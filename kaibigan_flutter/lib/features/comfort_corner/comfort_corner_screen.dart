@@ -11,7 +11,8 @@ class ComfortCornerScreen extends StatefulWidget {
   State<ComfortCornerScreen> createState() => _ComfortCornerScreenState();
 }
 
-class _ComfortCornerScreenState extends State<ComfortCornerScreen> with SingleTickerProviderStateMixin {
+class _ComfortCornerScreenState extends State<ComfortCornerScreen>
+    with SingleTickerProviderStateMixin {
   late AnimationController _breathingController;
 
   @override
@@ -33,7 +34,8 @@ class _ComfortCornerScreenState extends State<ComfortCornerScreen> with SingleTi
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final comfortProvider = Provider.of<ComfortProvider>(context);
-    final currentStep = comfortProvider.groundingStepsData[comfortProvider.groundingStep];
+    final currentStep =
+        comfortProvider.groundingStepsData[comfortProvider.groundingStep];
 
     return Scaffold(
       appBar: AppBar(
@@ -56,13 +58,14 @@ class _ComfortCornerScreenState extends State<ComfortCornerScreen> with SingleTi
               const SizedBox(height: 12),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
                 decoration: BoxDecoration(
                   color: isDark ? AppColors.darkCard : Colors.white,
                   borderRadius: BorderRadius.circular(28),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
+                      color: Colors.black.withValues(alpha: 0.03),
                       blurRadius: 12,
                     )
                   ],
@@ -78,10 +81,12 @@ class _ComfortCornerScreenState extends State<ComfortCornerScreen> with SingleTi
                     if (cycleSeconds < 4.0) {
                       // Inhale phase (0s - 4s): Expand 0.7 -> 1.25 smoothly
                       final progress = cycleSeconds / 4.0;
-                      final curveProgress = Curves.easeInOut.transform(progress);
+                      final curveProgress =
+                          Curves.easeInOut.transform(progress);
                       scale = 0.7 + (1.25 - 0.7) * curveProgress;
                       final remaining = (4.0 - cycleSeconds).ceil();
-                      stateText = 'Inhale... (${remaining > 0 ? remaining : 1}s)';
+                      stateText =
+                          'Inhale... (${remaining > 0 ? remaining : 1}s)';
                     } else if (cycleSeconds < 11.0) {
                       // Hold phase (4s - 11s): Stay expanded at 1.25
                       scale = 1.25;
@@ -90,10 +95,12 @@ class _ComfortCornerScreenState extends State<ComfortCornerScreen> with SingleTi
                     } else {
                       // Exhale phase (11s - 19s): Deflate 1.25 -> 0.7 smoothly over 8s
                       final progress = (cycleSeconds - 11.0) / 8.0;
-                      final curveProgress = Curves.easeInOut.transform(progress);
+                      final curveProgress =
+                          Curves.easeInOut.transform(progress);
                       scale = 1.25 - (1.25 - 0.7) * curveProgress;
                       final remaining = (19.0 - cycleSeconds).ceil();
-                      stateText = 'Exhale slowly... (${remaining > 0 ? remaining : 1}s)';
+                      stateText =
+                          'Exhale slowly... (${remaining > 0 ? remaining : 1}s)';
                     }
 
                     return Column(
@@ -105,24 +112,28 @@ class _ComfortCornerScreenState extends State<ComfortCornerScreen> with SingleTi
                             height: 120,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: AppColors.sageGreen.withOpacity(0.2),
-                              border: Border.all(color: AppColors.sageGreen, width: 3),
+                              color: AppColors.sageGreen.withValues(alpha: 0.2),
+                              border: Border.all(
+                                  color: AppColors.sageGreen, width: 3),
                             ),
                             child: const Center(
-                              child: Text('🌬️', style: TextStyle(fontSize: 44)),
+                              child:
+                                  Text('🌬️', style: TextStyle(fontSize: 44)),
                             ),
                           ),
                         ),
                         const SizedBox(height: 24),
                         Text(
                           stateText,
-                          style: AppTypography.titleSmall(context, isDark: isDark, color: AppColors.sageGreen),
+                          style: AppTypography.titleSmall(context,
+                              isDark: isDark, color: AppColors.sageGreen),
                         ),
                         const SizedBox(height: 6),
                         Text(
                           'Follow the rhythm of the expanding circle to calm your nervous system.',
                           textAlign: TextAlign.center,
-                          style: AppTypography.bodyMedium(context, isDark: isDark),
+                          style:
+                              AppTypography.bodyMedium(context, isDark: isDark),
                         ),
                       ],
                     );
@@ -140,7 +151,9 @@ class _ComfortCornerScreenState extends State<ComfortCornerScreen> with SingleTi
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: isDark ? AppColors.darkCard : AppColors.warmPeach.withValues(alpha: 0.25),
+                  color: isDark
+                      ? AppColors.darkCard
+                      : AppColors.warmPeach.withValues(alpha: 0.25),
                   borderRadius: BorderRadius.circular(24),
                   border: Border.all(color: AppColors.warmPeach, width: 1),
                 ),
@@ -149,7 +162,8 @@ class _ComfortCornerScreenState extends State<ComfortCornerScreen> with SingleTi
                   children: [
                     Text(
                       currentStep['title']!,
-                      style: AppTypography.titleSmall(context, isDark: isDark, color: AppColors.annPrimary),
+                      style: AppTypography.titleSmall(context,
+                          isDark: isDark, color: AppColors.annPrimary),
                     ),
                     const SizedBox(height: 8),
                     Text(
@@ -168,7 +182,10 @@ class _ComfortCornerScreenState extends State<ComfortCornerScreen> with SingleTi
                           ),
                         ),
                         onPressed: () => comfortProvider.nextGroundingStep(),
-                        child: const Text('Next Step', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                        child: const Text('Next Step',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600)),
                       ),
                     ),
                   ],
@@ -192,7 +209,9 @@ class _ComfortCornerScreenState extends State<ComfortCornerScreen> with SingleTi
                       margin: const EdgeInsets.only(right: 12),
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: isDark ? AppColors.darkCard : AppColors.lavenderMist.withOpacity(0.3),
+                        color: isDark
+                            ? AppColors.darkCard
+                            : AppColors.lavenderMist.withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Column(
@@ -202,14 +221,19 @@ class _ComfortCornerScreenState extends State<ComfortCornerScreen> with SingleTi
                             '"${item.quote}"',
                             textAlign: TextAlign.center,
                             style: AppTypography.companionInlineResponse(
-                              color: isDark ? AppColors.textPrimaryDark : AppColors.beePrimary,
+                              color: isDark
+                                  ? AppColors.textPrimaryDark
+                                  : AppColors.beePrimary,
                               fontSize: 14,
                             ),
                           ),
                           const SizedBox(height: 8),
                           Text(
                             '— ${item.author}',
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey),
+                            style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey),
                           ),
                         ],
                       ),

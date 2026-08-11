@@ -73,7 +73,8 @@ class JourneyScreen extends StatelessWidget {
                     child: _buildMetricCard(
                       context,
                       title: 'Avg Mood',
-                      value: '${moodProvider.averageWeeklyScore.toStringAsFixed(1)} / 5.0 ✨',
+                      value:
+                          '${moodProvider.averageWeeklyScore.toStringAsFixed(1)} / 5.0 ✨',
                       color: AppColors.beePrimary,
                     ),
                   ),
@@ -90,7 +91,8 @@ class JourneyScreen extends StatelessWidget {
               _buildTimelineTile(
                 context,
                 title: 'Started Kaibigan Journey',
-                desc: 'Chose Kai as companion & completed initial wellness check-in.',
+                desc:
+                    'Chose Kai as companion & completed initial wellness check-in.',
                 icon: '🌱',
                 isFirst: true,
               ),
@@ -120,27 +122,40 @@ class JourneyScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildMetricCard(BuildContext context, {required String title, required String value, required Color color}) {
+  Widget _buildMetricCard(BuildContext context,
+      {required String title, required String value, required Color color}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkCard : Colors.white,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: color.withOpacity(0.4), width: 1.5),
+        border: Border.all(color: color.withValues(alpha: 0.4), width: 1.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: TextStyle(fontSize: 12, color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight)),
+          Text(title,
+              style: TextStyle(
+                  fontSize: 12,
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight)),
           const SizedBox(height: 6),
-          Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: color)),
+          Text(value,
+              style: TextStyle(
+                  fontSize: 18, fontWeight: FontWeight.w700, color: color)),
         ],
       ),
     );
   }
 
-  Widget _buildTimelineTile(BuildContext context, {required String title, required String desc, required String icon, bool isFirst = false, bool isLast = false}) {
+  Widget _buildTimelineTile(BuildContext context,
+      {required String title,
+      required String desc,
+      required String icon,
+      bool isFirst = false,
+      bool isLast = false}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -150,11 +165,16 @@ class JourneyScreen extends StatelessWidget {
             Container(
               width: 38,
               height: 38,
-              decoration: const BoxDecoration(color: AppColors.warmCream, shape: BoxShape.circle),
-              child: Center(child: Text(icon, style: const TextStyle(fontSize: 20))),
+              decoration: const BoxDecoration(
+                  color: AppColors.warmCream, shape: BoxShape.circle),
+              child: Center(
+                  child: Text(icon, style: const TextStyle(fontSize: 20))),
             ),
             if (!isLast)
-              Container(width: 2, height: 40, color: AppColors.sageGreen.withOpacity(0.4)),
+              Container(
+                  width: 2,
+                  height: 40,
+                  color: AppColors.sageGreen.withValues(alpha: 0.4)),
           ],
         ),
         const SizedBox(width: 16),
@@ -169,9 +189,16 @@ class JourneyScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                Text(title,
+                    style: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 4),
-                Text(desc, style: TextStyle(fontSize: 12, color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight)),
+                Text(desc,
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : AppColors.textSecondaryLight)),
               ],
             ),
           ),

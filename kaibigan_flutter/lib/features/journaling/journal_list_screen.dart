@@ -24,8 +24,8 @@ class _JournalListScreenState extends State<JournalListScreen> {
     final userProvider = Provider.of<UserProvider>(context);
     final journalProvider = Provider.of<JournalProvider>(context);
 
-    final entries = _onlyFavorites 
-        ? journalProvider.favoriteEntries 
+    final entries = _onlyFavorites
+        ? journalProvider.favoriteEntries
         : journalProvider.entries;
 
     return Scaffold(
@@ -61,7 +61,8 @@ class _JournalListScreenState extends State<JournalListScreen> {
                   prefixIcon: const Icon(Icons.search),
                   filled: true,
                   fillColor: isDark ? AppColors.darkCard : Colors.white,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(24),
                     borderSide: BorderSide.none,
@@ -80,19 +81,24 @@ class _JournalListScreenState extends State<JournalListScreen> {
                           const Text('📝', style: TextStyle(fontSize: 48)),
                           const SizedBox(height: 12),
                           Text(
-                            _onlyFavorites ? 'No favorite entries yet.' : 'Your journal is empty.',
-                            style: AppTypography.titleMedium(context, isDark: isDark),
+                            _onlyFavorites
+                                ? 'No favorite entries yet.'
+                                : 'Your journal is empty.',
+                            style: AppTypography.titleMedium(context,
+                                isDark: isDark),
                           ),
                           const SizedBox(height: 6),
                           Text(
                             'Write a brief reflection to start your journey.',
-                            style: AppTypography.bodyMedium(context, isDark: isDark),
+                            style: AppTypography.bodyMedium(context,
+                                isDark: isDark),
                           ),
                         ],
                       ),
                     )
                   : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 10),
                       itemCount: entries.length,
                       itemBuilder: (context, index) {
                         final entry = entries[index];
@@ -105,7 +111,7 @@ class _JournalListScreenState extends State<JournalListScreen> {
                             borderRadius: BorderRadius.circular(20),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.03),
+                                color: Colors.black.withValues(alpha: 0.03),
                                 blurRadius: 10,
                                 offset: const Offset(0, 4),
                               )
@@ -117,7 +123,8 @@ class _JournalListScreenState extends State<JournalListScreen> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => JournalEditorScreen(entry: entry),
+                                  builder: (_) =>
+                                      JournalEditorScreen(entry: entry),
                                 ),
                               );
                             },
@@ -137,11 +144,16 @@ class _JournalListScreenState extends State<JournalListScreen> {
                                 ),
                                 IconButton(
                                   icon: Icon(
-                                    entry.isFavorite ? Icons.favorite : Icons.favorite_border,
+                                    entry.isFavorite
+                                        ? Icons.favorite
+                                        : Icons.favorite_border,
                                     size: 20,
-                                    color: entry.isFavorite ? AppColors.moodAwful : Colors.grey,
+                                    color: entry.isFavorite
+                                        ? AppColors.moodAwful
+                                        : Colors.grey,
                                   ),
-                                  onPressed: () => journalProvider.toggleFavorite(entry.id),
+                                  onPressed: () =>
+                                      journalProvider.toggleFavorite(entry.id),
                                 ),
                               ],
                             ),
@@ -154,16 +166,20 @@ class _JournalListScreenState extends State<JournalListScreen> {
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     fontSize: 13,
-                                    color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                    color: isDark
+                                        ? AppColors.textSecondaryDark
+                                        : AppColors.textSecondaryLight,
                                   ),
                                 ),
                                 const SizedBox(height: 10),
                                 Row(
                                   children: [
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 3),
                                       decoration: BoxDecoration(
-                                        color: mascot.primaryColor.withOpacity(0.15),
+                                        color: mascot.primaryColor
+                                            .withValues(alpha: 0.15),
                                         borderRadius: BorderRadius.circular(8),
                                       ),
                                       child: Text(
@@ -177,8 +193,10 @@ class _JournalListScreenState extends State<JournalListScreen> {
                                     ),
                                     const Spacer(),
                                     Text(
-                                      DateFormatter.formatShortDate(entry.createdAt),
-                                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                      DateFormatter.formatShortDate(
+                                          entry.createdAt),
+                                      style: const TextStyle(
+                                          fontSize: 11, color: Colors.grey),
                                     ),
                                   ],
                                 ),
@@ -195,7 +213,8 @@ class _JournalListScreenState extends State<JournalListScreen> {
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: AppColors.sageGreen,
         icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('New Entry', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+        label: const Text('New Entry',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
         onPressed: () {
           Navigator.push(
             context,

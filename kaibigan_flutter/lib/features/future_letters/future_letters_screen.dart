@@ -46,7 +46,6 @@ class _FutureLettersScreenState extends State<FutureLettersScreen> {
                 style: AppTypography.bodyMedium(context, isDark: isDark),
               ),
             ),
-
             Expanded(
               child: lettersProvider.letters.isEmpty
                   ? const Center(child: Text('No future letters written yet.'))
@@ -65,7 +64,7 @@ class _FutureLettersScreenState extends State<FutureLettersScreen> {
                             borderRadius: BorderRadius.circular(20),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.03),
+                                color: Colors.black.withValues(alpha: 0.03),
                                 blurRadius: 10,
                               )
                             ],
@@ -76,30 +75,43 @@ class _FutureLettersScreenState extends State<FutureLettersScreen> {
                               Row(
                                 children: [
                                   Icon(
-                                    isUnlocked ? Icons.lock_open_rounded : Icons.lock_rounded,
-                                    color: isUnlocked ? AppColors.sageGreen : AppColors.moodLow,
+                                    isUnlocked
+                                        ? Icons.lock_open_rounded
+                                        : Icons.lock_rounded,
+                                    color: isUnlocked
+                                        ? AppColors.sageGreen
+                                        : AppColors.moodLow,
                                   ),
                                   const SizedBox(width: 10),
                                   Expanded(
                                     child: Text(
                                       letter.title,
-                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                                      style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w700),
                                     ),
                                   ),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 4),
                                     decoration: BoxDecoration(
                                       color: isUnlocked
-                                          ? AppColors.sageGreen.withOpacity(0.15)
-                                          : AppColors.moodLow.withOpacity(0.15),
+                                          ? AppColors.sageGreen
+                                              .withValues(alpha: 0.15)
+                                          : AppColors.moodLow
+                                              .withValues(alpha: 0.15),
                                       borderRadius: BorderRadius.circular(10),
                                     ),
                                     child: Text(
-                                      isUnlocked ? 'Unlocked' : 'Unlocks ${DateFormatter.formatShortDate(letter.deliverAt)}',
+                                      isUnlocked
+                                          ? 'Unlocked'
+                                          : 'Unlocks ${DateFormatter.formatShortDate(letter.deliverAt)}',
                                       style: TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w600,
-                                        color: isUnlocked ? AppColors.sageGreen : AppColors.moodLow,
+                                        color: isUnlocked
+                                            ? AppColors.sageGreen
+                                            : AppColors.moodLow,
                                       ),
                                     ),
                                   ),
@@ -107,11 +119,19 @@ class _FutureLettersScreenState extends State<FutureLettersScreen> {
                               ),
                               const SizedBox(height: 10),
                               Text(
-                                isUnlocked ? letter.content : '🔒 This letter is sealed until the unlock date arrives.',
+                                isUnlocked
+                                    ? letter.content
+                                    : '🔒 This letter is sealed until the unlock date arrives.',
                                 style: TextStyle(
                                   fontSize: 14,
-                                  fontStyle: isUnlocked ? FontStyle.normal : FontStyle.italic,
-                                  color: isUnlocked ? (isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight) : Colors.grey,
+                                  fontStyle: isUnlocked
+                                      ? FontStyle.normal
+                                      : FontStyle.italic,
+                                  color: isUnlocked
+                                      ? (isDark
+                                          ? AppColors.textPrimaryDark
+                                          : AppColors.textPrimaryLight)
+                                      : Colors.grey,
                                 ),
                               ),
                             ],
@@ -126,7 +146,8 @@ class _FutureLettersScreenState extends State<FutureLettersScreen> {
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: AppColors.annPrimary,
         icon: const Icon(Icons.edit, color: Colors.white),
-        label: const Text('Write Letter', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+        label: const Text('Write Letter',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
         onPressed: () => _showWriteLetterSheet(context),
       ),
     );
@@ -156,7 +177,10 @@ class _FutureLettersScreenState extends State<FutureLettersScreen> {
                 children: [
                   const Text(
                     'Write to Your Future Self 💌',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.black),
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.black),
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -165,7 +189,9 @@ class _FutureLettersScreenState extends State<FutureLettersScreen> {
                       hintText: 'Title (e.g. Note to me in 1 month)',
                       filled: true,
                       fillColor: AppColors.warmCream,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide.none),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -173,14 +199,19 @@ class _FutureLettersScreenState extends State<FutureLettersScreen> {
                     controller: _contentController,
                     maxLines: 4,
                     decoration: InputDecoration(
-                      hintText: 'Write your hopes, reminders, or encouragement...',
+                      hintText:
+                          'Write your hopes, reminders, or encouragement...',
                       filled: true,
                       fillColor: AppColors.warmCream,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide.none),
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text('Unlock After:', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                  const Text('Unlock After:',
+                      style:
+                          TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 8),
                   Row(
                     children: [
@@ -198,21 +229,29 @@ class _FutureLettersScreenState extends State<FutureLettersScreen> {
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.annPrimary,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(25)),
                       ),
                       onPressed: () {
                         if (_contentController.text.trim().isEmpty) return;
-                        final provider = Provider.of<LettersProvider>(context, listen: false);
+                        final provider = Provider.of<LettersProvider>(context,
+                            listen: false);
                         provider.createLetter(
-                          title: _titleController.text.isEmpty ? 'Letter to Future Self' : _titleController.text,
+                          title: _titleController.text.isEmpty
+                              ? 'Letter to Future Self'
+                              : _titleController.text,
                           content: _contentController.text.trim(),
-                          deliverAt: DateTime.now().add(Duration(days: _selectedDurationDays)),
+                          deliverAt: DateTime.now()
+                              .add(Duration(days: _selectedDurationDays)),
                         );
                         _titleController.clear();
                         _contentController.clear();
                         Navigator.pop(context);
                       },
-                      child: const Text('Seal & Send to Future', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                      child: const Text('Seal & Send to Future',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600)),
                     ),
                   ),
                 ],

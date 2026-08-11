@@ -66,7 +66,8 @@ class _MascotSelectionScreenState extends State<MascotSelectionScreen> {
               Expanded(
                 child: ListView.separated(
                   itemCount: MascotInfo.companions.length,
-                  separatorBuilder: (context, index) => const SizedBox(height: 16),
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(height: 16),
                   itemBuilder: (context, index) {
                     final companion = MascotInfo.companions[index];
                     final isSelected = companion.id == _selectedId;
@@ -82,24 +83,29 @@ class _MascotSelectionScreenState extends State<MascotSelectionScreen> {
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
                           color: isSelected
-                              ? (isDark ? AppColors.darkCardBorder : companion.lightBgColor)
+                              ? (isDark
+                                  ? AppColors.darkCardBorder
+                                  : companion.lightBgColor)
                               : (isDark ? AppColors.darkCard : Colors.white),
                           borderRadius: BorderRadius.circular(24),
                           border: Border.all(
-                            color: isSelected ? companion.primaryColor : Colors.transparent,
+                            color: isSelected
+                                ? companion.primaryColor
+                                : Colors.transparent,
                             width: 2,
                           ),
                           boxShadow: isSelected
                               ? [
                                   BoxShadow(
-                                    color: companion.primaryColor.withOpacity(0.15),
+                                    color: companion.primaryColor
+                                        .withValues(alpha: 0.15),
                                     blurRadius: 16,
                                     offset: const Offset(0, 6),
                                   )
                                 ]
                               : [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.03),
+                                    color: Colors.black.withValues(alpha: 0.03),
                                     blurRadius: 10,
                                     offset: const Offset(0, 4),
                                   )
@@ -111,7 +117,8 @@ class _MascotSelectionScreenState extends State<MascotSelectionScreen> {
                               width: 52,
                               height: 52,
                               decoration: BoxDecoration(
-                                color: companion.primaryColor.withOpacity(0.2),
+                                color: companion.primaryColor
+                                    .withValues(alpha: 0.2),
                                 shape: BoxShape.circle,
                               ),
                               child: Center(
@@ -131,7 +138,9 @@ class _MascotSelectionScreenState extends State<MascotSelectionScreen> {
                                     style: TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.w700,
-                                      color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                      color: isDark
+                                          ? AppColors.textPrimaryDark
+                                          : AppColors.textPrimaryLight,
                                     ),
                                   ),
                                   const SizedBox(height: 4),
@@ -140,7 +149,9 @@ class _MascotSelectionScreenState extends State<MascotSelectionScreen> {
                                     style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w500,
-                                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                      color: isDark
+                                          ? AppColors.textSecondaryDark
+                                          : AppColors.textSecondaryLight,
                                     ),
                                   ),
                                 ],
@@ -181,14 +192,16 @@ class _MascotSelectionScreenState extends State<MascotSelectionScreen> {
                     elevation: 0,
                   ),
                   onPressed: () async {
-                    final userProvider = Provider.of<UserProvider>(context, listen: false);
+                    final userProvider =
+                        Provider.of<UserProvider>(context, listen: false);
                     await userProvider.setCompanion(_selectedId);
                     await userProvider.setLanguage(_selectedLang);
 
                     if (widget.isInitialOnboarding) {
                       Navigator.pushReplacement(
                         context,
-                        MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
+                        MaterialPageRoute(
+                            builder: (_) => const MainNavigationScreen()),
                       );
                     } else {
                       Navigator.pop(context);

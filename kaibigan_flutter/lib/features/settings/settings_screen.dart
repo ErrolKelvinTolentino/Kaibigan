@@ -85,7 +85,8 @@ class SettingsScreen extends StatelessWidget {
                         ],
                       ),
                     ),
-                    const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.grey),
+                    const Icon(Icons.arrow_forward_ios_rounded,
+                        size: 16, color: Colors.grey),
                   ],
                 ),
               ),
@@ -97,8 +98,8 @@ class SettingsScreen extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: SupabaseService.isInitialized
-                    ? AppColors.sageGreen.withOpacity(0.15)
-                    : AppColors.warmPeach.withOpacity(0.2),
+                    ? AppColors.sageGreen.withValues(alpha: 0.15)
+                    : AppColors.warmPeach.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
                   color: SupabaseService.isInitialized

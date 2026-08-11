@@ -51,7 +51,7 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
+                      color: Colors.black.withValues(alpha: 0.03),
                       blurRadius: 12,
                     )
                   ],
@@ -76,11 +76,21 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
                             setState(() {
                               _selectedScore = score;
                               switch (score) {
-                                case 1: _selectedLabel = 'Struggling'; break;
-                                case 2: _selectedLabel = 'Low'; break;
-                                case 3: _selectedLabel = 'Okay'; break;
-                                case 4: _selectedLabel = 'Good'; break;
-                                case 5: _selectedLabel = 'Awesome'; break;
+                                case 1:
+                                  _selectedLabel = 'Struggling';
+                                  break;
+                                case 2:
+                                  _selectedLabel = 'Low';
+                                  break;
+                                case 3:
+                                  _selectedLabel = 'Okay';
+                                  break;
+                                case 4:
+                                  _selectedLabel = 'Good';
+                                  break;
+                                case 5:
+                                  _selectedLabel = 'Awesome';
+                                  break;
                               }
                             });
                           },
@@ -89,11 +99,14 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
                               color: isSelected
-                                  ? MoodLog.getMoodColor(score).withOpacity(0.2)
+                                  ? MoodLog.getMoodColor(score)
+                                      .withValues(alpha: 0.2)
                                   : Colors.transparent,
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: isSelected ? MoodLog.getMoodColor(score) : Colors.transparent,
+                                color: isSelected
+                                    ? MoodLog.getMoodColor(score)
+                                    : Colors.transparent,
                                 width: 2,
                               ),
                             ),
@@ -122,7 +135,9 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
                       decoration: InputDecoration(
                         hintText: 'Add a brief note (optional)...',
                         filled: true,
-                        fillColor: isDark ? AppColors.darkBackground : AppColors.warmCream,
+                        fillColor: isDark
+                            ? AppColors.darkBackground
+                            : AppColors.warmCream,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
                           borderSide: BorderSide.none,
@@ -144,14 +159,20 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
                           moodProvider.logMood(
                             score: _selectedScore,
                             label: _selectedLabel,
-                            note: _noteController.text.isEmpty ? null : _noteController.text,
+                            note: _noteController.text.isEmpty
+                                ? null
+                                : _noteController.text,
                           );
                           _noteController.clear();
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Mood check-in recorded! ✨')),
+                            const SnackBar(
+                                content: Text('Mood check-in recorded! ✨')),
                           );
                         },
-                        child: const Text('Save Mood Check-In', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                        child: const Text('Save Mood Check-In',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600)),
                       ),
                     ),
                   ],
@@ -167,7 +188,8 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
               const SizedBox(height: 12),
               Container(
                 height: 220,
-                padding: const EdgeInsets.only(right: 20, left: 10, top: 20, bottom: 10),
+                padding: const EdgeInsets.only(
+                    right: 20, left: 10, top: 20, bottom: 10),
                 decoration: BoxDecoration(
                   color: isDark ? AppColors.darkCard : Colors.white,
                   borderRadius: BorderRadius.circular(24),
@@ -176,17 +198,28 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
                   LineChartData(
                     gridData: const FlGridData(show: false),
                     titlesData: const FlTitlesData(
-                      rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                      topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      rightTitles:
+                          AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      topTitles:
+                          AxisTitles(sideTitles: SideTitles(showTitles: false)),
                     ),
                     borderData: FlBorderData(show: false),
                     minY: 1,
                     maxY: 5,
                     lineBarsData: [
                       LineChartBarData(
-                        spots: logs.take(7).toList().asMap().entries.map((e) {
-                          return FlSpot(e.key.toDouble(), e.value.moodScore.toDouble());
-                        }).toList().reversed.toList(),
+                        spots: logs
+                            .take(7)
+                            .toList()
+                            .asMap()
+                            .entries
+                            .map((e) {
+                              return FlSpot(e.key.toDouble(),
+                                  e.value.moodScore.toDouble());
+                            })
+                            .toList()
+                            .reversed
+                            .toList(),
                         isCurved: true,
                         color: AppColors.sageGreen,
                         barWidth: 4,
@@ -194,7 +227,7 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
                         dotData: const FlDotData(show: true),
                         belowBarData: BarAreaData(
                           show: true,
-                          color: AppColors.sageGreen.withOpacity(0.15),
+                          color: AppColors.sageGreen.withValues(alpha: 0.15),
                         ),
                       ),
                     ],
