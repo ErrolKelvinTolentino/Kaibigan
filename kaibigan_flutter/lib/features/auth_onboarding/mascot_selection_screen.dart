@@ -122,9 +122,10 @@ class _MascotSelectionScreenState extends State<MascotSelectionScreen> {
                                 shape: BoxShape.circle,
                               ),
                               child: Center(
-                                child: Text(
-                                  companion.avatarIcon,
-                                  style: const TextStyle(fontSize: 26),
+                                child: Icon(
+                                  companion.materialIcon,
+                                  color: companion.primaryColor,
+                                  size: 28,
                                 ),
                               ),
                             ),
@@ -196,6 +197,8 @@ class _MascotSelectionScreenState extends State<MascotSelectionScreen> {
                         Provider.of<UserProvider>(context, listen: false);
                     await userProvider.setCompanion(_selectedId);
                     await userProvider.setLanguage(_selectedLang);
+
+                    if (!context.mounted) return;
 
                     if (widget.isInitialOnboarding) {
                       Navigator.pushReplacement(

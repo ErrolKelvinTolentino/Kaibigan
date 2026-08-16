@@ -4,6 +4,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
 import '../companion/companion_model.dart';
 import '../auth_onboarding/mascot_selection_screen.dart';
+import '../auth_onboarding/auth_screen.dart';
 import 'user_provider.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -60,9 +61,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       border: Border.all(color: mascot.primaryColor, width: 3),
                     ),
                     child: Center(
-                      child: Text(
-                        mascot.avatarIcon,
-                        style: const TextStyle(fontSize: 48),
+                      child: Icon(
+                        mascot.materialIcon,
+                        color: mascot.primaryColor,
+                        size: 48,
                       ),
                     ),
                   ),
@@ -72,7 +74,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       color: AppColors.sageGreen,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.shield, color: Colors.white, size: 16),
+                    child:
+                        const Icon(Icons.shield, color: Colors.white, size: 16),
                   ),
                 ],
               ),
@@ -81,7 +84,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Center(
               child: Text(
                 'kaibigan member 🛡️',
-                style: AppTypography.bodySmall(context, isDark: isDark, color: AppColors.sageGreen),
+                style: AppTypography.bodySmall(context,
+                    isDark: isDark, color: AppColors.sageGreen),
               ),
             ),
             const SizedBox(height: 24),
@@ -103,28 +107,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Display Name:', style: AppTypography.bodySmall(context, isDark: isDark)),
+                  Text('Display Name:',
+                      style: AppTypography.bodySmall(context, isDark: isDark)),
                   const SizedBox(height: 8),
                   Row(
                     children: [
                       Expanded(
                         child: TextField(
                           controller: _nameController,
-                          style: AppTypography.titleSmall(context, isDark: isDark),
+                          style:
+                              AppTypography.titleSmall(context, isDark: isDark),
                           decoration: const InputDecoration(
                             isDense: true,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 10),
                             border: InputBorder.none,
                           ),
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.check_circle_rounded, color: AppColors.sageGreen),
+                        icon: const Icon(Icons.check_circle_rounded,
+                            color: AppColors.sageGreen),
                         onPressed: () {
                           if (_nameController.text.trim().isNotEmpty) {
-                            userProvider.updateDisplayName(_nameController.text.trim());
+                            userProvider
+                                .updateDisplayName(_nameController.text.trim());
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Name updated successfully!')),
+                              const SnackBar(
+                                  content: Text('Name updated successfully!')),
                             );
                           }
                         },
@@ -137,7 +147,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 18),
 
             // Companion Selection Section
-            Text('Your Companion', style: AppTypography.titleMedium(context, isDark: isDark)),
+            Text('Your Companion',
+                style: AppTypography.titleMedium(context, isDark: isDark)),
             const SizedBox(height: 10),
             Container(
               padding: const EdgeInsets.all(18),
@@ -153,27 +164,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(mascot.name, style: AppTypography.titleSmall(context, isDark: isDark)),
+                        Text(mascot.name,
+                            style: AppTypography.titleSmall(context,
+                                isDark: isDark)),
                         const SizedBox(height: 2),
-                        Text(mascot.tag, style: AppTypography.bodySmall(context, isDark: isDark)),
+                        Text(mascot.tag,
+                            style: AppTypography.bodySmall(context,
+                                isDark: isDark)),
                       ],
                     ),
                   ),
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.sageGreen,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
                       elevation: 0,
                     ),
                     onPressed: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => const MascotSelectionScreen(isInitialOnboarding: false),
+                          builder: (_) => const MascotSelectionScreen(
+                              isInitialOnboarding: false),
                         ),
                       );
                     },
-                    child: const Text('Change', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                    child: const Text('Change',
+                        style: TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.w700)),
                   ),
                 ],
               ),
@@ -181,7 +200,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 24),
 
             // Preferred Language Section
-            Text('Language Preference', style: AppTypography.titleMedium(context, isDark: isDark)),
+            Text('Language Preference',
+                style: AppTypography.titleMedium(context, isDark: isDark)),
             const SizedBox(height: 10),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -191,11 +211,82 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               child: Column(
                 children: [
-                  _buildLanguageOption(context, userProvider, 'english', '🇺🇸 English'),
+                  _buildLanguageOption(
+                      context, userProvider, 'english', '🇺🇸 English'),
                   const Divider(height: 1),
-                  _buildLanguageOption(context, userProvider, 'filipino', '🇵🇭 Filipino'),
+                  _buildLanguageOption(
+                      context, userProvider, 'filipino', '🇵🇭 Filipino'),
                   const Divider(height: 1),
-                  _buildLanguageOption(context, userProvider, 'taglish', '🇵🇭 Taglish (Mix)'),
+                  _buildLanguageOption(
+                      context, userProvider, 'taglish', '🇵🇭 Taglish (Mix)'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Account & Session Status Section
+            Text('Account & Security',
+                style: AppTypography.titleMedium(context, isDark: isDark)),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.darkCard : Colors.white,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.mark_email_read_outlined,
+                        color: AppColors.sageGreen,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          userProvider.userEmail ?? 'Authenticated User',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: isDark
+                                ? AppColors.textPrimaryDark
+                                : AppColors.textPrimaryLight,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        await userProvider.logout();
+                        if (context.mounted) {
+                          Navigator.of(context).pushAndRemoveUntil(
+                            MaterialPageRoute(
+                                builder: (_) => const AuthScreen()),
+                            (route) => false,
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.logout, color: Colors.redAccent),
+                      label: const Text('Log Out of Kaibigan',
+                          style: TextStyle(
+                              color: Colors.redAccent,
+                              fontWeight: FontWeight.w700)),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(
+                            color: Colors.redAccent, width: 1.5),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16)),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -205,13 +296,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildLanguageOption(BuildContext context, UserProvider provider, String langKey, String label) {
+  Widget _buildLanguageOption(BuildContext context, UserProvider provider,
+      String langKey, String label) {
     final isSelected = provider.preferredLanguage == langKey;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return ListTile(
-      title: Text(label, style: AppTypography.bodyMedium(context, isDark: isDark)),
-      trailing: isSelected ? const Icon(Icons.check_circle_rounded, color: AppColors.sageGreen) : null,
+      title:
+          Text(label, style: AppTypography.bodyMedium(context, isDark: isDark)),
+      trailing: isSelected
+          ? const Icon(Icons.check_circle_rounded, color: AppColors.sageGreen)
+          : null,
       onTap: () => provider.setLanguage(langKey),
     );
   }

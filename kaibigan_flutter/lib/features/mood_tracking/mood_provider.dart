@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/services/supabase_service.dart';
+import '../../core/utils/uuid_helper.dart';
 import 'mood_model.dart';
 
 class MoodProvider extends ChangeNotifier {
@@ -21,18 +22,19 @@ class MoodProvider extends ChangeNotifier {
 
   MoodProvider() {
     _initSampleData();
+    fetchMoodLogs();
   }
 
   void _initSampleData() {
     final now = DateTime.now();
     _logs.addAll([
-      MoodLog(id: 'm-1', moodScore: 4, moodLabel: 'Good', stressLevel: 2, energyLevel: 4, sleepQuality: 4, anxietyLevel: 2, note: 'Had a smooth day!', createdAt: now.subtract(const Duration(days: 6))),
-      MoodLog(id: 'm-2', moodScore: 3, moodLabel: 'Okay', stressLevel: 3, energyLevel: 3, sleepQuality: 3, anxietyLevel: 3, note: 'School deadlines.', createdAt: now.subtract(const Duration(days: 5))),
-      MoodLog(id: 'm-3', moodScore: 5, moodLabel: 'Awesome', stressLevel: 1, energyLevel: 5, sleepQuality: 5, anxietyLevel: 1, note: 'Great conversation with companion!', createdAt: now.subtract(const Duration(days: 4))),
-      MoodLog(id: 'm-4', moodScore: 4, moodLabel: 'Good', stressLevel: 2, energyLevel: 4, sleepQuality: 4, anxietyLevel: 2, note: 'Gardening time.', createdAt: now.subtract(const Duration(days: 3))),
-      MoodLog(id: 'm-5', moodScore: 3, moodLabel: 'Okay', stressLevel: 3, energyLevel: 3, sleepQuality: 3, anxietyLevel: 3, note: 'Resting early.', createdAt: now.subtract(const Duration(days: 2))),
-      MoodLog(id: 'm-6', moodScore: 4, moodLabel: 'Good', stressLevel: 2, energyLevel: 4, sleepQuality: 4, anxietyLevel: 2, note: 'Felt calm and present.', createdAt: now.subtract(const Duration(days: 1))),
-      MoodLog(id: 'm-7', moodScore: 5, moodLabel: 'Awesome', stressLevel: 1, energyLevel: 5, sleepQuality: 5, anxietyLevel: 1, note: 'Poured heart out in journal.', createdAt: now),
+      MoodLog(id: UuidHelper.generateV4(), moodScore: 4, moodLabel: 'Good', stressLevel: 2, energyLevel: 4, sleepQuality: 4, anxietyLevel: 2, note: 'Had a smooth day!', createdAt: now.subtract(const Duration(days: 6))),
+      MoodLog(id: UuidHelper.generateV4(), moodScore: 3, moodLabel: 'Okay', stressLevel: 3, energyLevel: 3, sleepQuality: 3, anxietyLevel: 3, note: 'School deadlines.', createdAt: now.subtract(const Duration(days: 5))),
+      MoodLog(id: UuidHelper.generateV4(), moodScore: 5, moodLabel: 'Awesome', stressLevel: 1, energyLevel: 5, sleepQuality: 5, anxietyLevel: 1, note: 'Great conversation with companion!', createdAt: now.subtract(const Duration(days: 4))),
+      MoodLog(id: UuidHelper.generateV4(), moodScore: 4, moodLabel: 'Good', stressLevel: 2, energyLevel: 4, sleepQuality: 4, anxietyLevel: 2, note: 'Gardening time.', createdAt: now.subtract(const Duration(days: 3))),
+      MoodLog(id: UuidHelper.generateV4(), moodScore: 3, moodLabel: 'Okay', stressLevel: 3, energyLevel: 3, sleepQuality: 3, anxietyLevel: 3, note: 'Resting early.', createdAt: now.subtract(const Duration(days: 2))),
+      MoodLog(id: UuidHelper.generateV4(), moodScore: 4, moodLabel: 'Good', stressLevel: 2, energyLevel: 4, sleepQuality: 4, anxietyLevel: 2, note: 'Felt calm and present.', createdAt: now.subtract(const Duration(days: 1))),
+      MoodLog(id: UuidHelper.generateV4(), moodScore: 5, moodLabel: 'Awesome', stressLevel: 1, energyLevel: 5, sleepQuality: 5, anxietyLevel: 1, note: 'Poured heart out in journal.', createdAt: now),
     ]);
   }
 
@@ -42,10 +44,12 @@ class MoodProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await SupabaseService.client
-          .from('mood_logs')
-          .select()
-          .order('created_at', ascending: false);
+      final userId = SupabaseService.client.auth.currentUser?.id;
+      var query = SupabaseService.client.from('mood_logs').select();
+      if (userId != null) {
+        query = query.eq('user_id', userId);
+      }
+      final response = await query.order('created_at', ascending: false);
 
       final List data = response as List;
       _logs.clear();
@@ -71,7 +75,7 @@ class MoodProvider extends ChangeNotifier {
     notifyListeners();
 
     final newLog = MoodLog(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: UuidHelper.generateV4(),
       moodScore: score,
       moodLabel: label,
       stressLevel: stress,
@@ -86,9 +90,10 @@ class MoodProvider extends ChangeNotifier {
 
     if (SupabaseService.isInitialized) {
       try {
+        final userId = SupabaseService.client.auth.currentUser?.id;
         await SupabaseService.client
             .from('mood_logs')
-            .insert(newLog.toMap());
+            .insert(newLog.toMap(userId: userId));
       } catch (e) {
         print("Error saving mood log to Supabase: $e");
       }
@@ -97,5 +102,41 @@ class MoodProvider extends ChangeNotifier {
     _isLoading = false;
     notifyListeners();
     return newLog;
+  }
+
+  Future<void> updateMoodLog(MoodLog updated) async {
+    final index = _logs.indexWhere((l) => l.id == updated.id);
+    if (index != -1) {
+      _logs[index] = updated;
+      notifyListeners();
+
+      if (SupabaseService.isInitialized && UuidHelper.isValidUuid(updated.id)) {
+        try {
+          final userId = SupabaseService.client.auth.currentUser?.id;
+          await SupabaseService.client
+              .from('mood_logs')
+              .update(updated.toMap(userId: userId))
+              .eq('id', updated.id);
+        } catch (e) {
+          print("Error updating mood log in Supabase: $e");
+        }
+      }
+    }
+  }
+
+  Future<void> deleteMoodLog(String id) async {
+    _logs.removeWhere((l) => l.id == id);
+    notifyListeners();
+
+    if (SupabaseService.isInitialized && UuidHelper.isValidUuid(id)) {
+      try {
+        await SupabaseService.client
+            .from('mood_logs')
+            .delete()
+            .eq('id', id);
+      } catch (e) {
+        print("Error deleting mood log: $e");
+      }
+    }
   }
 }

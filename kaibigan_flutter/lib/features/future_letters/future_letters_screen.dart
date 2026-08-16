@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/utils/date_formatter.dart';
+import '../../core/widgets/cozy_confirm_sheet.dart';
 import 'letters_provider.dart';
 
 class FutureLettersScreen extends StatefulWidget {
@@ -32,7 +33,7 @@ class _FutureLettersScreenState extends State<FutureLettersScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'Letters to Future Self 💌',
+          'Letters to Future Self',
           style: AppTypography.titleLarge(context, isDark: isDark),
         ),
       ),
@@ -115,6 +116,33 @@ class _FutureLettersScreenState extends State<FutureLettersScreen> {
                                       ),
                                     ),
                                   ),
+                                  const SizedBox(width: 6),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, size: 18, color: Colors.grey),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    tooltip: 'Delete letter',
+                                    onPressed: () async {
+                                      final confirmed = await CozyConfirmSheet.show(
+                                        context,
+                                        title: 'Palayain ang Liham?',
+                                        message: 'Sigurado ka bang nais mong alisin ang liham na "${letter.title}" para sa iyong hinaharap?',
+                                        confirmLabel: 'Let Go',
+                                        cancelLabel: 'Keep Letter',
+                                        icon: Icons.mark_email_read_outlined,
+                                      );
+                                      if (confirmed && context.mounted) {
+                                        lettersProvider.deleteLetter(letter.id);
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('Future letter gently removed.'),
+                                            behavior: SnackBarBehavior.floating,
+                                            duration: Duration(seconds: 2),
+                                          ),
+                                        );
+                                      }
+                                    },
+                                  ),
                                 ],
                               ),
                               const SizedBox(height: 10),
@@ -154,10 +182,12 @@ class _FutureLettersScreenState extends State<FutureLettersScreen> {
   }
 
   void _showWriteLetterSheet(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: isDark ? AppColors.darkCard : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
@@ -175,20 +205,21 @@ class _FutureLettersScreenState extends State<FutureLettersScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Write to Your Future Self 💌',
+                  Text(
+                    'Write to Your Future Self',
                     style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
-                        color: Colors.black),
+                        color: isDark ? AppColors.textPrimaryDark : Colors.black),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _titleController,
+                    style: TextStyle(color: isDark ? AppColors.textPrimaryDark : Colors.black87),
                     decoration: InputDecoration(
                       hintText: 'Title (e.g. Note to me in 1 month)',
                       filled: true,
-                      fillColor: AppColors.warmCream,
+                      fillColor: isDark ? AppColors.darkBackground : AppColors.warmCream,
                       border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
                           borderSide: BorderSide.none),
@@ -198,20 +229,21 @@ class _FutureLettersScreenState extends State<FutureLettersScreen> {
                   TextField(
                     controller: _contentController,
                     maxLines: 4,
+                    style: TextStyle(color: isDark ? AppColors.textPrimaryDark : Colors.black87),
                     decoration: InputDecoration(
                       hintText:
                           'Write your hopes, reminders, or encouragement...',
                       filled: true,
-                      fillColor: AppColors.warmCream,
+                      fillColor: isDark ? AppColors.darkBackground : AppColors.warmCream,
                       border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
                           borderSide: BorderSide.none),
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text('Unlock After:',
+                  Text('Unlock After:',
                       style:
-                          TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                          TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: isDark ? AppColors.textPrimaryDark : Colors.black87)),
                   const SizedBox(height: 8),
                   Row(
                     children: [

@@ -23,11 +23,13 @@ dependencies:
   google_fonts: ^6.2.1
   flutter_animate: ^4.5.2
   fl_chart: ^0.70.0
+  flutter_markdown: ^0.7.5
 
   # Utilities & Networking
   http: ^1.2.2
   intl: ^0.20.2
   shared_preferences: ^2.3.2
+  url_launcher: ^6.3.1
 
   # Document Generation & Notifications
   pdf: ^3.11.1
@@ -43,3 +45,6 @@ flutter:
   uses-material-design: true
   assets:
     - .env
+    - assets/feature icons/
+    - assets/mood tracker/
+    - assets/sleep log/

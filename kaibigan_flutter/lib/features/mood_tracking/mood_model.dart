@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/utils/uuid_helper.dart';
 
 class MoodLog {
   final String id;
@@ -24,9 +25,34 @@ class MoodLog {
     required this.createdAt,
   });
 
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
+  MoodLog copyWith({
+    String? id,
+    int? moodScore,
+    String? moodLabel,
+    int? stressLevel,
+    int? energyLevel,
+    int? sleepQuality,
+    int? anxietyLevel,
+    String? note,
+    DateTime? createdAt,
+  }) {
+    return MoodLog(
+      id: id ?? this.id,
+      moodScore: moodScore ?? this.moodScore,
+      moodLabel: moodLabel ?? this.moodLabel,
+      stressLevel: stressLevel ?? this.stressLevel,
+      energyLevel: energyLevel ?? this.energyLevel,
+      sleepQuality: sleepQuality ?? this.sleepQuality,
+      anxietyLevel: anxietyLevel ?? this.anxietyLevel,
+      note: note ?? this.note,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  Map<String, dynamic> toMap({String? userId}) {
+    final validId = UuidHelper.isValidUuid(id) ? id : UuidHelper.generateV4();
+    final map = <String, dynamic>{
+      'id': validId,
       'mood_score': moodScore,
       'mood_label': moodLabel,
       'stress_level': stressLevel,
@@ -36,6 +62,10 @@ class MoodLog {
       'note': note,
       'created_at': createdAt.toIso8601String(),
     };
+    if (userId != null && userId.isNotEmpty) {
+      map['user_id'] = userId;
+    }
+    return map;
   }
 
   factory MoodLog.fromMap(Map<String, dynamic> map) {
@@ -85,6 +115,89 @@ class MoodLog {
         return '😊';
     }
   }
+
+  static String getMoodName(int score) {
+    switch (score) {
+      case 1:
+        return 'Struggling';
+      case 2:
+        return 'Low';
+      case 3:
+        return 'Okay';
+      case 4:
+        return 'Good';
+      case 5:
+      default:
+        return 'Awesome';
+    }
+  }
+
+  static String getMoodLabel(int score) => getMoodName(score);
+
+  static String getMoodAssetPath(int score) {
+    switch (score) {
+      case 1:
+        return 'assets/mood tracker/Very Sad.png';
+      case 2:
+        return 'assets/mood tracker/Sad.png';
+      case 3:
+        return 'assets/mood tracker/OK.png';
+      case 4:
+        return 'assets/mood tracker/Good.png';
+      case 5:
+      default:
+        return 'assets/mood tracker/Very Good.png';
+    }
+  }
+}
+
+class SleepAssetHelper {
+  static String getSleepAssetPath(int quality) {
+    switch (quality) {
+      case 1:
+        return 'assets/sleep log/Deprived.png';
+      case 2:
+        return 'assets/sleep log/Bad.png';
+      case 3:
+        return 'assets/sleep log/Okay.png';
+      case 4:
+        return 'assets/sleep log/Great.png';
+      case 5:
+      default:
+        return 'assets/sleep log/Energized.png';
+    }
+  }
+
+  static String getSleepLabel(int quality) {
+    switch (quality) {
+      case 1:
+        return 'Deprived';
+      case 2:
+        return 'Bad';
+      case 3:
+        return 'Okay';
+      case 4:
+        return 'Great';
+      case 5:
+      default:
+        return 'Energized';
+    }
+  }
+}
+
+class FeatureIconHelper {
+  static const String dailyReflection = 'assets/feature icons/Daily Reflection.png';
+  static const String entries = 'assets/feature icons/Entries.png';
+  static const String gratitudeGarden = 'assets/feature icons/Gratitude Garden.png';
+  static const String journal = 'assets/feature icons/Journal.png';
+  static const String midDayRoutine = 'assets/feature icons/Mid-day routine.png';
+  static const String moodTracker = 'assets/feature icons/Mood Tracker.png';
+  static const String morningRoutine = 'assets/feature icons/Morning Routine.png';
+  static const String nightRoutine = 'assets/feature icons/Night Routine.png';
+  static const String routines = 'assets/feature icons/Routines.png';
+  static const String sleepLog = 'assets/feature icons/Sleep log.png';
+  static const String todaysFocus = 'assets/feature icons/Today\'s Focus.png';
+  static const String todaysHighlight = 'assets/feature icons/Today\'s Higlight.png';
 }
 
 enum EmotionalWeatherType {

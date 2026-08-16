@@ -1,3 +1,5 @@
+import '../../core/utils/uuid_helper.dart';
+
 class JournalEntry {
   final String id;
   final String title;
@@ -49,9 +51,10 @@ class JournalEntry {
     );
   }
 
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
+  Map<String, dynamic> toMap({String? userId}) {
+    final validId = UuidHelper.isValidUuid(id) ? id : UuidHelper.generateV4();
+    final map = <String, dynamic>{
+      'id': validId,
       'title': title,
       'content': content,
       'ai_response': aiResponse,
@@ -62,6 +65,10 @@ class JournalEntry {
       'reflection_seed_stage': reflectionSeedStage,
       'created_at': createdAt.toIso8601String(),
     };
+    if (userId != null && userId.isNotEmpty) {
+      map['user_id'] = userId;
+    }
+    return map;
   }
 
   factory JournalEntry.fromMap(Map<String, dynamic> map) {

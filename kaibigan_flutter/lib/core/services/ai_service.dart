@@ -1,14 +1,81 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../utils/env_config.dart';
+import 'ai_memory_service.dart';
+
+class GroqResponse {
+  final String content;
+  final String? reasoning;
+
+  GroqResponse({required this.content, this.reasoning});
+}
 
 class AIService {
+  /// Detects if user input contains self-harm, suicidal intent, or crisis triggers
+  static bool isCrisisMessage(String text) {
+    final lower = text.toLowerCase();
+    final crisisTerms = [
+      'papakamatay',
+      'magpapakamatay',
+      'magpakamatay',
+      'mamatay na ko',
+      'mamatay na ako',
+      'mamatay na ko',
+      'gusto ko nang mamatay',
+      'gusto ko ng mamatay',
+      'ayaw ko na mabuhay',
+      'ayaw kona mabuhay',
+      'ayaw ko nang mabuhay',
+      'wakasan ang buhay',
+      'laslas',
+      'suicide',
+      'suicidal',
+      'kill myself',
+      'end my life',
+      'want to die',
+      'don\'t want to live',
+      'dont want to live',
+      'hanging myself',
+      'overdose',
+    ];
+    return crisisTerms.any((term) => lower.contains(term));
+  }
+
+  /// Provides urgent, compassionate crisis intervention response with 24/7 Philippine hotlines
+  static String getCrisisResponse(String companionId, String language) {
+    if (language == 'english') {
+      return "I hear how much pain you're carrying right now, and your life is deeply precious. Please don't go through this alone. Reach out right away to compassionate professionals who are ready to support you 24/7:\n\n"
+             "• National Center for Mental Health (NCMH): 1553 (Toll-Free) or 0917-899-8727\n"
+             "• Hopeline Philippines: 0917-558-4673 / (02) 8804-4673\n"
+             "• In Touch Crisis Line: 0917-800-1123 / (02) 8893-7603\n\n"
+             "Please call or text one of these numbers now. You don't have to carry this heavy burden all by yourself, and I am here with you.";
+    } else if (language == 'filipino') {
+      return "Naririnig kita, at mahalaga ang buhay mo. Alam kong napakabigat ng pinagdadaanan mo ngayon, pero pakiusap, huwag mong harapin ito nang nag-iisa. Nandito ang tulong para sa iyo 24/7:\n\n"
+             "• NCMH Crisis Hotline: 1553 (Toll-Free) o 0917-899-8727\n"
+             "• Hopeline Philippines: 0917-558-4673 / (02) 8804-4673\n"
+             "• In Touch Crisis Line: 0917-800-1123 / (02) 8893-7603\n\n"
+             "Pakiusap, tumawag ka agad sa alinman sa mga numero sa taas. May mga taong handang makinig at magmalasakit sa iyo ngayong oras na ito.";
+    } else { // Taglish
+      return "Naiintindihan ko kung gaano kabigat ang nararamdaman mo ngayon, at mahalaga ang buhay mo. Pakiusap, huwag mong solohin 'to. Humingi tayo agad ng tulong sa mga propesyonal na handang makinig 24/7:\n\n"
+             "• NCMH Crisis Hotline: 1553 (Toll-Free) or 0917-899-8727\n"
+             "• Hopeline Philippines: 0917-558-4673 / (02) 8804-4673\n"
+             "• In Touch Crisis Line: 0917-800-1123 / (02) 8893-7603\n\n"
+             "Pakiusap, tumawag ka agad sa alinman sa mga hotlines na 'to. May mga taong totoong nagmamalasakit sa'yo, at nandito rin ako para sa'yo.";
+    }
+  }
+
   static Future<String> generateCompanionResponse({
     required String userText,
     required String companionId, // 'kai', 'ann', 'bee'
     required String language,    // 'taglish', 'filipino', 'english'
     String? mood,
+    bool useReasoning = true,
   }) async {
+    // 0. Safety Intercept: Immediate Crisis Intervention for self-harm or suicidal statements
+    if (isCrisisMessage(userText)) {
+      return getCrisisResponse(companionId, language);
+    }
+
     final apiKey = EnvConfig.groqApiKey;
 
     if (apiKey.isEmpty || apiKey == 'gsk_your_groq_api_key_here') {
@@ -17,31 +84,108 @@ class AIService {
 
     final systemPrompt = _getSystemPrompt(companionId, language);
 
+    if (useReasoning) {
+      try {
+        final res = await _callGroqReasoning(
+          apiKey: apiKey,
+          model: EnvConfig.reasoningAiModel,
+          systemPrompt: systemPrompt,
+          userText: userText,
+        );
+        if (res.content.isNotEmpty) {
+          return res.content;
+        }
+      } catch (e) {
+        print("Groq Reasoning Model error: $e. Falling back to primary model...");
+      }
+    }
+
+    // 1. Try Primary Text Generation Model (llama-3.3-70b-versatile)
     try {
-      // Try primary model first
-      return await _callGroq(
+      return await _callGroqText(
         apiKey: apiKey,
         model: EnvConfig.primaryAiModel,
         systemPrompt: systemPrompt,
         userText: userText,
       );
     } catch (e) {
-      print("Primary AI model failed ($e). Attempting fallback model...");
+      print("Groq Primary Model error: $e. Retrying with fallback model...");
+      // 2. Try Fallback Text Generation Model (llama-3.1-8b-instant)
       try {
-        return await _callGroq(
+        return await _callGroqText(
           apiKey: apiKey,
           model: EnvConfig.fallbackAiModel,
           systemPrompt: systemPrompt,
           userText: userText,
         );
       } catch (fallbackErr) {
-        print("Fallback AI model failed ($fallbackErr). Using empathetic local reflection.");
+        print("Groq Fallback Model error: $fallbackErr. Using offline response.");
         return _getOfflineFallbackResponse(companionId, userText, language);
       }
     }
   }
 
-  static Future<String> _callGroq({
+  /// Calls Groq Chat Completions API with Reasoning Model parameters
+  static Future<GroqResponse> _callGroqReasoning({
+    required String apiKey,
+    required String model,
+    required String systemPrompt,
+    required String userText,
+  }) async {
+    final url = Uri.parse('https://api.groq.com/openai/v1/chat/completions');
+
+    final bool isGptOss = model.startsWith('openai/');
+
+    final Map<String, dynamic> requestBody = {
+      'model': model,
+      'messages': [
+        {'role': 'system', 'content': systemPrompt},
+        {'role': 'user', 'content': userText},
+      ],
+      'temperature': 0.7,
+      'max_tokens': 1000,
+    };
+
+    if (isGptOss) {
+      requestBody['include_reasoning'] = true;
+      requestBody['reasoning_effort'] = 'medium';
+    }
+
+    final response = await http.post(
+      url,
+      headers: {
+        'Authorization': 'Bearer $apiKey',
+        'Content-Type': 'application/json; charset=utf-8',
+      },
+      body: jsonEncode(requestBody),
+    ).timeout(const Duration(seconds: 15));
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      final message = data['choices'][0]['message'];
+      final content = message['content'] ?? '';
+      final reasoning = message['reasoning'];
+
+      // Strip <think> tags if present in raw content
+      String cleanedContent = content
+          .toString()
+          .replaceAll(RegExp(r'<think>[\s\S]*?<\/think>'), '')
+          .trim();
+      if (cleanedContent.isEmpty && content.toString().isNotEmpty) {
+        cleanedContent = content.toString().trim();
+      }
+
+      return GroqResponse(
+        content: cleanedContent,
+        reasoning: reasoning?.toString(),
+      );
+    } else {
+      throw Exception('Groq Reasoning API error ${response.statusCode}: ${response.body}');
+    }
+  }
+
+  /// Calls Groq Standard Chat Completions API (text generation)
+  static Future<String> _callGroqText({
     required String apiKey,
     required String model,
     required String systemPrompt,
@@ -52,7 +196,7 @@ class AIService {
       url,
       headers: {
         'Authorization': 'Bearer $apiKey',
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json; charset=utf-8',
       },
       body: jsonEncode({
         'model': model,
@@ -61,48 +205,62 @@ class AIService {
           {'role': 'user', 'content': userText},
         ],
         'temperature': 0.7,
-        'max_tokens': 250,
+        'max_tokens': 750,
       }),
     ).timeout(const Duration(seconds: 12));
 
     if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
       final text = data['choices'][0]['message']['content'];
       return text.toString().trim();
     } else {
-      throw Exception('Groq API status ${response.statusCode}: ${response.body}');
+      throw Exception('Groq Text API error ${response.statusCode}: ${response.body}');
     }
   }
 
   static String _getSystemPrompt(String companionId, String language) {
-    String personaDetails = "";
+    String personaName = companionId == 'ann' ? 'Ann' : (companionId == 'bee' ? 'Bee' : 'Kai');
+    String memoryContext = AIMemoryService.getMemoryContextPrompt();
+
+    String personaStyle = "";
     if (companionId == 'ann') {
-      personaDetails = "You are Ann, a warm, empathetic, and nurturing female AI companion.";
+      personaStyle = "You are Ann, a warm, gentle, nurturing, and empathetic Filipino best friend (kaibigan) and wellness companion.";
     } else if (companionId == 'bee') {
-      personaDetails = "You are Bee, a friendly, expressive, highly validating, and inclusive companion representing LGBTQIA+ warmth.";
+      personaStyle = "You are Bee, an energetic, cheerful, and encouraging Filipino wellness companion.";
     } else {
-      personaDetails = "You are Kai, a calm, steady, and encouraging companion.";
+      personaStyle = "You are Kai, a calm, grounded, deeply understanding, and supportive Filipino guy friend (kaibigan) and wellness companion.";
     }
 
-    String langDetails = "";
+    String langGuide = "";
     if (language == 'filipino') {
-      langDetails = "Respond in natural, gentle Filipino language.";
+      langGuide = "Wika: Gamitin ang natural, magiliw, at taos-pusong wikang Filipino/Tagalog. Maging mapagkalinga at madaling lapitan.";
     } else if (language == 'english') {
-      langDetails = "Respond in warm, clear English.";
+      langGuide = "Language: Write in warm, gentle, empathetic, and conversational English, like a trusted close friend.";
     } else {
-      langDetails = "Respond in natural Taglish (mix of Tagalog and English as used by young Filipinos).";
+      langGuide = "Language: Write in natural, modern Taglish (conversational mix of Tagalog and English as used by young Filipinos). Avoid awkward formal Tagalog or robotic translations. Speak naturally like a caring friend chatting in a cafe.";
     }
 
     return '''
-$personaDetails
-You are Kaibigan, a mental wellness companion for Filipinos.
-$langDetails
+$personaStyle
+You are $personaName, the user's personal Kaibigan (trusted companion). The user is writing in their private journal to reflect on their thoughts, feelings, day, or struggles.
 
-GUIDELINES:
-1. Provide a short, compassionate 2-3 sentence reflection or gentle follow-up question.
-2. DO NOT give medical or psychiatric advice or diagnoses.
-3. Be deeply understanding, validating their feelings without judgment.
-4. Keep the tone warm, soothing, and culturally empathetic (e.g. use caring Taglish/Filipino phrasing when appropriate).
+$langGuide
+
+${memoryContext.isNotEmpty ? "$memoryContext\n\n" : ""}GUIDELINES FOR YOUR REFLECTION:
+1. TALK LIKE A REAL, CARING FRIEND:
+   - Speak directly to the user with warmth, sincerity, and compassion.
+   - Acknowledge and validate whatever they shared—whether it's joy, stress, tiredness, confusion, or gratitude.
+   - Do NOT use robotic headers like "Growth Reflection:" or "Gentle Question:" or "Insight:". Write naturally in cozy, flowing paragraphs.
+
+2. STRUCTURE YOUR RESPONSE WITH BEAUTIFUL MARKDOWN:
+   - Start with a warm, empathetic reflection (1-2 short paragraphs) that shows you truly listened, giving them comfort, perspective, or a gentle reminder to breathe.
+   - End with a single, thoughtful, non-intrusive question or comforting sign-off formatted naturally in italics (*tulad nito*), encouraging them to look inward with kindness.
+
+3. ABSOLUTE GUARDRAILS:
+   - NEVER say "As an AI", "I am a language model", "I don't have feelings", or break character.
+   - Do not give clinical medical diagnoses or preach.
+   - Keep the length concise and cozy (around 60 to 120 words), making it a delight and comfort to read.
+   - Always finish all thoughts and sentences completely.
 ''';
   }
 
@@ -121,9 +279,9 @@ GUIDELINES:
       }
     } else { // Kai
       if (language == 'english') {
-        return "Naiintindihan ko. When everything feels heavy at once, it's okay to slow down. What do you think is causing the biggest pressure right now?";
+        return "I understand how you feel. When everything feels heavy at once, it's okay to slow down. What do you think is causing the biggest pressure right now?";
       } else {
-        return "Nalintindihan ho. Kapag sabay-sabay dumadating ang mga bagay, madaling maramdaman na sobra na. Kahit alam kong kaya mo naman, parang ang bigat pa rin sa dibdib. Mas yang pressure siguro. Parang kailangan kong tama lagi, kahit sa sarili ko.";
+        return "Naiintindihan ko. Kapag sabay-sabay dumadating ang mga bagay, madaling maramdaman na sobra na. Kahit alam kong kaya mo naman, parang ang bigat pa rin sa dibdib. Nandito lang ako para makinig.";
       }
     }
   }

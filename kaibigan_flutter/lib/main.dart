@@ -13,7 +13,9 @@ import 'features/mood_tracking/mood_provider.dart';
 import 'features/comfort_corner/comfort_provider.dart';
 import 'features/future_letters/letters_provider.dart';
 import 'features/wellness_journey/daily_goals_provider.dart';
-import 'features/main_navigation_screen.dart';
+import 'features/routines/routines_provider.dart';
+import 'features/auth_onboarding/auth_screen.dart';
+import 'features/home/home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -55,6 +57,7 @@ class KaibiganApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ComfortProvider()),
         ChangeNotifierProvider(create: (_) => LettersProvider()),
         ChangeNotifierProvider(create: (_) => DailyGoalsProvider()),
+        ChangeNotifierProvider(create: (_) => RoutinesProvider()),
       ],
       child: Consumer<UserProvider>(
         builder: (context, userProvider, child) {
@@ -64,8 +67,11 @@ class KaibiganApp extends StatelessWidget {
             scrollBehavior: AppScrollBehavior(),
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,
-            themeMode: userProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
-            home: const MainNavigationScreen(),
+            themeMode:
+                userProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+            home: userProvider.isAuthenticated
+                ? const HomeScreen()
+                : const AuthScreen(),
           );
         },
       ),

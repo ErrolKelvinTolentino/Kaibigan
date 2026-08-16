@@ -9,15 +9,20 @@ class SupabaseService {
       final url = EnvConfig.supabaseUrl;
       final anonKey = EnvConfig.supabaseAnonKey;
 
-      if (url.isNotEmpty && !url.contains('xyzcompany') && anonKey.isNotEmpty && anonKey != 'dummy_key') {
+      if (url.isNotEmpty &&
+          !url.contains('xyzcompany') &&
+          !url.contains('your-supabase-project') &&
+          anonKey.isNotEmpty &&
+          anonKey != 'dummy_key' &&
+          anonKey != 'your_supabase_anon_key_here') {
         await Supabase.initialize(
           url: url,
           anonKey: anonKey,
         );
         _isInitialized = true;
-        print("Supabase successfully initialized.");
+        print("Supabase successfully initialized with $url");
       } else {
-        print("Supabase credentials not set or using placeholder. Running in local-first mode.");
+        print("Supabase credentials missing or invalid. Supabase is required for authentication and storage.");
       }
     } catch (e) {
       print("Supabase initialization error: $e");

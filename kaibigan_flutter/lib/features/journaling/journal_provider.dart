@@ -1,62 +1,85 @@
 import 'package:flutter/material.dart';
-import '../../core/services/ai_service.dart';
+import '../../core/services/ai_memory_service.dart';
 import '../../core/services/supabase_service.dart';
+import '../../core/utils/uuid_helper.dart';
 import 'journal_model.dart';
 
 class JournalProvider extends ChangeNotifier {
   final List<JournalEntry> _entries = [];
   bool _isLoading = false;
-  String _searchQuery = "";
+  String _searchQuery = '';
+  String? _selectedCategoryFilter;
 
   List<JournalEntry> get entries {
-    if (_searchQuery.isEmpty) return List.unmodifiable(_entries);
-    return _entries.where((e) =>
-      e.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-      e.content.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-      e.tags.any((t) => t.toLowerCase().contains(_searchQuery.toLowerCase()))
-    ).toList();
+    return _entries.where((entry) {
+      final matchesSearch = _searchQuery.isEmpty ||
+          entry.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          entry.content.toLowerCase().contains(_searchQuery.toLowerCase());
+
+      final matchesCategory = _selectedCategoryFilter == null ||
+          entry.tags.contains(_selectedCategoryFilter);
+
+      return matchesSearch && matchesCategory;
+    }).toList();
   }
 
   List<JournalEntry> get favoriteEntries =>
       _entries.where((e) => e.isFavorite).toList();
 
+  JournalEntry? getMemoryLaneEntry() {
+    if (_entries.isEmpty) return null;
+    final pastEntries = _entries
+        .where((e) => DateTime.now().difference(e.createdAt).inDays >= 1)
+        .toList();
+    if (pastEntries.isNotEmpty) return pastEntries.first;
+    return _entries.first;
+  }
+
   bool get isLoading => _isLoading;
   String get searchQuery => _searchQuery;
+  String? get selectedCategoryFilter => _selectedCategoryFilter;
 
   JournalProvider() {
     _initSampleData();
+    fetchJournalEntries();
   }
 
-  void setSearchQuery(String q) {
-    _searchQuery = q;
+  void setSearchQuery(String query) {
+    _searchQuery = query;
+    notifyListeners();
+  }
+
+  void setCategoryFilter(String? category) {
+    _selectedCategoryFilter = category;
     notifyListeners();
   }
 
   void _initSampleData() {
     _entries.addAll([
       JournalEntry(
-        id: 'sample-1',
-        title: 'Medyo mabigat na araw',
-        content: 'Sobrang dami ng deadline ngayon, pakiramdam ko parang hindi ako makahinga. Kahit alam kong kaya ko naman, parang ang bigat pa rin sa dibdib.',
-        aiResponse: 'Naiintindihan ko. Kapag sabay-sabay dumadating ang mga bagay, madaling maramdaman na sobra na. Kahit alam kong kaya mo naman, parang ang bigat pa rin sa dibdib. Mas yang pressure siguro. Parang kailangan kong tama lagi, kahit sa sarili ko.',
+        id: UuidHelper.generateV4(),
+        title: 'Breathe and Reset',
+        content:
+            'Today was full of tasks, but taking a short walk helped clear my mind.',
+        aiResponse:
+            'Ang ganda ng desisyon mo na maglakad-lakad kahit sandali. Minsan, akala natin kailangan tuloy-tuloy ang trabaho, pero ang totoo, ang paghinga at pagbagal ang nagbibigay sa atin ng lakas para magpatuloy.\n\n*Anong isang magandang tanawin o pakiramdam ang napansin mo kanina habang naglalakad ka?*',
         companionId: 'kai',
-        mood: 'stressed',
-        tags: ['School', 'Pressure'],
+        mood: 'calm',
+        tags: ['Daily', 'Reflection'],
         isFavorite: true,
-        reflectionSeedStage: 3,
         createdAt: DateTime.now().subtract(const Duration(days: 1)),
       ),
       JournalEntry(
-        id: 'sample-2',
-        title: 'Morning reflection & quiet moment',
-        content: 'Woke up feeling peaceful today. Spent 10 minutes watering the plants and breathing slowly. I feel ready to handle whatever comes today.',
-        aiResponse: 'Such a calm and beautiful start to your morning! Nurturing green leaves and taking time for yourself is a wonderful act of self-love.',
+        id: UuidHelper.generateV4(),
+        title: 'Reflections on Gratitude',
+        content: 'Grateful for rainy weather and hot soup with family tonight.',
+        aiResponse:
+            'Ang sarap sa puso ng mga ganitong simpleng sandali—mainit na sabaw sa malamig na gabi kasama ang mga taong mahalaga sa\'yo. Ang mga ganitong payapang alaala ang nagsisilbing kanlungan natin sa gitna ng abalang linggo.\n\n*Paano mo pa kaya maipapadama ang pasasalamat na ito sa kanila bukas?*',
         companionId: 'ann',
-        mood: 'calm',
-        tags: ['Peaceful', 'Morning'],
+        mood: 'happy',
+        tags: ['Gratitude'],
         isFavorite: false,
-        reflectionSeedStage: 2,
-        createdAt: DateTime.now().subtract(const Duration(days: 4)),
+        createdAt: DateTime.now().subtract(const Duration(days: 3)),
       ),
     ]);
   }
@@ -67,10 +90,12 @@ class JournalProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await SupabaseService.client
-          .from('journal_entries')
-          .select()
-          .order('created_at', ascending: false);
+      final userId = SupabaseService.client.auth.currentUser?.id;
+      var query = SupabaseService.client.from('journal_entries').select();
+      if (userId != null) {
+        query = query.eq('user_id', userId);
+      }
+      final response = await query.order('created_at', ascending: false);
 
       final List data = response as List;
       _entries.clear();
@@ -86,33 +111,21 @@ class JournalProvider extends ChangeNotifier {
   Future<JournalEntry> addJournalEntry({
     required String title,
     required String content,
+    String? aiReply,
+    String? aiResponse,
     required String companionId,
-    required String language,
-    String mood = 'calm',
+    required String mood,
     List<String> tags = const [],
-    bool requestAiReflection = true,
+    int seedStage = 1,
   }) async {
     _isLoading = true;
     notifyListeners();
 
-    String? aiReply;
-    int seedStage = 1;
-
-    if (requestAiReflection && content.trim().isNotEmpty) {
-      aiReply = await AIService.generateCompanionResponse(
-        userText: '$title\n$content',
-        companionId: companionId,
-        language: language,
-        mood: mood,
-      );
-      seedStage = 2; // Grown into sprout upon companion reflection!
-    }
-
     final newEntry = JournalEntry(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      title: title.isEmpty ? 'Untitled Reflection' : title,
+      id: UuidHelper.generateV4(),
+      title: title,
       content: content,
-      aiResponse: aiReply,
+      aiResponse: aiResponse ?? aiReply,
       companionId: companionId,
       mood: mood,
       tags: tags,
@@ -125,13 +138,16 @@ class JournalProvider extends ChangeNotifier {
 
     if (SupabaseService.isInitialized) {
       try {
+        final userId = SupabaseService.client.auth.currentUser?.id;
         await SupabaseService.client
             .from('journal_entries')
-            .insert(newEntry.toMap());
+            .insert(newEntry.toMap(userId: userId));
       } catch (e) {
         print("Error saving entry to Supabase: $e");
       }
     }
+
+    AIMemoryService.extractMemoryFromNote(title, content);
 
     _isLoading = false;
     notifyListeners();
@@ -141,26 +157,58 @@ class JournalProvider extends ChangeNotifier {
   Future<void> toggleFavorite(String id) async {
     final index = _entries.indexWhere((e) => e.id == id);
     if (index != -1) {
-      final updated = _entries[index].copyWith(isFavorite: !_entries[index].isFavorite);
+      final updated =
+          _entries[index].copyWith(isFavorite: !_entries[index].isFavorite);
       _entries[index] = updated;
       notifyListeners();
 
-      if (SupabaseService.isInitialized) {
+      if (SupabaseService.isInitialized && UuidHelper.isValidUuid(id)) {
         try {
           await SupabaseService.client
               .from('journal_entries')
-              .update({'is_favorite': updated.isFavorite})
-              .eq('id', id);
+              .update({'is_favorite': updated.isFavorite}).eq('id', id);
         } catch (e) {
-          print("Error updating favorite: $e");
+          print("Error updating favorite status: $e");
         }
       }
     }
   }
 
-  // Memory Lane: get entry from same period or past
-  JournalEntry? getMemoryLaneEntry() {
-    if (_entries.isEmpty) return null;
-    return _entries.last; // Returns an earlier reflective entry
+  Future<void> updateJournalEntry(JournalEntry entry) async {
+    final index = _entries.indexWhere((e) => e.id == entry.id);
+    if (index != -1) {
+      _entries[index] = entry;
+      notifyListeners();
+
+      if (SupabaseService.isInitialized && UuidHelper.isValidUuid(entry.id)) {
+        try {
+          final userId = SupabaseService.client.auth.currentUser?.id;
+          await SupabaseService.client
+              .from('journal_entries')
+              .update(entry.toMap(userId: userId))
+              .eq('id', entry.id);
+        } catch (e) {
+          print("Error updating entry in Supabase: $e");
+        }
+      }
+
+      AIMemoryService.extractMemoryFromNote(entry.title, entry.content);
+    }
+  }
+
+  Future<void> deleteJournalEntry(String id) async {
+    _entries.removeWhere((e) => e.id == id);
+    notifyListeners();
+
+    if (SupabaseService.isInitialized && UuidHelper.isValidUuid(id)) {
+      try {
+        await SupabaseService.client
+            .from('journal_entries')
+            .delete()
+            .eq('id', id);
+      } catch (e) {
+        print("Error deleting entry from Supabase: $e");
+      }
+    }
   }
 }

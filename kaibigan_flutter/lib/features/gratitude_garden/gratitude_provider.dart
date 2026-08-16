@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
 import '../../core/services/supabase_service.dart';
+import '../../core/utils/uuid_helper.dart';
 import 'gratitude_model.dart';
 
 class GratitudeProvider extends ChangeNotifier {
   final List<GratitudeEntry> _entries = [];
+  final List<GratitudeEntry> _communityEntries = [];
   bool _isLoading = false;
+  String _activeSoundscape = 'lofi_guitar'; // 'lofi_guitar', 'rain_nipa', 'night_crickets', 'ocean_breeze', 'off'
 
   List<GratitudeEntry> get entries => List.unmodifiable(_entries);
+  List<GratitudeEntry> get communityEntries => List.unmodifiable(_communityEntries);
   bool get isLoading => _isLoading;
   int get flowerCount => _entries.length;
+  String get activeSoundscape => _activeSoundscape;
 
   // Gamification Level & Progression
   int get gardenLevel => (_entries.length ~/ 5) + 1;
@@ -23,12 +28,19 @@ class GratitudeProvider extends ChangeNotifier {
 
   GratitudeProvider() {
     _initSampleData();
+    _initCommunityMeadow();
+    fetchGratitudeEntries();
+  }
+
+  void setSoundscape(String soundscape) {
+    _activeSoundscape = soundscape;
+    notifyListeners();
   }
 
   void _initSampleData() {
     _entries.addAll([
       GratitudeEntry(
-        id: 'g-1',
+        id: UuidHelper.generateV4(),
         content: 'Tumawag si Mama, ang saya ng boses niya.',
         flowerType: 'sunflower',
         growthStage: 3,
@@ -36,7 +48,7 @@ class GratitudeProvider extends ChangeNotifier {
         createdAt: DateTime.now().subtract(const Duration(days: 2)),
       ),
       GratitudeEntry(
-        id: 'g-2',
+        id: UuidHelper.generateV4(),
         content: 'Napanood ko ang magandang sunset sa biyahe pauwi.',
         flowerType: 'sampaguita',
         growthStage: 3,
@@ -44,7 +56,7 @@ class GratitudeProvider extends ChangeNotifier {
         createdAt: DateTime.now().subtract(const Duration(days: 1)),
       ),
       GratitudeEntry(
-        id: 'g-3',
+        id: UuidHelper.generateV4(),
         content: 'Nakatapos ng mahirap na task sa school with team.',
         flowerType: 'tulip',
         growthStage: 3,
@@ -52,12 +64,41 @@ class GratitudeProvider extends ChangeNotifier {
         createdAt: DateTime.now(),
       ),
       GratitudeEntry(
-        id: 'g-4',
+        id: UuidHelper.generateV4(),
         content: 'A warm cup of tsokolate on a rainy afternoon.',
         flowerType: 'orchid',
         growthStage: 3,
         waterCount: 1,
         createdAt: DateTime.now().subtract(const Duration(hours: 4)),
+      ),
+    ]);
+  }
+
+  void _initCommunityMeadow() {
+    _communityEntries.addAll([
+      GratitudeEntry(
+        id: UuidHelper.generateV4(),
+        content: 'Nakatulong ako sa matanda na tumawid sa kalsada ngayong umaga.',
+        flowerType: 'sampaguita',
+        growthStage: 3,
+        waterCount: 12,
+        createdAt: DateTime.now().subtract(const Duration(hours: 3)),
+      ),
+      GratitudeEntry(
+        id: UuidHelper.generateV4(),
+        content: 'Passed my major exam after studying hard all week! 📚🎉',
+        flowerType: 'sunflower',
+        growthStage: 3,
+        waterCount: 28,
+        createdAt: DateTime.now().subtract(const Duration(hours: 6)),
+      ),
+      GratitudeEntry(
+        id: UuidHelper.generateV4(),
+        content: 'Grateful for rainy weather and hot sinigang with family.',
+        flowerType: 'rose',
+        growthStage: 3,
+        waterCount: 45,
+        createdAt: DateTime.now().subtract(const Duration(hours: 12)),
       ),
     ]);
   }
@@ -68,10 +109,12 @@ class GratitudeProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await SupabaseService.client
-          .from('gratitude_entries')
-          .select()
-          .order('created_at', ascending: true);
+      final userId = SupabaseService.client.auth.currentUser?.id;
+      var query = SupabaseService.client.from('gratitude_entries').select();
+      if (userId != null) {
+        query = query.eq('user_id', userId);
+      }
+      final response = await query.order('created_at', ascending: true);
 
       final List data = response as List;
       _entries.clear();
@@ -84,7 +127,7 @@ class GratitudeProvider extends ChangeNotifier {
     }
   }
 
-  Future<GratitudeEntry> addGratitudeEntry(String content, {String flowerType = 'sunflower'}) async {
+  Future<GratitudeEntry> addGratitudeEntry(String content, {String flowerType = 'sunflower', bool shareToCommunity = false}) async {
     _isLoading = true;
     notifyListeners();
 
@@ -94,7 +137,7 @@ class GratitudeProvider extends ChangeNotifier {
         : flowerType;
 
     final newEntry = GratitudeEntry(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: UuidHelper.generateV4(),
       content: content,
       flowerType: chosenType,
       growthStage: 3,
@@ -104,11 +147,16 @@ class GratitudeProvider extends ChangeNotifier {
 
     _entries.add(newEntry);
 
+    if (shareToCommunity) {
+      _communityEntries.insert(0, newEntry);
+    }
+
     if (SupabaseService.isInitialized) {
       try {
+        final userId = SupabaseService.client.auth.currentUser?.id;
         await SupabaseService.client
             .from('gratitude_entries')
-            .insert(newEntry.toMap());
+            .insert(newEntry.toMap(userId: userId));
       } catch (e) {
         print("Error saving gratitude entry to Supabase: $e");
       }
@@ -119,11 +167,59 @@ class GratitudeProvider extends ChangeNotifier {
     return newEntry;
   }
 
-  void waterFlower(String id) {
+  Future<void> waterFlower(String id) async {
     final index = _entries.indexWhere((e) => e.id == id);
     if (index != -1) {
-      _entries[index] = _entries[index].copyWith(waterCount: _entries[index].waterCount + 1);
+      final updated = _entries[index].copyWith(waterCount: _entries[index].waterCount + 1);
+      _entries[index] = updated;
       notifyListeners();
+
+      if (SupabaseService.isInitialized && UuidHelper.isValidUuid(id)) {
+        try {
+          await SupabaseService.client
+              .from('gratitude_entries')
+              .update({'water_count': updated.waterCount})
+              .eq('id', id);
+        } catch (e) {
+          print("Error updating water count in Supabase: $e");
+        }
+      }
+    }
+  }
+
+  Future<void> updateGratitudeEntry(String id, String newContent) async {
+    final index = _entries.indexWhere((e) => e.id == id);
+    if (index != -1) {
+      final updated = _entries[index].copyWith(content: newContent);
+      _entries[index] = updated;
+      notifyListeners();
+
+      if (SupabaseService.isInitialized && UuidHelper.isValidUuid(id)) {
+        try {
+          await SupabaseService.client
+              .from('gratitude_entries')
+              .update({'content': newContent})
+              .eq('id', id);
+        } catch (e) {
+          print("Error updating gratitude entry in Supabase: $e");
+        }
+      }
+    }
+  }
+
+  Future<void> deleteGratitudeEntry(String id) async {
+    _entries.removeWhere((e) => e.id == id);
+    notifyListeners();
+
+    if (SupabaseService.isInitialized && UuidHelper.isValidUuid(id)) {
+      try {
+        await SupabaseService.client
+            .from('gratitude_entries')
+            .delete()
+            .eq('id', id);
+      } catch (e) {
+        print("Error deleting gratitude entry: $e");
+      }
     }
   }
 }

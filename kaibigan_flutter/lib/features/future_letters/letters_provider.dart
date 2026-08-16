@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/services/supabase_service.dart';
+import '../../core/utils/uuid_helper.dart';
 
 class FutureLetter {
   final String id;
@@ -20,15 +21,20 @@ class FutureLetter {
 
   bool get isReadyToUnlock => DateTime.now().isAfter(deliverAt);
 
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
+  Map<String, dynamic> toMap({String? userId}) {
+    final validId = UuidHelper.isValidUuid(id) ? id : UuidHelper.generateV4();
+    final map = <String, dynamic>{
+      'id': validId,
       'title': title,
       'content': content,
       'deliver_at': deliverAt.toIso8601String(),
       'is_opened': isOpened,
       'created_at': createdAt.toIso8601String(),
     };
+    if (userId != null && userId.isNotEmpty) {
+      map['user_id'] = userId;
+    }
+    return map;
   }
 
   factory FutureLetter.fromMap(Map<String, dynamic> map) {
@@ -56,13 +62,14 @@ class LettersProvider extends ChangeNotifier {
 
   LettersProvider() {
     _initSampleData();
+    fetchLetters();
   }
 
   void _initSampleData() {
     final now = DateTime.now();
     _letters.addAll([
       FutureLetter(
-        id: 'fl-1',
+        id: UuidHelper.generateV4(),
         title: 'Para sa akin sa susunod na buwan',
         content: 'Sana mas magaan na ang puso mo habang binabasa mo ito. Remember how hard you worked on your capstone project! I am so proud of you.',
         deliverAt: now.add(const Duration(days: 30)),
@@ -70,7 +77,7 @@ class LettersProvider extends ChangeNotifier {
         createdAt: now.subtract(const Duration(days: 2)),
       ),
       FutureLetter(
-        id: 'fl-2',
+        id: UuidHelper.generateV4(),
         title: 'A note from last week',
         content: 'You felt stressed on Monday, but look—you made it through gracefully! Always trust your resilience.',
         deliverAt: now.subtract(const Duration(hours: 1)),
@@ -86,10 +93,12 @@ class LettersProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await SupabaseService.client
-          .from('future_letters')
-          .select()
-          .order('created_at', ascending: false);
+      final userId = SupabaseService.client.auth.currentUser?.id;
+      var query = SupabaseService.client.from('future_letters').select();
+      if (userId != null) {
+        query = query.eq('user_id', userId);
+      }
+      final response = await query.order('created_at', ascending: false);
 
       final List data = response as List;
       _letters.clear();
@@ -111,7 +120,7 @@ class LettersProvider extends ChangeNotifier {
     notifyListeners();
 
     final newLetter = FutureLetter(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: UuidHelper.generateV4(),
       title: title,
       content: content,
       deliverAt: deliverAt,
@@ -123,9 +132,10 @@ class LettersProvider extends ChangeNotifier {
 
     if (SupabaseService.isInitialized) {
       try {
+        final userId = SupabaseService.client.auth.currentUser?.id;
         await SupabaseService.client
             .from('future_letters')
-            .insert(newLetter.toMap());
+            .insert(newLetter.toMap(userId: userId));
       } catch (e) {
         print("Error saving letter to Supabase: $e");
       }
@@ -134,5 +144,21 @@ class LettersProvider extends ChangeNotifier {
     _isLoading = false;
     notifyListeners();
     return newLetter;
+  }
+
+  Future<void> deleteLetter(String id) async {
+    _letters.removeWhere((l) => l.id == id);
+    notifyListeners();
+
+    if (SupabaseService.isInitialized && UuidHelper.isValidUuid(id)) {
+      try {
+        await SupabaseService.client
+            .from('future_letters')
+            .delete()
+            .eq('id', id);
+      } catch (e) {
+        print("Error deleting letter from Supabase: $e");
+      }
+    }
   }
 }

@@ -1,9 +1,15 @@
-# Environment & Sensitive Keys
+# =================================================================
+# ENVIRONMENT & SENSITIVE KEYS
+# =================================================================
 .env
 .env.*
 !.env.example
+*.pem
+*.key
 
-# Miscellaneous
+# =================================================================
+# MISCELLANEOUS & SYSTEM
+# =================================================================
 *.class
 *.log
 *.pyc
@@ -17,16 +23,19 @@ Thumbs.db
 .svn/
 .swiftpm/
 
-# IDE & Editor files
+# =================================================================
+# IDES & EDITORS
+# =================================================================
 *.iml
 *.ipr
 *.iws
 .idea/
 .vscode/
 
-# Flutter/Dart/Pub related
+# =================================================================
+# FLUTTER / DART / PUB
+# =================================================================
 **/doc/api/
-**/ios/Flutter/.last_build_id
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
@@ -35,11 +44,29 @@ Thumbs.db
 /build/
 /coverage/
 
-# Android Studio & Gradle
+# =================================================================
+# ANDROID
+# =================================================================
 /android/.gradle
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/local.properties
+/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
 
-# Windows & Ephemeral
+# =================================================================
+# IOS & MACOS
+# =================================================================
+/ios/Flutter/ephemeral/
+/ios/Flutter/flutter_export_environment.sh
+/ios/Flutter/Generated.xcconfig
+/ios/Flutter/.last_build_id
+/ios/Runner/GeneratedPluginRegistrant.*
+/macos/Flutter/ephemeral/
+/macos/Flutter/GeneratedPluginRegistrant.swift
+
+# =================================================================
+# WINDOWS
+# =================================================================
 /windows/flutter/ephemeral
+/windows/flutter/generated_plugin_registrant.*

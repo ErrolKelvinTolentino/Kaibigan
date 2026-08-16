@@ -96,3 +96,21 @@ class PDFService {
     );
   }
 }
+
+class PdfService {
+  static Future<void> exportJournalPdf({
+    required String title,
+    required String content,
+    String? aiResponse,
+    String? companionName,
+    required DateTime createdAt,
+  }) async {
+    await PDFService.exportJournalToPDF(
+      title: title,
+      content: content,
+      aiResponse: aiResponse,
+      companionName: companionName,
+      createdAt: createdAt,
+    );
+  }
+}

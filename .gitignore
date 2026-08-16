@@ -29,7 +29,9 @@
 **/android/app/release/
 **/android/key.jks
 **/android/key.p12
+**/android/local.properties
 **/android/app/google-services.json
+**/android/**/GeneratedPluginRegistrant.java
 
 # =================================================================
 # IOS & MACOS
@@ -40,6 +42,11 @@
 **/ios/Flutter/Flutter.framework
 **/ios/Flutter/Flutter.podspec
 **/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Flutter/ephemeral/
+**/ios/Runner/GeneratedPluginRegistrant.*
+**/macos/Flutter/ephemeral/
+**/macos/Flutter/GeneratedPluginRegistrant.swift
 **/ios/Flutter/app.flx
 **/ios/Flutter/app.zip
 **/ios/Flutter/flutter_assets/
@@ -56,6 +63,7 @@
 # WINDOWS & WEB BUILD OUTPUT
 # =================================================================
 **/windows/flutter/ephemeral/
+**/windows/flutter/generated_plugin_registrant.*
 **/web/main.dart.js
 **/web/main.dart.js.map
 **/web/main.dart.js.deps
@@ -63,11 +71,11 @@
 # =================================================================
 # IDES & EDITORS
 # =================================================================
-.idea/
-.vscode/
-*.iml
-*.ipr
-*.iws
+**/.idea/
+**/.vscode/
+**/*.iml
+**/*.ipr
+**/*.iws
 *.swp
 *.swo
 

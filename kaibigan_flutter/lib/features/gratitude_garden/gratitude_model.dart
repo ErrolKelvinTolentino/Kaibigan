@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/utils/uuid_helper.dart';
 
 class GratitudeEntry {
   final String id;
@@ -35,15 +36,20 @@ class GratitudeEntry {
     );
   }
 
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
+  Map<String, dynamic> toMap({String? userId}) {
+    final validId = UuidHelper.isValidUuid(id) ? id : UuidHelper.generateV4();
+    final map = <String, dynamic>{
+      'id': validId,
       'content': content,
       'flower_type': flowerType,
       'growth_stage': growthStage,
       'water_count': waterCount,
       'created_at': createdAt.toIso8601String(),
     };
+    if (userId != null && userId.isNotEmpty) {
+      map['user_id'] = userId;
+    }
+    return map;
   }
 
   factory GratitudeEntry.fromMap(Map<String, dynamic> map) {
@@ -122,4 +128,21 @@ class GratitudeEntry {
         return '🌻';
     }
   }
+
+  static IconData getFlowerMaterialIcon(String flowerType) {
+    switch (flowerType) {
+      case 'sampaguita':
+        return Icons.filter_vintage;
+      case 'tulip':
+        return Icons.local_florist;
+      case 'orchid':
+        return Icons.spa;
+      case 'rose':
+        return Icons.favorite;
+      case 'sunflower':
+      default:
+        return Icons.wb_sunny;
+    }
+  }
 }
+

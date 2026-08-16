@@ -3,6 +3,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
 
 class AppTypography {
+  // Headings
+  static TextStyle heading1(BuildContext context, {bool isDark = false, Color? color}) => titleLarge(context, isDark: isDark, color: color);
+  static TextStyle heading2(BuildContext context, {bool isDark = false, Color? color}) => titleLarge(context, isDark: isDark, color: color);
+  static TextStyle heading3(BuildContext context, {bool isDark = false, Color? color}) => titleMedium(context, isDark: isDark, color: color);
+
   // Hero Stacked Header Typography (e.g. MY favorites)
   static TextStyle heroHeader(BuildContext context, {bool isDark = false, Color? color}) => GoogleFonts.quicksand(
         fontSize: 34,

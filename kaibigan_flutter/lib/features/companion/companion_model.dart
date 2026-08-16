@@ -30,40 +30,33 @@ class MascotInfo {
     MascotInfo(
       id: 'kai',
       name: 'Kai',
-      tag: 'Calm, steady, encouraging',
-      description: 'Provides a grounded, thoughtful presence to help you unpack heavy thoughts gently.',
+      tag: 'Male Bee Companion • Steady & Grounded',
+      description: 'Dressed in honey-gold and warm slate bee attire. Provides a calming, encouraging presence to help you organize thoughts.',
       primaryColor: AppColors.kaiPrimary,
       lightBgColor: AppColors.kaiLight,
-      avatarIcon: '🌿',
-      greetingTaglish: 'Kamusta ka ngayong araw? Nandito ako para makinig.',
-      greetingFilipino: 'Kamusta ang iyong araw? Handa akong makinig sa iyo.',
-      greetingEnglish: 'How are you feeling today? I am here to listen whenever you need.',
+      avatarIcon: 'Kai',
+      greetingTaglish: 'Kamusta ka ngayong araw? Nandito ako para samahan ka mag-reflect.',
+      greetingFilipino: 'Magandang araw sa iyo. Handa akong makinig at samahan ka.',
+      greetingEnglish: 'How are you feeling today? Take your time, I am right here with you.',
     ),
     MascotInfo(
       id: 'ann',
       name: 'Ann',
-      tag: 'Warm, empathetic, nurturing',
-      description: 'Offers deep emotional validation and gentle warmth like a trusted close friend.',
+      tag: 'Female Bee Companion • Warm & Empathetic',
+      description: 'Dressed in blossom-peach and honey bee attire. Offers gentle emotional care and validation like a loving close friend.',
       primaryColor: AppColors.annPrimary,
       lightBgColor: AppColors.annLight,
-      avatarIcon: '🌸',
-      greetingTaglish: 'Medyo mabigat ba ang araw? Magpahinga ka muna rito sa piling ko.',
-      greetingFilipino: 'Mabigat ba ang iyong pakiramdam? Dito ka muna magpahinga.',
-      greetingEnglish: 'Feeling a bit overwhelmed? Rest your mind here with me.',
-    ),
-    MascotInfo(
-      id: 'bee',
-      name: 'Bee',
-      tag: 'Friendly, expressive, inclusive',
-      description: 'Expressive and uplifting space where every identity and emotion is celebrated.',
-      primaryColor: AppColors.beePrimary,
-      lightBgColor: AppColors.beeLight,
-      avatarIcon: '🐝',
-      greetingTaglish: 'Hey friend! Anong kwento mo ngayon? I-share mo lang kahit ano!',
-      greetingFilipino: 'Magandang araw! Ano ang kwento ng iyong puso ngayon?',
-      greetingEnglish: 'Hey there friend! What\'s on your mind today? Share whatever you feel!',
+      avatarIcon: 'Ann',
+      greetingTaglish: 'Medyo mabigat ba ang pakiramdam mo? Magpahinga ka muna rito.',
+      greetingFilipino: 'Mabigat ba ang iyong puso? Dito ka muna magpahinga at mag-breathe.',
+      greetingEnglish: 'Feeling a bit tired or overwhelmed? Rest your mind here with me.',
     ),
   ];
+
+  IconData get materialIcon {
+    if (id == 'ann') return Icons.favorite_rounded;
+    return Icons.spa_rounded;
+  }
 
   static MascotInfo getById(String id) {
     return companions.firstWhere(
@@ -71,4 +64,6 @@ class MascotInfo {
       orElse: () => companions[0],
     );
   }
+
+  static MascotInfo getMascot(String id) => getById(id);
 }

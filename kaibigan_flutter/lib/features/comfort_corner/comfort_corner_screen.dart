@@ -40,7 +40,7 @@ class _ComfortCornerScreenState extends State<ComfortCornerScreen>
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'Comfort Corner 🫶',
+          'Comfort Corner',
           style: AppTypography.titleLarge(context, isDark: isDark),
         ),
       ),
@@ -117,8 +117,11 @@ class _ComfortCornerScreenState extends State<ComfortCornerScreen>
                                   color: AppColors.sageGreen, width: 3),
                             ),
                             child: const Center(
-                              child:
-                                  Text('🌬️', style: TextStyle(fontSize: 44)),
+                              child: Icon(
+                                Icons.air_rounded,
+                                size: 48,
+                                color: AppColors.sageGreen,
+                              ),
                             ),
                           ),
                         ),
