@@ -4,6 +4,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../core/widgets/cozy_confirm_sheet.dart';
+import '../../core/widgets/sync_status_banner.dart';
 import 'letters_provider.dart';
 
 class FutureLettersScreen extends StatefulWidget {
@@ -40,6 +41,13 @@ class _FutureLettersScreenState extends State<FutureLettersScreen> {
       body: SafeArea(
         child: Column(
           children: [
+            if (lettersProvider.isLoading)
+              const LinearProgressIndicator(minHeight: 2),
+            if (lettersProvider.errorMessage != null)
+              SyncStatusBanner(
+                message: lettersProvider.errorMessage!,
+                onRetry: lettersProvider.fetchLetters,
+              ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               child: Text(
@@ -118,24 +126,29 @@ class _FutureLettersScreenState extends State<FutureLettersScreen> {
                                   ),
                                   const SizedBox(width: 6),
                                   IconButton(
-                                    icon: const Icon(Icons.delete_outline, size: 18, color: Colors.grey),
+                                    icon: const Icon(Icons.delete_outline,
+                                        size: 18, color: Colors.grey),
                                     padding: EdgeInsets.zero,
                                     constraints: const BoxConstraints(),
                                     tooltip: 'Delete letter',
                                     onPressed: () async {
-                                      final confirmed = await CozyConfirmSheet.show(
+                                      final confirmed =
+                                          await CozyConfirmSheet.show(
                                         context,
                                         title: 'Palayain ang Liham?',
-                                        message: 'Sigurado ka bang nais mong alisin ang liham na "${letter.title}" para sa iyong hinaharap?',
+                                        message:
+                                            'Sigurado ka bang nais mong alisin ang liham na "${letter.title}" para sa iyong hinaharap?',
                                         confirmLabel: 'Let Go',
                                         cancelLabel: 'Keep Letter',
                                         icon: Icons.mark_email_read_outlined,
                                       );
                                       if (confirmed && context.mounted) {
                                         lettersProvider.deleteLetter(letter.id);
-                                        ScaffoldMessenger.of(context).showSnackBar(
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
                                           const SnackBar(
-                                            content: Text('Future letter gently removed.'),
+                                            content: Text(
+                                                'Future letter gently removed.'),
                                             behavior: SnackBarBehavior.floating,
                                             duration: Duration(seconds: 2),
                                           ),
@@ -210,16 +223,22 @@ class _FutureLettersScreenState extends State<FutureLettersScreen> {
                     style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
-                        color: isDark ? AppColors.textPrimaryDark : Colors.black),
+                        color:
+                            isDark ? AppColors.textPrimaryDark : Colors.black),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _titleController,
-                    style: TextStyle(color: isDark ? AppColors.textPrimaryDark : Colors.black87),
+                    style: TextStyle(
+                        color: isDark
+                            ? AppColors.textPrimaryDark
+                            : Colors.black87),
                     decoration: InputDecoration(
                       hintText: 'Title (e.g. Note to me in 1 month)',
                       filled: true,
-                      fillColor: isDark ? AppColors.darkBackground : AppColors.warmCream,
+                      fillColor: isDark
+                          ? AppColors.darkBackground
+                          : AppColors.warmCream,
                       border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
                           borderSide: BorderSide.none),
@@ -229,12 +248,17 @@ class _FutureLettersScreenState extends State<FutureLettersScreen> {
                   TextField(
                     controller: _contentController,
                     maxLines: 4,
-                    style: TextStyle(color: isDark ? AppColors.textPrimaryDark : Colors.black87),
+                    style: TextStyle(
+                        color: isDark
+                            ? AppColors.textPrimaryDark
+                            : Colors.black87),
                     decoration: InputDecoration(
                       hintText:
                           'Write your hopes, reminders, or encouragement...',
                       filled: true,
-                      fillColor: isDark ? AppColors.darkBackground : AppColors.warmCream,
+                      fillColor: isDark
+                          ? AppColors.darkBackground
+                          : AppColors.warmCream,
                       border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
                           borderSide: BorderSide.none),
@@ -242,8 +266,12 @@ class _FutureLettersScreenState extends State<FutureLettersScreen> {
                   ),
                   const SizedBox(height: 16),
                   Text('Unlock After:',
-                      style:
-                          TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: isDark ? AppColors.textPrimaryDark : Colors.black87)),
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: isDark
+                              ? AppColors.textPrimaryDark
+                              : Colors.black87)),
                   const SizedBox(height: 8),
                   Row(
                     children: [
@@ -264,11 +292,11 @@ class _FutureLettersScreenState extends State<FutureLettersScreen> {
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(25)),
                       ),
-                      onPressed: () {
+                      onPressed: () async {
                         if (_contentController.text.trim().isEmpty) return;
                         final provider = Provider.of<LettersProvider>(context,
                             listen: false);
-                        provider.createLetter(
+                        await provider.createLetter(
                           title: _titleController.text.isEmpty
                               ? 'Letter to Future Self'
                               : _titleController.text,
@@ -276,6 +304,13 @@ class _FutureLettersScreenState extends State<FutureLettersScreen> {
                           deliverAt: DateTime.now()
                               .add(Duration(days: _selectedDurationDays)),
                         );
+                        if (!context.mounted) return;
+                        if (provider.errorMessage != null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(provider.errorMessage!)),
+                          );
+                          return;
+                        }
                         _titleController.clear();
                         _contentController.clear();
                         Navigator.pop(context);

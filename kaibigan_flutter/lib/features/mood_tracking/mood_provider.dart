@@ -7,12 +7,15 @@ import 'mood_model.dart';
 class MoodProvider extends ChangeNotifier {
   final List<MoodLog> _logs = [];
   bool _isLoading = false;
+  String? _errorMessage;
+  String? _activeUserId;
 
   List<MoodLog> get logs => List.unmodifiable(_logs);
   bool get isLoading => _isLoading;
+  String? get errorMessage => _errorMessage;
 
   double get averageWeeklyScore {
-    if (_logs.isEmpty) return 4.0;
+    if (_logs.isEmpty) return 0;
     final recent = _logs.take(7);
     final total = recent.fold(0, (sum, item) => sum + item.moodScore);
     return total / recent.length;
@@ -22,34 +25,39 @@ class MoodProvider extends ChangeNotifier {
       EmotionalWeatherInfo.getWeatherForScore(averageWeeklyScore);
 
   MoodProvider() {
-    _initSampleData();
-    fetchMoodLogs();
+    syncForCurrentUser();
   }
 
-  void _initSampleData() {
-    final now = DateTime.now();
-    _logs.addAll([
-      MoodLog(id: UuidHelper.generateV4(), moodScore: 4, moodLabel: 'Good', stressLevel: 2, energyLevel: 4, sleepQuality: 4, anxietyLevel: 2, note: 'Had a smooth day!', createdAt: now.subtract(const Duration(days: 6))),
-      MoodLog(id: UuidHelper.generateV4(), moodScore: 3, moodLabel: 'Okay', stressLevel: 3, energyLevel: 3, sleepQuality: 3, anxietyLevel: 3, note: 'School deadlines.', createdAt: now.subtract(const Duration(days: 5))),
-      MoodLog(id: UuidHelper.generateV4(), moodScore: 5, moodLabel: 'Awesome', stressLevel: 1, energyLevel: 5, sleepQuality: 5, anxietyLevel: 1, note: 'Great conversation with companion!', createdAt: now.subtract(const Duration(days: 4))),
-      MoodLog(id: UuidHelper.generateV4(), moodScore: 4, moodLabel: 'Good', stressLevel: 2, energyLevel: 4, sleepQuality: 4, anxietyLevel: 2, note: 'Gardening time.', createdAt: now.subtract(const Duration(days: 3))),
-      MoodLog(id: UuidHelper.generateV4(), moodScore: 3, moodLabel: 'Okay', stressLevel: 3, energyLevel: 3, sleepQuality: 3, anxietyLevel: 3, note: 'Resting early.', createdAt: now.subtract(const Duration(days: 2))),
-      MoodLog(id: UuidHelper.generateV4(), moodScore: 4, moodLabel: 'Good', stressLevel: 2, energyLevel: 4, sleepQuality: 4, anxietyLevel: 2, note: 'Felt calm and present.', createdAt: now.subtract(const Duration(days: 1))),
-      MoodLog(id: UuidHelper.generateV4(), moodScore: 5, moodLabel: 'Awesome', stressLevel: 1, energyLevel: 5, sleepQuality: 5, anxietyLevel: 1, note: 'Poured heart out in journal.', createdAt: now),
-    ]);
+  void syncForCurrentUser() {
+    final userId = SupabaseService.isInitialized
+        ? SupabaseService.client.auth.currentUser?.id
+        : null;
+    if (userId == _activeUserId) return;
+    _activeUserId = userId;
+    _logs.clear();
+    _errorMessage = null;
+    notifyListeners();
+    if (userId != null) fetchMoodLogs();
   }
 
   Future<void> fetchMoodLogs() async {
-    if (!SupabaseService.isInitialized) return;
+    _errorMessage = null;
+    if (!SupabaseService.isInitialized) {
+      _errorMessage =
+          'Mood sync is unavailable. Check the app configuration and try again.';
+      notifyListeners();
+      return;
+    }
+    final userId = SupabaseService.client.auth.currentUser?.id;
+    if (userId == null) return;
     _isLoading = true;
     notifyListeners();
 
     try {
-      final userId = SupabaseService.client.auth.currentUser?.id;
-      var query = SupabaseService.client.from('mood_logs').select();
-      if (userId != null) {
-        query = query.eq('user_id', userId);
-      }
+      final query = SupabaseService.client
+          .from('mood_logs')
+          .select()
+          .eq('user_id', userId);
       final response = await query.order('created_at', ascending: false);
 
       final List data = response as List;
@@ -60,9 +68,14 @@ class MoodProvider extends ChangeNotifier {
         operation: 'SELECT',
         table: 'mood_logs',
         payload: {'user_id': userId, 'order': 'created_at DESC'},
-        result: {'count': data.length, 'sample': data.isNotEmpty ? data.first : null},
+        result: {
+          'count': data.length,
+          'sample': data.isNotEmpty ? data.first : null
+        },
       );
     } catch (e) {
+      _errorMessage =
+          'We could not refresh your mood history. Please try again.';
       ApiLogger.logDatabase(
         operation: 'SELECT',
         table: 'mood_logs',
@@ -84,6 +97,7 @@ class MoodProvider extends ChangeNotifier {
     String? note,
   }) async {
     _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
 
     final newLog = MoodLog(
@@ -98,13 +112,14 @@ class MoodProvider extends ChangeNotifier {
       createdAt: DateTime.now(),
     );
 
-    _logs.insert(0, newLog);
-
-    if (SupabaseService.isInitialized) {
+    var saved = false;
+    if (SupabaseService.isInitialized &&
+        SupabaseService.client.auth.currentUser != null) {
       try {
-        final userId = SupabaseService.client.auth.currentUser?.id;
+        final userId = SupabaseService.client.auth.currentUser!.id;
         final map = newLog.toMap(userId: userId);
         await SupabaseService.client.from('mood_logs').insert(map);
+        saved = true;
 
         ApiLogger.logDatabase(
           operation: 'INSERT',
@@ -113,13 +128,20 @@ class MoodProvider extends ChangeNotifier {
           result: {'status': 'success', 'id': newLog.id},
         );
       } catch (e) {
+        _errorMessage =
+            'Your mood check-in could not be saved. Please try again.';
         ApiLogger.logDatabase(
           operation: 'INSERT',
           table: 'mood_logs',
           error: e.toString(),
         );
       }
+    } else {
+      _errorMessage =
+          'Your mood check-in could not be saved because sync is unavailable.';
     }
+
+    if (saved) _logs.insert(0, newLog);
 
     _isLoading = false;
     notifyListeners();
@@ -127,8 +149,17 @@ class MoodProvider extends ChangeNotifier {
   }
 
   Future<void> updateMoodLog(MoodLog updated) async {
+    _errorMessage = null;
+    if (!SupabaseService.isInitialized ||
+        SupabaseService.client.auth.currentUser == null) {
+      _errorMessage =
+          'Your mood update could not be saved because sync is unavailable.';
+      notifyListeners();
+      return;
+    }
     final index = _logs.indexWhere((l) => l.id == updated.id);
     if (index != -1) {
+      final previous = _logs[index];
       _logs[index] = updated;
       notifyListeners();
 
@@ -148,6 +179,8 @@ class MoodProvider extends ChangeNotifier {
             result: {'status': 'success', 'id': updated.id},
           );
         } catch (e) {
+          _logs[index] = previous;
+          _errorMessage = 'Your mood update could not be saved.';
           ApiLogger.logDatabase(
             operation: 'UPDATE',
             table: 'mood_logs',
@@ -155,19 +188,27 @@ class MoodProvider extends ChangeNotifier {
           );
         }
       }
+      notifyListeners();
     }
   }
 
   Future<void> deleteMoodLog(String id) async {
-    _logs.removeWhere((l) => l.id == id);
+    _errorMessage = null;
+    if (!SupabaseService.isInitialized ||
+        SupabaseService.client.auth.currentUser == null) {
+      _errorMessage =
+          'The mood log could not be deleted because sync is unavailable.';
+      notifyListeners();
+      return;
+    }
+    final index = _logs.indexWhere((log) => log.id == id);
+    if (index == -1) return;
+    final removed = _logs.removeAt(index);
     notifyListeners();
 
     if (SupabaseService.isInitialized && UuidHelper.isValidUuid(id)) {
       try {
-        await SupabaseService.client
-            .from('mood_logs')
-            .delete()
-            .eq('id', id);
+        await SupabaseService.client.from('mood_logs').delete().eq('id', id);
 
         ApiLogger.logDatabase(
           operation: 'DELETE',
@@ -176,6 +217,9 @@ class MoodProvider extends ChangeNotifier {
           result: {'status': 'success', 'id': id},
         );
       } catch (e) {
+        _logs.insert(index.clamp(0, _logs.length), removed);
+        _errorMessage =
+            'The mood log could not be deleted. It has been restored.';
         ApiLogger.logDatabase(
           operation: 'DELETE',
           table: 'mood_logs',
@@ -183,5 +227,6 @@ class MoodProvider extends ChangeNotifier {
         );
       }
     }
+    notifyListeners();
   }
 }

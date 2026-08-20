@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS public.journal_entries (
     title TEXT NOT NULL,
     content TEXT NOT NULL,
     ai_response TEXT,
+    reflection_mode TEXT NOT NULL DEFAULT 'companion',
     companion_id TEXT NOT NULL DEFAULT 'kai',
     mood TEXT NOT NULL DEFAULT 'calm',
     tags TEXT[] DEFAULT '{}',
@@ -32,6 +33,10 @@ CREATE TABLE IF NOT EXISTS public.journal_entries (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Safe migration for projects created before companion modes were added.
+ALTER TABLE public.journal_entries
+    ADD COLUMN IF NOT EXISTS reflection_mode TEXT NOT NULL DEFAULT 'companion';
 
 -- 4. Gratitude Entries Table
 CREATE TABLE IF NOT EXISTS public.gratitude_entries (
@@ -118,14 +123,68 @@ CREATE TABLE IF NOT EXISTS public.user_memories (
 );
 
 -- =================================================================
--- DISABLE ROW LEVEL SECURITY (RLS) FOR DEVELOPMENT ENVIRONMENT
+-- ROW LEVEL SECURITY (PRIVATE, PER-USER DATA)
 -- =================================================================
-ALTER TABLE public.profiles DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.journal_entries DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.gratitude_entries DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.mood_logs DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.future_letters DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.daily_goals DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.routine_configs DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.routine_logs DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.user_memories DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.journal_entries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.gratitude_entries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.mood_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.future_letters ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.daily_goals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.routine_configs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.routine_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_memories ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users manage their own profile" ON public.profiles;
+CREATE POLICY "Users manage their own profile"
+    ON public.profiles FOR ALL TO authenticated
+    USING (auth.uid() = id)
+    WITH CHECK (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Users manage their own journal entries" ON public.journal_entries;
+CREATE POLICY "Users manage their own journal entries"
+    ON public.journal_entries FOR ALL TO authenticated
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users manage their own gratitude entries" ON public.gratitude_entries;
+CREATE POLICY "Users manage their own gratitude entries"
+    ON public.gratitude_entries FOR ALL TO authenticated
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users manage their own mood logs" ON public.mood_logs;
+CREATE POLICY "Users manage their own mood logs"
+    ON public.mood_logs FOR ALL TO authenticated
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users manage their own future letters" ON public.future_letters;
+CREATE POLICY "Users manage their own future letters"
+    ON public.future_letters FOR ALL TO authenticated
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users manage their own daily goals" ON public.daily_goals;
+CREATE POLICY "Users manage their own daily goals"
+    ON public.daily_goals FOR ALL TO authenticated
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users manage their own routine configs" ON public.routine_configs;
+CREATE POLICY "Users manage their own routine configs"
+    ON public.routine_configs FOR ALL TO authenticated
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users manage their own routine logs" ON public.routine_logs;
+CREATE POLICY "Users manage their own routine logs"
+    ON public.routine_logs FOR ALL TO authenticated
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users manage their own AI memories" ON public.user_memories;
+CREATE POLICY "Users manage their own AI memories"
+    ON public.user_memories FOR ALL TO authenticated
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);

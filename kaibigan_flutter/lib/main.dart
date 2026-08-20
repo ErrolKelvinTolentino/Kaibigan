@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'core/theme/app_theme.dart';
 import 'core/utils/env_config.dart';
@@ -15,12 +16,13 @@ import 'features/future_letters/letters_provider.dart';
 import 'features/wellness_journey/daily_goals_provider.dart';
 import 'features/routines/routines_provider.dart';
 import 'features/auth_onboarding/auth_screen.dart';
+import 'features/auth_onboarding/reset_password_screen.dart';
 import 'features/home/home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1. Initialize Environment Config (.env)
+  // 1. Initialize public build-time configuration (dart-defines)
   await EnvConfig.init();
 
   // 2. Initialize Supabase
@@ -51,13 +53,55 @@ class KaibiganApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => UserProvider()),
-        ChangeNotifierProvider(create: (_) => JournalProvider()),
-        ChangeNotifierProvider(create: (_) => GratitudeProvider()),
-        ChangeNotifierProvider(create: (_) => MoodProvider()),
+        ChangeNotifierProxyProvider<UserProvider, JournalProvider>(
+          create: (_) => JournalProvider(),
+          update: (_, __, provider) {
+            final value = provider ?? JournalProvider();
+            value.syncForCurrentUser();
+            return value;
+          },
+        ),
+        ChangeNotifierProxyProvider<UserProvider, GratitudeProvider>(
+          create: (_) => GratitudeProvider(),
+          update: (_, __, provider) {
+            final value = provider ?? GratitudeProvider();
+            value.syncForCurrentUser();
+            return value;
+          },
+        ),
+        ChangeNotifierProxyProvider<UserProvider, MoodProvider>(
+          create: (_) => MoodProvider(),
+          update: (_, __, provider) {
+            final value = provider ?? MoodProvider();
+            value.syncForCurrentUser();
+            return value;
+          },
+        ),
         ChangeNotifierProvider(create: (_) => ComfortProvider()),
-        ChangeNotifierProvider(create: (_) => LettersProvider()),
-        ChangeNotifierProvider(create: (_) => DailyGoalsProvider()),
-        ChangeNotifierProvider(create: (_) => RoutinesProvider()),
+        ChangeNotifierProxyProvider<UserProvider, LettersProvider>(
+          create: (_) => LettersProvider(),
+          update: (_, __, provider) {
+            final value = provider ?? LettersProvider();
+            value.syncForCurrentUser();
+            return value;
+          },
+        ),
+        ChangeNotifierProxyProvider<UserProvider, DailyGoalsProvider>(
+          create: (_) => DailyGoalsProvider(),
+          update: (_, __, provider) {
+            final value = provider ?? DailyGoalsProvider();
+            value.syncForCurrentUser();
+            return value;
+          },
+        ),
+        ChangeNotifierProxyProvider<UserProvider, RoutinesProvider>(
+          create: (_) => RoutinesProvider(),
+          update: (_, __, provider) {
+            final value = provider ?? RoutinesProvider();
+            value.syncForCurrentUser();
+            return value;
+          },
+        ),
       ],
       child: Consumer<UserProvider>(
         builder: (context, userProvider, child) {
@@ -67,11 +111,22 @@ class KaibiganApp extends StatelessWidget {
             scrollBehavior: AppScrollBehavior(),
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,
+            locale: userProvider.preferredLanguage == 'filipino'
+                ? const Locale('fil')
+                : const Locale('en'),
+            supportedLocales: const [Locale('en'), Locale('fil')],
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             themeMode:
                 userProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
-            home: userProvider.isAuthenticated
-                ? const HomeScreen()
-                : const AuthScreen(),
+            home: userProvider.isPasswordRecovery
+                ? const ResetPasswordScreen()
+                : userProvider.isAuthenticated
+                    ? const HomeScreen()
+                    : const AuthScreen(),
           );
         },
       ),

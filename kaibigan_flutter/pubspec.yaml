@@ -14,7 +14,6 @@ dependencies:
 
   # Database & Environment
   supabase_flutter: ^2.8.0
-  flutter_dotenv: ^5.2.1
 
   # State Management
   provider: ^6.1.2
@@ -29,6 +28,7 @@ dependencies:
   http: ^1.2.2
   intl: ^0.20.2
   shared_preferences: ^2.3.2
+  flutter_secure_storage: ^9.2.4
   url_launcher: ^6.3.1
 
   # Document Generation & Notifications
@@ -44,7 +44,6 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - .env
     - assets/feature icons/
     - assets/mood tracker/
     - assets/sleep log/

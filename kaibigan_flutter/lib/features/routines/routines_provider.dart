@@ -2,20 +2,35 @@ import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/utils/uuid_helper.dart';
+import '../../core/utils/api_logger.dart';
 import 'routine_model.dart';
 
 class RoutinesProvider extends ChangeNotifier {
   final Map<String, RoutineConfig> _routines = {};
   final List<RoutineLog> _logs = [];
+  String? _activeUserId;
+  String? _errorMessage;
 
   RoutinesProvider() {
     _initDefaultRoutines();
-    _initSampleLogs();
-    fetchRoutineLogs();
+    syncForCurrentUser();
   }
 
   List<RoutineConfig> get allRoutines => _routines.values.toList();
   List<RoutineLog> get logs => List.unmodifiable(_logs);
+  String? get errorMessage => _errorMessage;
+
+  void syncForCurrentUser() {
+    final userId = SupabaseService.isInitialized
+        ? SupabaseService.client.auth.currentUser?.id
+        : null;
+    if (userId == _activeUserId) return;
+    _activeUserId = userId;
+    _logs.clear();
+    _errorMessage = null;
+    notifyListeners();
+    if (userId != null) fetchRoutineLogs();
+  }
 
   RoutineType get currentPhase {
     final hour = DateTime.now().hour;
@@ -46,10 +61,12 @@ class RoutinesProvider extends ChangeNotifier {
 
   int get completedTodayCount {
     final now = DateTime.now();
-    return _logs.where((log) =>
-        log.completedAt.year == now.year &&
-        log.completedAt.month == now.month &&
-        log.completedAt.day == now.day).length;
+    return _logs
+        .where((log) =>
+            log.completedAt.year == now.year &&
+            log.completedAt.month == now.month &&
+            log.completedAt.day == now.day)
+        .length;
   }
 
   int get streakDays {
@@ -208,38 +225,17 @@ class RoutinesProvider extends ChangeNotifier {
     );
   }
 
-  void _initSampleLogs() {
-    final now = DateTime.now();
-    _logs.addAll([
-      RoutineLog(
-        id: UuidHelper.generateV4(),
-        routineId: 'morning',
-        routineType: RoutineType.morning,
-        completedAt: now.subtract(const Duration(days: 1, hours: 12)),
-        sleepFeeling: SleepFeeling.wellRested,
-        focusOrHighlight: 'Finish design prototype with calm mindset',
-      ),
-      RoutineLog(
-        id: UuidHelper.generateV4(),
-        routineId: 'night',
-        routineType: RoutineType.night,
-        completedAt: now.subtract(const Duration(days: 1)),
-        moodScore: 4,
-        moodNote: 'Peaceful walk around evening',
-        gratitudeContent: 'Grateful for rainy breeze',
-      ),
-    ]);
-  }
-
   Future<void> fetchRoutineLogs() async {
+    _errorMessage = null;
     if (!SupabaseService.isInitialized) return;
+    final userId = SupabaseService.client.auth.currentUser?.id;
+    if (userId == null) return;
 
     try {
-      final userId = SupabaseService.client.auth.currentUser?.id;
-      var query = SupabaseService.client.from('routine_logs').select();
-      if (userId != null) {
-        query = query.eq('user_id', userId);
-      }
+      final query = SupabaseService.client
+          .from('routine_logs')
+          .select()
+          .eq('user_id', userId);
       final response = await query.order('completed_at', ascending: false);
 
       final List data = response as List;
@@ -247,7 +243,13 @@ class RoutinesProvider extends ChangeNotifier {
       _logs.addAll(data.map((e) => RoutineLog.fromMap(e)).toList());
       notifyListeners();
     } catch (e) {
-      print("Error fetching routine logs: $e");
+      _errorMessage = 'We could not refresh routine history.';
+      ApiLogger.logDatabase(
+        operation: 'SELECT',
+        table: 'routine_logs',
+        error: e.toString(),
+      );
+      notifyListeners();
     }
   }
 
@@ -327,6 +329,7 @@ class RoutinesProvider extends ChangeNotifier {
   }
 
   Future<void> addLog(RoutineLog log) async {
+    _errorMessage = null;
     final finalLog = log.id.startsWith('log-') || log.id.isEmpty
         ? RoutineLog(
             id: UuidHelper.generateV4(),
@@ -341,22 +344,36 @@ class RoutinesProvider extends ChangeNotifier {
           )
         : log;
 
-    _logs.insert(0, finalLog);
-    notifyListeners();
-
-    if (SupabaseService.isInitialized) {
+    if (SupabaseService.isInitialized &&
+        SupabaseService.client.auth.currentUser != null) {
       try {
-        final userId = SupabaseService.client.auth.currentUser?.id;
+        final userId = SupabaseService.client.auth.currentUser!.id;
         await SupabaseService.client
             .from('routine_logs')
             .insert(finalLog.toMap(userId: userId));
+        _logs.insert(0, finalLog);
       } catch (e) {
-        print("Error saving routine log to Supabase: $e");
+        _errorMessage =
+            'Routine completion could not be saved. Please try again.';
+        ApiLogger.logDatabase(
+          operation: 'INSERT',
+          table: 'routine_logs',
+          error: e.toString(),
+        );
       }
+    } else {
+      _errorMessage =
+          'Routine completion could not be saved because sync is unavailable.';
     }
+    notifyListeners();
   }
 
-  Future<void> completeRoutine(RoutineType type, {String? focusOrHighlight, SleepFeeling? sleepFeeling, int? moodScore, String? moodNote, String? gratitudeContent}) async {
+  Future<void> completeRoutine(RoutineType type,
+      {String? focusOrHighlight,
+      SleepFeeling? sleepFeeling,
+      int? moodScore,
+      String? moodNote,
+      String? gratitudeContent}) async {
     final log = RoutineLog(
       id: UuidHelper.generateV4(),
       routineId: type.name,
@@ -372,18 +389,33 @@ class RoutinesProvider extends ChangeNotifier {
   }
 
   Future<void> deleteLog(String id) async {
-    _logs.removeWhere((l) => l.id == id);
+    _errorMessage = null;
+    if (!SupabaseService.isInitialized ||
+        SupabaseService.client.auth.currentUser == null) {
+      _errorMessage =
+          'The routine log could not be deleted because sync is unavailable.';
+      notifyListeners();
+      return;
+    }
+    final index = _logs.indexWhere((log) => log.id == id);
+    if (index == -1) return;
+    final removed = _logs.removeAt(index);
     notifyListeners();
 
     if (SupabaseService.isInitialized && UuidHelper.isValidUuid(id)) {
       try {
-        await SupabaseService.client
-            .from('routine_logs')
-            .delete()
-            .eq('id', id);
+        await SupabaseService.client.from('routine_logs').delete().eq('id', id);
       } catch (e) {
-        print("Error deleting routine log: $e");
+        _logs.insert(index.clamp(0, _logs.length), removed);
+        _errorMessage =
+            'The routine log could not be deleted. It has been restored.';
+        ApiLogger.logDatabase(
+          operation: 'DELETE',
+          table: 'routine_logs',
+          error: e.toString(),
+        );
       }
     }
+    notifyListeners();
   }
 }

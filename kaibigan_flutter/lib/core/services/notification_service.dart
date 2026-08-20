@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class NotificationService {
@@ -23,7 +24,7 @@ class NotificationService {
     try {
       await _notificationsPlugin.initialize(settings);
     } catch (e) {
-      print("Notification initialization error: $e");
+      debugPrint('Notification initialization error: $e');
     }
   }
 
@@ -36,7 +37,8 @@ class NotificationService {
         AndroidNotificationDetails(
       'kaibigan_reminders',
       'Wellness Reminders',
-      channelDescription: 'Gentle reminders for journaling, gratitude, and breathing exercises.',
+      channelDescription:
+          'Gentle reminders for journaling, gratitude, and breathing exercises.',
       importance: Importance.high,
       priority: Priority.high,
     );
@@ -49,7 +51,7 @@ class NotificationService {
     try {
       await _notificationsPlugin.show(id, title, body, details);
     } catch (e) {
-      print("Failed to display notification: $e");
+      debugPrint('Failed to display notification: $e');
     }
   }
 }

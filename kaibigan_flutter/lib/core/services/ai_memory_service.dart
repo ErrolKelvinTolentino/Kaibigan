@@ -1,4 +1,5 @@
 import 'supabase_service.dart';
+import '../utils/api_logger.dart';
 import '../utils/uuid_helper.dart';
 
 class UserMemory {
@@ -44,50 +45,51 @@ class UserMemory {
 }
 
 class AIMemoryService {
-  static final List<UserMemory> _memories = [
-    UserMemory(
-      id: UuidHelper.generateV4(),
-      category: 'coping_strategy',
-      summary: 'Responds well to morning quiet time, breathing pauses, and gardening.',
-      relevanceScore: 8,
-      createdAt: DateTime.now().subtract(const Duration(days: 3)),
-    ),
-    UserMemory(
-      id: UuidHelper.generateV4(),
-      category: 'trigger',
-      summary: 'Academic deadlines and multiple overlapping tasks cause feeling overwhelmed.',
-      relevanceScore: 7,
-      createdAt: DateTime.now().subtract(const Duration(days: 2)),
-    ),
-  ];
+  // Never seed fabricated memories. Personalization starts empty and only uses
+  // broad, user-specific themes learned from that signed-in user's entries.
+  static final List<UserMemory> _memories = [];
+  static String? _loadedUserId;
 
   /// Fetch memories from Supabase database if available
   static Future<void> fetchMemories() async {
+    _memories.clear();
+    _loadedUserId = null;
     if (!SupabaseService.isInitialized) return;
 
     try {
       final userId = SupabaseService.client.auth.currentUser?.id;
-      var query = SupabaseService.client.from('user_memories').select();
-      if (userId != null) {
-        query = query.eq('user_id', userId);
-      }
-      final response = await query
+      if (userId == null) return;
+      _loadedUserId = userId;
+      final response = await SupabaseService.client
+          .from('user_memories')
+          .select()
+          .eq('user_id', userId)
           .order('relevance_score', ascending: false)
           .limit(10);
 
       final List data = response as List;
-      if (data.isNotEmpty) {
-        _memories.clear();
-        _memories.addAll(data.map((m) => UserMemory.fromMap(m)).toList());
-      }
+      _memories.addAll(data.map((m) => UserMemory.fromMap(m)).toList());
     } catch (e) {
-      print("Error fetching AI memories: $e");
+      ApiLogger.logDatabase(
+        operation: 'SELECT',
+        table: 'user_memories',
+        error: e.toString(),
+      );
     }
   }
 
   /// Add a memory summary to the AI memory bank
-  static Future<void> addMemory(String summary, {String category = 'theme', int relevance = 5}) async {
+  static Future<void> addMemory(String summary,
+      {String category = 'theme', int relevance = 5}) async {
     if (summary.trim().isEmpty) return;
+
+    final currentUserId = SupabaseService.isInitialized
+        ? SupabaseService.client.auth.currentUser?.id
+        : null;
+    if (_loadedUserId != null && _loadedUserId != currentUserId) {
+      _memories.clear();
+    }
+    _loadedUserId = currentUserId;
 
     final newMemory = UserMemory(
       id: UuidHelper.generateV4(),
@@ -101,10 +103,16 @@ class AIMemoryService {
 
     if (SupabaseService.isInitialized) {
       try {
-        final userId = SupabaseService.client.auth.currentUser?.id;
-        await SupabaseService.client.from('user_memories').insert(newMemory.toMap(userId: userId));
+        if (currentUserId == null) return;
+        await SupabaseService.client
+            .from('user_memories')
+            .insert(newMemory.toMap(userId: currentUserId));
       } catch (e) {
-        print("Error saving AI memory to Supabase: $e");
+        ApiLogger.logDatabase(
+          operation: 'INSERT',
+          table: 'user_memories',
+          error: e.toString(),
+        );
       }
     }
   }
@@ -113,9 +121,19 @@ class AIMemoryService {
   static String getMemoryContextPrompt() {
     if (_memories.isEmpty) return "";
 
-    final topMemories = _memories.take(5);
+    if (SupabaseService.isInitialized) {
+      final currentUserId = SupabaseService.client.auth.currentUser?.id;
+      if (_loadedUserId != currentUserId) {
+        _memories.clear();
+        _loadedUserId = currentUserId;
+        return "";
+      }
+    }
+
+    final topMemories = _memories.take(4);
     final buffer = StringBuffer();
-    buffer.writeln("USER MEMORY CONTEXT & RECURRING PATTERNS:");
+    buffer.writeln(
+        "GENTLE CONTEXT & RECURRING PATTERNS (Use only when directly relevant; never quote verbatim):");
     for (final m in topMemories) {
       buffer.writeln("• ${m.summary}");
     }
@@ -123,16 +141,56 @@ class AIMemoryService {
   }
 
   /// Analyzes a journal note to extract key user context automatically
-  static Future<void> extractMemoryFromNote(String title, String content) async {
+  static Future<void> extractMemoryFromNote(
+      String title, String content) async {
     final combined = "$title $content".toLowerCase();
-    if (combined.contains('deadline') || combined.contains('exam') || combined.contains('school')) {
-      if (!_memories.any((m) => m.summary.contains('deadline') || m.summary.contains('school'))) {
-        await addMemory('User is currently balancing school projects and deadline pressure.', category: 'trigger', relevance: 6);
+
+    // 1. Academic & work deadlines
+    if (combined.contains('deadline') ||
+        combined.contains('exam') ||
+        combined.contains('school') ||
+        combined.contains('thesis') ||
+        combined.contains('capstone')) {
+      if (!_memories.any((m) =>
+          m.summary.toLowerCase().contains('deadline') ||
+          m.summary.toLowerCase().contains('school'))) {
+        await addMemory(
+            'Currently navigating academic projects and deadline demands.',
+            category: 'trigger',
+            relevance: 6);
       }
     }
-    if (combined.contains('breathing') || combined.contains('himala') || combined.contains('pahinga')) {
-      if (!_memories.any((m) => m.summary.contains('breathing') || m.summary.contains('pahinga'))) {
-        await addMemory('Values quiet breathing breaks to restore focus.', category: 'coping_strategy', relevance: 7);
+
+    // 2. Restorative & grounding habits
+    if (combined.contains('breathing') ||
+        combined.contains('himala') ||
+        combined.contains('pahinga') ||
+        combined.contains('walk') ||
+        combined.contains('lakad') ||
+        combined.contains('meditation')) {
+      if (!_memories.any((m) =>
+          m.summary.toLowerCase().contains('breathing') ||
+          m.summary.toLowerCase().contains('walk'))) {
+        await addMemory(
+            'Values intentional pauses, breathing, and short walks to restore mental clarity.',
+            category: 'coping_strategy',
+            relevance: 7);
+      }
+    }
+
+    // 3. Family & social connections
+    if (combined.contains('pamilya') ||
+        combined.contains('family') ||
+        combined.contains('magulang') ||
+        combined.contains('kaibigan') ||
+        combined.contains('friend')) {
+      if (!_memories.any((m) =>
+          m.summary.toLowerCase().contains('family') ||
+          m.summary.toLowerCase().contains('friends'))) {
+        await addMemory(
+            'Draws comfort and meaning from close family and authentic friendships.',
+            category: 'theme',
+            relevance: 6);
       }
     }
   }

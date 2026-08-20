@@ -6,21 +6,21 @@ import 'gratitude_model.dart';
 
 class GratitudeProvider extends ChangeNotifier {
   final List<GratitudeEntry> _entries = [];
-  final List<GratitudeEntry> _communityEntries = [];
   bool _isLoading = false;
-  String _activeSoundscape = 'lofi_guitar'; // 'lofi_guitar', 'rain_nipa', 'night_crickets', 'ocean_breeze', 'off'
+  String? _errorMessage;
+  String? _activeUserId;
 
   List<GratitudeEntry> get entries => List.unmodifiable(_entries);
-  List<GratitudeEntry> get communityEntries => List.unmodifiable(_communityEntries);
   bool get isLoading => _isLoading;
+  String? get errorMessage => _errorMessage;
   int get flowerCount => _entries.length;
-  String get activeSoundscape => _activeSoundscape;
 
   // Gamification Level & Progression
   int get gardenLevel => (_entries.length ~/ 5) + 1;
   int get flowersInCurrentLevel => _entries.length % 5;
   double get levelProgress => flowersInCurrentLevel / 5.0;
-  int get waterDrops => _entries.fold(0, (sum, e) => sum + (e.waterCount * 3)) + 10;
+  int get waterDrops =>
+      _entries.fold(0, (sum, e) => sum + (e.waterCount * 3)) + 10;
 
   // Unlocked garden features based on count
   bool get hasButterflies => _entries.length >= 3;
@@ -28,93 +28,39 @@ class GratitudeProvider extends ChangeNotifier {
   bool get hasRainbow => _entries.length >= 10;
 
   GratitudeProvider() {
-    _initSampleData();
-    _initCommunityMeadow();
-    fetchGratitudeEntries();
+    syncForCurrentUser();
   }
 
-  void setSoundscape(String soundscape) {
-    _activeSoundscape = soundscape;
+  void syncForCurrentUser() {
+    final userId = SupabaseService.isInitialized
+        ? SupabaseService.client.auth.currentUser?.id
+        : null;
+    if (userId == _activeUserId) return;
+    _activeUserId = userId;
+    _entries.clear();
+    _errorMessage = null;
     notifyListeners();
-  }
-
-  void _initSampleData() {
-    _entries.addAll([
-      GratitudeEntry(
-        id: UuidHelper.generateV4(),
-        content: 'Tumawag si Mama, ang saya ng boses niya.',
-        flowerType: 'sunflower',
-        growthStage: 3,
-        waterCount: 2,
-        createdAt: DateTime.now().subtract(const Duration(days: 2)),
-      ),
-      GratitudeEntry(
-        id: UuidHelper.generateV4(),
-        content: 'Napanood ko ang magandang sunset sa biyahe pauwi.',
-        flowerType: 'sampaguita',
-        growthStage: 3,
-        waterCount: 1,
-        createdAt: DateTime.now().subtract(const Duration(days: 1)),
-      ),
-      GratitudeEntry(
-        id: UuidHelper.generateV4(),
-        content: 'Nakatapos ng mahirap na task sa school with team.',
-        flowerType: 'tulip',
-        growthStage: 3,
-        waterCount: 2,
-        createdAt: DateTime.now(),
-      ),
-      GratitudeEntry(
-        id: UuidHelper.generateV4(),
-        content: 'A warm cup of tsokolate on a rainy afternoon.',
-        flowerType: 'orchid',
-        growthStage: 3,
-        waterCount: 1,
-        createdAt: DateTime.now().subtract(const Duration(hours: 4)),
-      ),
-    ]);
-  }
-
-  void _initCommunityMeadow() {
-    _communityEntries.addAll([
-      GratitudeEntry(
-        id: UuidHelper.generateV4(),
-        content: 'Nakatulong ako sa matanda na tumawid sa kalsada ngayong umaga.',
-        flowerType: 'sampaguita',
-        growthStage: 3,
-        waterCount: 12,
-        createdAt: DateTime.now().subtract(const Duration(hours: 3)),
-      ),
-      GratitudeEntry(
-        id: UuidHelper.generateV4(),
-        content: 'Passed my major exam after studying hard all week! 📚🎉',
-        flowerType: 'sunflower',
-        growthStage: 3,
-        waterCount: 28,
-        createdAt: DateTime.now().subtract(const Duration(hours: 6)),
-      ),
-      GratitudeEntry(
-        id: UuidHelper.generateV4(),
-        content: 'Grateful for rainy weather and hot sinigang with family.',
-        flowerType: 'rose',
-        growthStage: 3,
-        waterCount: 45,
-        createdAt: DateTime.now().subtract(const Duration(hours: 12)),
-      ),
-    ]);
+    if (userId != null) fetchGratitudeEntries();
   }
 
   Future<void> fetchGratitudeEntries() async {
-    if (!SupabaseService.isInitialized) return;
+    _errorMessage = null;
+    if (!SupabaseService.isInitialized) {
+      _errorMessage =
+          'Garden sync is unavailable. Check the app configuration and try again.';
+      notifyListeners();
+      return;
+    }
+    final userId = SupabaseService.client.auth.currentUser?.id;
+    if (userId == null) return;
     _isLoading = true;
     notifyListeners();
 
     try {
-      final userId = SupabaseService.client.auth.currentUser?.id;
-      var query = SupabaseService.client.from('gratitude_entries').select();
-      if (userId != null) {
-        query = query.eq('user_id', userId);
-      }
+      final query = SupabaseService.client
+          .from('gratitude_entries')
+          .select()
+          .eq('user_id', userId);
       final response = await query.order('created_at', ascending: true);
 
       final List data = response as List;
@@ -125,9 +71,14 @@ class GratitudeProvider extends ChangeNotifier {
         operation: 'SELECT',
         table: 'gratitude_entries',
         payload: {'user_id': userId, 'order': 'created_at ASC'},
-        result: {'count': data.length, 'sample': data.isNotEmpty ? data.first : null},
+        result: {
+          'count': data.length,
+          'sample': data.isNotEmpty ? data.first : null
+        },
       );
     } catch (e) {
+      _errorMessage =
+          'We could not refresh your gratitude garden. Please try again.';
       ApiLogger.logDatabase(
         operation: 'SELECT',
         table: 'gratitude_entries',
@@ -139,13 +90,21 @@ class GratitudeProvider extends ChangeNotifier {
     }
   }
 
-  Future<GratitudeEntry> addGratitudeEntry(String content, {String flowerType = 'sunflower', bool shareToCommunity = false}) async {
+  Future<GratitudeEntry> addGratitudeEntry(String content,
+      {String flowerType = 'sunflower', bool shareToCommunity = false}) async {
     _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
 
-    final flowerTypesList = ['sunflower', 'sampaguita', 'tulip', 'orchid', 'rose'];
-    final chosenType = flowerType == 'random' 
-        ? flowerTypesList[_entries.length % flowerTypesList.length] 
+    final flowerTypesList = [
+      'sunflower',
+      'sampaguita',
+      'tulip',
+      'orchid',
+      'rose'
+    ];
+    final chosenType = flowerType == 'random'
+        ? flowerTypesList[_entries.length % flowerTypesList.length]
         : flowerType;
 
     final newEntry = GratitudeEntry(
@@ -157,17 +116,14 @@ class GratitudeProvider extends ChangeNotifier {
       createdAt: DateTime.now(),
     );
 
-    _entries.add(newEntry);
-
-    if (shareToCommunity) {
-      _communityEntries.insert(0, newEntry);
-    }
-
-    if (SupabaseService.isInitialized) {
+    var saved = false;
+    if (SupabaseService.isInitialized &&
+        SupabaseService.client.auth.currentUser != null) {
       try {
-        final userId = SupabaseService.client.auth.currentUser?.id;
+        final userId = SupabaseService.client.auth.currentUser!.id;
         final map = newEntry.toMap(userId: userId);
         await SupabaseService.client.from('gratitude_entries').insert(map);
+        saved = true;
 
         ApiLogger.logDatabase(
           operation: 'INSERT',
@@ -176,13 +132,20 @@ class GratitudeProvider extends ChangeNotifier {
           result: {'status': 'success', 'id': newEntry.id},
         );
       } catch (e) {
+        _errorMessage =
+            'Your gratitude could not be planted. Please try again.';
         ApiLogger.logDatabase(
           operation: 'INSERT',
           table: 'gratitude_entries',
           error: e.toString(),
         );
       }
+    } else {
+      _errorMessage =
+          'Your gratitude could not be planted because sync is unavailable.';
     }
+
+    if (saved) _entries.add(newEntry);
 
     _isLoading = false;
     notifyListeners();
@@ -190,9 +153,19 @@ class GratitudeProvider extends ChangeNotifier {
   }
 
   Future<void> waterFlower(String id) async {
+    _errorMessage = null;
+    if (!SupabaseService.isInitialized ||
+        SupabaseService.client.auth.currentUser == null) {
+      _errorMessage =
+          'This flower could not be watered because sync is unavailable.';
+      notifyListeners();
+      return;
+    }
     final index = _entries.indexWhere((e) => e.id == id);
     if (index != -1) {
-      final updated = _entries[index].copyWith(waterCount: _entries[index].waterCount + 1);
+      final previous = _entries[index];
+      final updated =
+          _entries[index].copyWith(waterCount: _entries[index].waterCount + 1);
       _entries[index] = updated;
       notifyListeners();
 
@@ -200,8 +173,7 @@ class GratitudeProvider extends ChangeNotifier {
         try {
           await SupabaseService.client
               .from('gratitude_entries')
-              .update({'water_count': updated.waterCount})
-              .eq('id', id);
+              .update({'water_count': updated.waterCount}).eq('id', id);
 
           ApiLogger.logDatabase(
             operation: 'UPDATE',
@@ -210,6 +182,8 @@ class GratitudeProvider extends ChangeNotifier {
             result: {'status': 'success'},
           );
         } catch (e) {
+          _entries[index] = previous;
+          _errorMessage = 'This flower could not be watered. Please try again.';
           ApiLogger.logDatabase(
             operation: 'UPDATE',
             table: 'gratitude_entries (water)',
@@ -217,12 +191,22 @@ class GratitudeProvider extends ChangeNotifier {
           );
         }
       }
+      notifyListeners();
     }
   }
 
   Future<void> updateGratitudeEntry(String id, String newContent) async {
+    _errorMessage = null;
+    if (!SupabaseService.isInitialized ||
+        SupabaseService.client.auth.currentUser == null) {
+      _errorMessage =
+          'This gratitude could not be updated because sync is unavailable.';
+      notifyListeners();
+      return;
+    }
     final index = _entries.indexWhere((e) => e.id == id);
     if (index != -1) {
+      final previous = _entries[index];
       final updated = _entries[index].copyWith(content: newContent);
       _entries[index] = updated;
       notifyListeners();
@@ -231,8 +215,7 @@ class GratitudeProvider extends ChangeNotifier {
         try {
           await SupabaseService.client
               .from('gratitude_entries')
-              .update({'content': newContent})
-              .eq('id', id);
+              .update({'content': newContent}).eq('id', id);
 
           ApiLogger.logDatabase(
             operation: 'UPDATE',
@@ -241,6 +224,9 @@ class GratitudeProvider extends ChangeNotifier {
             result: {'status': 'success'},
           );
         } catch (e) {
+          _entries[index] = previous;
+          _errorMessage =
+              'This gratitude could not be updated. Please try again.';
           ApiLogger.logDatabase(
             operation: 'UPDATE',
             table: 'gratitude_entries',
@@ -248,11 +234,22 @@ class GratitudeProvider extends ChangeNotifier {
           );
         }
       }
+      notifyListeners();
     }
   }
 
   Future<void> deleteGratitudeEntry(String id) async {
-    _entries.removeWhere((e) => e.id == id);
+    _errorMessage = null;
+    if (!SupabaseService.isInitialized ||
+        SupabaseService.client.auth.currentUser == null) {
+      _errorMessage =
+          'This flower could not be deleted because sync is unavailable.';
+      notifyListeners();
+      return;
+    }
+    final index = _entries.indexWhere((entry) => entry.id == id);
+    if (index == -1) return;
+    final removed = _entries.removeAt(index);
     notifyListeners();
 
     if (SupabaseService.isInitialized && UuidHelper.isValidUuid(id)) {
@@ -269,6 +266,9 @@ class GratitudeProvider extends ChangeNotifier {
           result: {'status': 'success', 'id': id},
         );
       } catch (e) {
+        _entries.insert(index.clamp(0, _entries.length), removed);
+        _errorMessage =
+            'This flower could not be deleted. It has been restored.';
         ApiLogger.logDatabase(
           operation: 'DELETE',
           table: 'gratitude_entries',
@@ -276,5 +276,6 @@ class GratitudeProvider extends ChangeNotifier {
         );
       }
     }
+    notifyListeners();
   }
 }

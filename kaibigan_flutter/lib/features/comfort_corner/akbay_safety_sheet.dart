@@ -62,7 +62,8 @@ class AkbaySafetySheet extends StatelessWidget {
                   color: Colors.redAccent.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.favorite, color: Colors.redAccent, size: 28),
+                child: const Icon(Icons.favorite,
+                    color: Colors.redAccent, size: 28),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -78,7 +79,9 @@ class AkbaySafetySheet extends StatelessWidget {
                       'Nandito kami para sa iyo. Hindi ka nag-iisa.',
                       style: TextStyle(
                         fontSize: 13,
-                        color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : AppColors.textSecondaryLight,
                       ),
                     ),
                   ],
@@ -94,11 +97,13 @@ class AkbaySafetySheet extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppColors.sageGreen.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppColors.sageGreen.withValues(alpha: 0.3)),
+              border:
+                  Border.all(color: AppColors.sageGreen.withValues(alpha: 0.3)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.info_outline, color: AppColors.sageGreen, size: 22),
+                const Icon(Icons.info_outline,
+                    color: AppColors.sageGreen, size: 22),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
@@ -106,7 +111,9 @@ class AkbaySafetySheet extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 12.5,
                       height: 1.4,
-                      color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                      color: isDark
+                          ? AppColors.textPrimaryDark
+                          : AppColors.textPrimaryLight,
                     ),
                   ),
                 ),
@@ -116,23 +123,24 @@ class AkbaySafetySheet extends StatelessWidget {
           const SizedBox(height: 20),
 
           // Hotline Items
-          Text('24/7 Philippines Mental Health Warm-Lines:', style: AppTypography.titleSmall(context, isDark: isDark)),
+          Text('Immediate support in the Philippines:',
+              style: AppTypography.titleSmall(context, isDark: isDark)),
           const SizedBox(height: 12),
 
           _buildHotlineCard(
             context,
-            title: 'National Center for Mental Health (NCMH)',
-            numberDisplay: '1553 (Toll-Free) / 0917-899-8727',
-            dialNumber: '1553',
+            title: 'Unified Emergency Hotline',
+            numberDisplay: '911 — for immediate danger',
+            dialNumber: '911',
             isDark: isDark,
           ),
           const SizedBox(height: 10),
 
           _buildHotlineCard(
             context,
-            title: 'Hopeline Philippines',
-            numberDisplay: '0917-558-4673 / (02) 8804-4673',
-            dialNumber: '09175584673',
+            title: 'National Center for Mental Health (NCMH)',
+            numberDisplay: '1553 (Toll-Free) / 0917-899-8727',
+            dialNumber: '1553',
             isDark: isDark,
           ),
           const SizedBox(height: 10),
@@ -153,9 +161,11 @@ class AkbaySafetySheet extends StatelessWidget {
             child: ElevatedButton(
               onPressed: () => Navigator.pop(context),
               style: ElevatedButton.styleFrom(
-                backgroundColor: isDark ? AppColors.darkCardBorder : Colors.grey.shade300,
+                backgroundColor:
+                    isDark ? AppColors.darkCardBorder : Colors.grey.shade300,
                 elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
               ),
               child: Text(
                 'Close',
@@ -191,9 +201,15 @@ class AkbaySafetySheet extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                Text(title,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 13.5)),
                 const SizedBox(height: 2),
-                Text(numberDisplay, style: const TextStyle(fontSize: 12, color: AppColors.sageGreen, fontWeight: FontWeight.w600)),
+                Text(numberDisplay,
+                    style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.sageGreen,
+                        fontWeight: FontWeight.w600)),
               ],
             ),
           ),

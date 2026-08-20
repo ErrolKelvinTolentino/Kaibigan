@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../utils/env_config.dart';
 
@@ -17,15 +18,17 @@ class SupabaseService {
           anonKey != 'your_supabase_anon_key_here') {
         await Supabase.initialize(
           url: url,
-          anonKey: anonKey,
+          publishableKey: anonKey,
         );
         _isInitialized = true;
-        print("Supabase successfully initialized with $url");
+        debugPrint("Supabase successfully initialized with $url");
       } else {
-        print("Supabase credentials missing or invalid. Supabase is required for authentication and storage.");
+        debugPrint(
+          "Supabase credentials missing or invalid. Supabase is required for authentication and storage.",
+        );
       }
     } catch (e) {
-      print("Supabase initialization error: $e");
+      debugPrint("Supabase initialization error: $e");
       _isInitialized = false;
     }
   }

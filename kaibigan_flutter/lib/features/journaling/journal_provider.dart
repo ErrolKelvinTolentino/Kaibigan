@@ -8,8 +8,10 @@ import 'journal_model.dart';
 class JournalProvider extends ChangeNotifier {
   final List<JournalEntry> _entries = [];
   bool _isLoading = false;
+  String? _errorMessage;
   String _searchQuery = '';
   String? _selectedCategoryFilter;
+  String? _activeUserId;
 
   List<JournalEntry> get entries {
     return _entries.where((entry) {
@@ -37,12 +39,24 @@ class JournalProvider extends ChangeNotifier {
   }
 
   bool get isLoading => _isLoading;
+  String? get errorMessage => _errorMessage;
   String get searchQuery => _searchQuery;
   String? get selectedCategoryFilter => _selectedCategoryFilter;
 
   JournalProvider() {
-    _initSampleData();
-    fetchJournalEntries();
+    syncForCurrentUser();
+  }
+
+  void syncForCurrentUser() {
+    final userId = SupabaseService.isInitialized
+        ? SupabaseService.client.auth.currentUser?.id
+        : null;
+    if (userId == _activeUserId) return;
+    _activeUserId = userId;
+    _entries.clear();
+    _errorMessage = null;
+    notifyListeners();
+    if (userId != null) fetchJournalEntries();
   }
 
   void setSearchQuery(String query) {
@@ -55,47 +69,25 @@ class JournalProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _initSampleData() {
-    _entries.addAll([
-      JournalEntry(
-        id: UuidHelper.generateV4(),
-        title: 'Breathe and Reset',
-        content:
-            'Today was full of tasks, but taking a short walk helped clear my mind.',
-        aiResponse:
-            'Ang ganda ng desisyon mo na maglakad-lakad kahit sandali. Minsan, akala natin kailangan tuloy-tuloy ang trabaho, pero ang totoo, ang paghinga at pagbagal ang nagbibigay sa atin ng lakas para magpatuloy.\n\n*Anong isang magandang tanawin o pakiramdam ang napansin mo kanina habang naglalakad ka?*',
-        companionId: 'kai',
-        mood: 'calm',
-        tags: ['Daily', 'Reflection'],
-        isFavorite: true,
-        createdAt: DateTime.now().subtract(const Duration(days: 1)),
-      ),
-      JournalEntry(
-        id: UuidHelper.generateV4(),
-        title: 'Reflections on Gratitude',
-        content: 'Grateful for rainy weather and hot soup with family tonight.',
-        aiResponse:
-            'Ang sarap sa puso ng mga ganitong simpleng sandali—mainit na sabaw sa malamig na gabi kasama ang mga taong mahalaga sa\'yo. Ang mga ganitong payapang alaala ang nagsisilbing kanlungan natin sa gitna ng abalang linggo.\n\n*Paano mo pa kaya maipapadama ang pasasalamat na ito sa kanila bukas?*',
-        companionId: 'ann',
-        mood: 'happy',
-        tags: ['Gratitude'],
-        isFavorite: false,
-        createdAt: DateTime.now().subtract(const Duration(days: 3)),
-      ),
-    ]);
-  }
-
   Future<void> fetchJournalEntries() async {
-    if (!SupabaseService.isInitialized) return;
+    _errorMessage = null;
+    if (!SupabaseService.isInitialized) {
+      _errorMessage =
+          'Journal sync is unavailable. Check the app configuration and try again.';
+      notifyListeners();
+      return;
+    }
+    final userId = SupabaseService.client.auth.currentUser?.id;
+    if (userId == null) return;
     _isLoading = true;
     notifyListeners();
 
     try {
-      final userId = SupabaseService.client.auth.currentUser?.id;
-      var query = SupabaseService.client.from('journal_entries').select();
-      if (userId != null) {
-        query = query.eq('user_id', userId);
-      }
+      await AIMemoryService.fetchMemories();
+      final query = SupabaseService.client
+          .from('journal_entries')
+          .select()
+          .eq('user_id', userId);
       final response = await query.order('created_at', ascending: false);
 
       final List data = response as List;
@@ -106,9 +98,14 @@ class JournalProvider extends ChangeNotifier {
         operation: 'SELECT',
         table: 'journal_entries',
         payload: {'user_id': userId, 'order': 'created_at DESC'},
-        result: {'count': data.length, 'sample': data.isNotEmpty ? data.first : null},
+        result: {
+          'count': data.length,
+          'sample': data.isNotEmpty ? data.first : null
+        },
       );
     } catch (e) {
+      _errorMessage =
+          'We could not refresh your journal. Your existing entries are still shown.';
       ApiLogger.logDatabase(
         operation: 'SELECT',
         table: 'journal_entries',
@@ -127,10 +124,12 @@ class JournalProvider extends ChangeNotifier {
     String? aiResponse,
     required String companionId,
     required String mood,
+    String reflectionMode = 'companion',
     List<String> tags = const [],
     int seedStage = 1,
   }) async {
     _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
 
     final newEntry = JournalEntry(
@@ -140,19 +139,21 @@ class JournalProvider extends ChangeNotifier {
       aiResponse: aiResponse ?? aiReply,
       companionId: companionId,
       mood: mood,
+      reflectionMode: reflectionMode,
       tags: tags,
       isFavorite: false,
       reflectionSeedStage: seedStage,
       createdAt: DateTime.now(),
     );
 
-    _entries.insert(0, newEntry);
-
-    if (SupabaseService.isInitialized) {
+    var saved = false;
+    if (SupabaseService.isInitialized &&
+        SupabaseService.client.auth.currentUser != null) {
       try {
-        final userId = SupabaseService.client.auth.currentUser?.id;
+        final userId = SupabaseService.client.auth.currentUser!.id;
         final map = newEntry.toMap(userId: userId);
         await SupabaseService.client.from('journal_entries').insert(map);
+        saved = true;
 
         ApiLogger.logDatabase(
           operation: 'INSERT',
@@ -161,15 +162,23 @@ class JournalProvider extends ChangeNotifier {
           result: {'status': 'success', 'id': newEntry.id},
         );
       } catch (e) {
+        _errorMessage =
+            'This entry could not be saved. Please try again before leaving.';
         ApiLogger.logDatabase(
           operation: 'INSERT',
           table: 'journal_entries',
           error: e.toString(),
         );
       }
+    } else {
+      _errorMessage =
+          'This entry could not be saved because journal sync is unavailable.';
     }
 
-    AIMemoryService.extractMemoryFromNote(title, content);
+    if (saved) {
+      _entries.insert(0, newEntry);
+      AIMemoryService.extractMemoryFromNote(title, content);
+    }
 
     _isLoading = false;
     notifyListeners();
@@ -177,10 +186,19 @@ class JournalProvider extends ChangeNotifier {
   }
 
   Future<void> toggleFavorite(String id) async {
+    _errorMessage = null;
+    if (!SupabaseService.isInitialized ||
+        SupabaseService.client.auth.currentUser == null) {
+      _errorMessage =
+          'The favorite change could not be saved because sync is unavailable.';
+      notifyListeners();
+      return;
+    }
     final index = _entries.indexWhere((e) => e.id == id);
     if (index != -1) {
       final updated =
           _entries[index].copyWith(isFavorite: !_entries[index].isFavorite);
+      final previous = _entries[index];
       _entries[index] = updated;
       notifyListeners();
 
@@ -197,6 +215,8 @@ class JournalProvider extends ChangeNotifier {
             result: {'status': 'success'},
           );
         } catch (e) {
+          _entries[index] = previous;
+          _errorMessage = 'The favorite change could not be synced.';
           ApiLogger.logDatabase(
             operation: 'UPDATE',
             table: 'journal_entries (favorite)',
@@ -204,12 +224,22 @@ class JournalProvider extends ChangeNotifier {
           );
         }
       }
+      notifyListeners();
     }
   }
 
   Future<void> updateJournalEntry(JournalEntry entry) async {
+    _errorMessage = null;
+    if (!SupabaseService.isInitialized ||
+        SupabaseService.client.auth.currentUser == null) {
+      _errorMessage =
+          'Your changes could not be saved because sync is unavailable.';
+      notifyListeners();
+      return;
+    }
     final index = _entries.indexWhere((e) => e.id == entry.id);
     if (index != -1) {
+      final previous = _entries[index];
       _entries[index] = entry;
       notifyListeners();
 
@@ -229,6 +259,8 @@ class JournalProvider extends ChangeNotifier {
             result: {'status': 'success', 'id': entry.id},
           );
         } catch (e) {
+          _entries[index] = previous;
+          _errorMessage = 'Your changes could not be saved. Please try again.';
           ApiLogger.logDatabase(
             operation: 'UPDATE',
             table: 'journal_entries',
@@ -237,12 +269,25 @@ class JournalProvider extends ChangeNotifier {
         }
       }
 
-      AIMemoryService.extractMemoryFromNote(entry.title, entry.content);
+      if (_errorMessage == null) {
+        AIMemoryService.extractMemoryFromNote(entry.title, entry.content);
+      }
+      notifyListeners();
     }
   }
 
   Future<void> deleteJournalEntry(String id) async {
-    _entries.removeWhere((e) => e.id == id);
+    _errorMessage = null;
+    if (!SupabaseService.isInitialized ||
+        SupabaseService.client.auth.currentUser == null) {
+      _errorMessage =
+          'The entry could not be deleted because sync is unavailable.';
+      notifyListeners();
+      return;
+    }
+    final index = _entries.indexWhere((e) => e.id == id);
+    if (index == -1) return;
+    final removed = _entries.removeAt(index);
     notifyListeners();
 
     if (SupabaseService.isInitialized && UuidHelper.isValidUuid(id)) {
@@ -259,6 +304,8 @@ class JournalProvider extends ChangeNotifier {
           result: {'status': 'success', 'id': id},
         );
       } catch (e) {
+        _entries.insert(index.clamp(0, _entries.length), removed);
+        _errorMessage = 'The entry could not be deleted. It has been restored.';
         ApiLogger.logDatabase(
           operation: 'DELETE',
           table: 'journal_entries',
@@ -266,5 +313,6 @@ class JournalProvider extends ChangeNotifier {
         );
       }
     }
+    notifyListeners();
   }
 }

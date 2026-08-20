@@ -23,7 +23,10 @@ class SettingsScreen extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight),
+          icon: Icon(Icons.arrow_back_ios_new_rounded,
+              color: isDark
+                  ? AppColors.textPrimaryDark
+                  : AppColors.textPrimaryLight),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
@@ -42,7 +45,10 @@ class SettingsScreen extends StatelessWidget {
               decoration: BoxDecoration(
                 color: isDark ? AppColors.darkCard : Colors.white,
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: isDark ? AppColors.darkCardBorder : Colors.black.withValues(alpha: 0.05)),
+                border: Border.all(
+                    color: isDark
+                        ? AppColors.darkCardBorder
+                        : Colors.black.withValues(alpha: 0.05)),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
@@ -61,7 +67,8 @@ class SettingsScreen extends StatelessWidget {
                       shape: BoxShape.circle,
                     ),
                     child: Center(
-                      child: Text(mascot.avatarIcon, style: const TextStyle(fontSize: 30)),
+                      child: Text(mascot.avatarIcon,
+                          style: const TextStyle(fontSize: 30)),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -70,19 +77,27 @@ class SettingsScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          userProvider.displayName.isEmpty ? 'Kaibigan User' : userProvider.displayName,
+                          userProvider.displayName.isEmpty
+                              ? 'Kaibigan User'
+                              : userProvider.displayName,
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w800,
-                            color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                            color: isDark
+                                ? AppColors.textPrimaryDark
+                                : AppColors.textPrimaryLight,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          userProvider.email.isEmpty ? 'Offline Profile' : userProvider.email,
+                          userProvider.email.isEmpty
+                              ? 'Offline Profile'
+                              : userProvider.email,
                           style: TextStyle(
                             fontSize: 13,
-                            color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                            color: isDark
+                                ? AppColors.textSecondaryDark
+                                : AppColors.textSecondaryLight,
                           ),
                         ),
                       ],
@@ -117,14 +132,19 @@ class SettingsScreen extends StatelessWidget {
               decoration: BoxDecoration(
                 color: isDark ? AppColors.darkCard : Colors.white,
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: isDark ? AppColors.darkCardBorder : Colors.black.withValues(alpha: 0.05)),
+                border: Border.all(
+                    color: isDark
+                        ? AppColors.darkCardBorder
+                        : Colors.black.withValues(alpha: 0.05)),
               ),
               child: Column(
                 children: [
                   // Companion Picker (Kai vs Ann)
                   ListTile(
-                    leading: Text(mascot.avatarIcon, style: const TextStyle(fontSize: 22)),
-                    title: const Text('Companion Mascot', style: TextStyle(fontWeight: FontWeight.w700)),
+                    leading: Text(mascot.avatarIcon,
+                        style: const TextStyle(fontSize: 22)),
+                    title: const Text('Companion Mascot',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
                     subtitle: Text('${mascot.name} (${mascot.tag})'),
                     trailing: DropdownButton<String>(
                       value: userProvider.selectedCompanion,
@@ -147,21 +167,28 @@ class SettingsScreen extends StatelessWidget {
 
                   // Language Picker
                   ListTile(
-                    leading: const Icon(Icons.translate_rounded, color: AppColors.sageGreen),
-                    title: const Text('Language / Wika', style: TextStyle(fontWeight: FontWeight.w700)),
+                    leading: const Icon(Icons.translate_rounded,
+                        color: AppColors.sageGreen),
+                    title: const Text('Language / Wika',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
                     subtitle: Text(
                       userProvider.language == 'filipino'
                           ? 'Filipino'
-                          : (userProvider.language == 'taglish' ? 'Taglish (Filipino-English)' : 'English'),
+                          : (userProvider.language == 'taglish'
+                              ? 'Taglish (Filipino-English)'
+                              : 'English'),
                     ),
                     trailing: DropdownButton<String>(
                       value: userProvider.language,
                       underline: const SizedBox(),
                       borderRadius: BorderRadius.circular(16),
                       items: const [
-                        DropdownMenuItem(value: 'taglish', child: Text('Taglish 🇵🇭')),
-                        DropdownMenuItem(value: 'filipino', child: Text('Filipino 🇵🇭')),
-                        DropdownMenuItem(value: 'english', child: Text('English 🌐')),
+                        DropdownMenuItem(
+                            value: 'taglish', child: Text('Taglish 🇵🇭')),
+                        DropdownMenuItem(
+                            value: 'filipino', child: Text('Filipino 🇵🇭')),
+                        DropdownMenuItem(
+                            value: 'english', child: Text('English 🌐')),
                       ],
                       onChanged: (val) {
                         if (val != null) {
@@ -175,10 +202,13 @@ class SettingsScreen extends StatelessWidget {
                   // Dark Mode Switch
                   SwitchListTile(
                     secondary: Icon(
-                      userProvider.isDarkMode ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                      userProvider.isDarkMode
+                          ? Icons.dark_mode_rounded
+                          : Icons.light_mode_rounded,
                       color: AppColors.honeyGold,
                     ),
-                    title: const Text('Dark Mode', style: TextStyle(fontWeight: FontWeight.w700)),
+                    title: const Text('Dark Mode',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
                     subtitle: const Text('Cozy nature palette for evening'),
                     value: userProvider.isDarkMode,
                     activeThumbColor: AppColors.honeyGold,
@@ -207,15 +237,22 @@ class SettingsScreen extends StatelessWidget {
               decoration: BoxDecoration(
                 color: isDark ? AppColors.darkCard : Colors.white,
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: isDark ? AppColors.darkCardBorder : Colors.black.withValues(alpha: 0.05)),
+                border: Border.all(
+                    color: isDark
+                        ? AppColors.darkCardBorder
+                        : Colors.black.withValues(alpha: 0.05)),
               ),
               child: Column(
                 children: [
                   Row(
                     children: [
                       Icon(
-                        SupabaseService.isInitialized ? Icons.cloud_done_rounded : Icons.cloud_off_rounded,
-                        color: SupabaseService.isInitialized ? AppColors.sageGreen : Colors.orange,
+                        SupabaseService.isInitialized
+                            ? Icons.cloud_done_rounded
+                            : Icons.cloud_off_rounded,
+                        color: SupabaseService.isInitialized
+                            ? AppColors.sageGreen
+                            : Colors.orange,
                         size: 24,
                       ),
                       const SizedBox(width: 14),
@@ -224,15 +261,22 @@ class SettingsScreen extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              SupabaseService.isInitialized ? 'Cloud Sync Active' : 'Offline Mode',
-                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                              SupabaseService.isInitialized
+                                  ? 'Cloud Sync Available'
+                                  : 'Sync Unavailable',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w800, fontSize: 14),
                             ),
                             const SizedBox(height: 2),
                             Text(
                               SupabaseService.isInitialized
-                                  ? 'All entries safely synced with Supabase'
-                                  : 'Data stored locally on this device',
-                              style: TextStyle(fontSize: 12, color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
+                                  ? 'Signed-in entries sync securely with Supabase'
+                                  : 'New entries cannot be saved until sync is restored',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark
+                                      ? AppColors.textSecondaryDark
+                                      : AppColors.textSecondaryLight),
                             ),
                           ],
                         ),
@@ -244,17 +288,24 @@ class SettingsScreen extends StatelessWidget {
                     width: double.infinity,
                     height: 48,
                     child: OutlinedButton.icon(
-                      icon: const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 18),
-                      label: const Text('Log Out', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w700)),
+                      icon: const Icon(Icons.logout_rounded,
+                          color: Colors.redAccent, size: 18),
+                      label: const Text('Log Out',
+                          style: TextStyle(
+                              color: Colors.redAccent,
+                              fontWeight: FontWeight.w700)),
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Colors.redAccent, width: 1.2),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        side: const BorderSide(
+                            color: Colors.redAccent, width: 1.2),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16)),
                       ),
                       onPressed: () async {
                         await userProvider.logout();
                         if (context.mounted) {
                           Navigator.of(context).pushAndRemoveUntil(
-                            MaterialPageRoute(builder: (_) => const AuthScreen()),
+                            MaterialPageRoute(
+                                builder: (_) => const AuthScreen()),
                             (route) => false,
                           );
                         }

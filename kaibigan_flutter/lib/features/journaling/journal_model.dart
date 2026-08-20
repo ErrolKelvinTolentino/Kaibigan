@@ -7,6 +7,7 @@ class JournalEntry {
   final String? aiResponse;
   final String companionId;
   final String mood;
+  final String reflectionMode; // 'companion', 'reflection', 'advice', 'vent', 'celebration'
   final List<String> tags;
   final bool isFavorite;
   final int reflectionSeedStage; // 1: Seed, 2: Sprout, 3: Bloom
@@ -19,6 +20,7 @@ class JournalEntry {
     this.aiResponse,
     required this.companionId,
     this.mood = 'calm',
+    this.reflectionMode = 'companion',
     this.tags = const [],
     this.isFavorite = false,
     this.reflectionSeedStage = 1,
@@ -32,6 +34,7 @@ class JournalEntry {
     String? aiResponse,
     String? companionId,
     String? mood,
+    String? reflectionMode,
     List<String>? tags,
     bool? isFavorite,
     int? reflectionSeedStage,
@@ -44,6 +47,7 @@ class JournalEntry {
       aiResponse: aiResponse ?? this.aiResponse,
       companionId: companionId ?? this.companionId,
       mood: mood ?? this.mood,
+      reflectionMode: reflectionMode ?? this.reflectionMode,
       tags: tags ?? this.tags,
       isFavorite: isFavorite ?? this.isFavorite,
       reflectionSeedStage: reflectionSeedStage ?? this.reflectionSeedStage,
@@ -60,6 +64,7 @@ class JournalEntry {
       'ai_response': aiResponse,
       'companion_id': companionId,
       'mood': mood,
+      'reflection_mode': reflectionMode,
       'tags': tags,
       'is_favorite': isFavorite,
       'reflection_seed_stage': reflectionSeedStage,
@@ -79,6 +84,7 @@ class JournalEntry {
       aiResponse: map['ai_response'],
       companionId: map['companion_id'] ?? 'kai',
       mood: map['mood'] ?? 'calm',
+      reflectionMode: map['reflection_mode'] ?? 'companion',
       tags: List<String>.from(map['tags'] ?? []),
       isFavorite: map['is_favorite'] ?? false,
       reflectionSeedStage: map['reflection_seed_stage'] ?? 1,

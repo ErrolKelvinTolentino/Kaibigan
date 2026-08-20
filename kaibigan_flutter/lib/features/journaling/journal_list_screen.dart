@@ -4,6 +4,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../core/widgets/cozy_confirm_sheet.dart';
+import '../../core/widgets/sync_status_banner.dart';
 import '../companion/companion_model.dart';
 import 'journal_provider.dart';
 import 'journal_editor_screen.dart';
@@ -18,7 +19,13 @@ class JournalListScreen extends StatefulWidget {
 class _JournalListScreenState extends State<JournalListScreen> {
   String _selectedCategory = 'All';
 
-  final List<String> _categories = ['All', 'Favorites', 'Daily', 'Gratitude', 'Reflection'];
+  final List<String> _categories = [
+    'All',
+    'Favorites',
+    'Daily',
+    'Gratitude',
+    'Reflection'
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +38,11 @@ class _JournalListScreenState extends State<JournalListScreen> {
       entries = journalProvider.favoriteEntries;
     } else if (_selectedCategory != 'All') {
       final cleanCat = _selectedCategory.toLowerCase();
-      entries = entries.where((e) => e.tags.any((t) => t.toLowerCase().contains(cleanCat)) || e.title.toLowerCase().contains(cleanCat)).toList();
+      entries = entries
+          .where((e) =>
+              e.tags.any((t) => t.toLowerCase().contains(cleanCat)) ||
+              e.title.toLowerCase().contains(cleanCat))
+          .toList();
     }
 
     return Scaffold(
@@ -40,7 +51,8 @@ class _JournalListScreenState extends State<JournalListScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white : Colors.black87),
+          icon: Icon(Icons.arrow_back_ios_new_rounded,
+              color: isDark ? Colors.white : Colors.black87),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
@@ -57,32 +69,44 @@ class _JournalListScreenState extends State<JournalListScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
               child: TextField(
                 onChanged: (val) => journalProvider.setSearchQuery(val),
-                style: TextStyle(fontSize: 14, color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight),
+                style: TextStyle(
+                    fontSize: 14,
+                    color: isDark
+                        ? AppColors.textPrimaryDark
+                        : AppColors.textPrimaryLight),
                 decoration: InputDecoration(
                   hintText: 'Search reflections, thoughts, or tags...',
                   hintStyle: TextStyle(
                     fontSize: 13,
                     color: isDark ? Colors.white38 : Colors.black38,
                   ),
-                  prefixIcon: Icon(Icons.search_rounded, size: 20, color: isDark ? Colors.white54 : Colors.black45),
+                  prefixIcon: Icon(Icons.search_rounded,
+                      size: 20,
+                      color: isDark ? Colors.white54 : Colors.black45),
                   filled: true,
                   fillColor: isDark ? AppColors.darkCard : Colors.white,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(20),
                     borderSide: BorderSide(
-                      color: isDark ? AppColors.darkCardBorder : Colors.black.withValues(alpha: 0.05),
+                      color: isDark
+                          ? AppColors.darkCardBorder
+                          : Colors.black.withValues(alpha: 0.05),
                     ),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(20),
                     borderSide: BorderSide(
-                      color: isDark ? AppColors.darkCardBorder : Colors.black.withValues(alpha: 0.05),
+                      color: isDark
+                          ? AppColors.darkCardBorder
+                          : Colors.black.withValues(alpha: 0.05),
                     ),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(20),
-                    borderSide: const BorderSide(color: AppColors.honeyGold, width: 1.5),
+                    borderSide: const BorderSide(
+                        color: AppColors.honeyGold, width: 1.5),
                   ),
                 ),
               ),
@@ -105,20 +129,26 @@ class _JournalListScreenState extends State<JournalListScreen> {
                       label: Text(cat),
                       selected: isSelected,
                       selectedColor: AppColors.honeyGold,
-                      backgroundColor: isDark ? AppColors.darkCard : Colors.white,
+                      backgroundColor:
+                          isDark ? AppColors.darkCard : Colors.white,
                       labelStyle: TextStyle(
                         fontSize: 12,
-                        fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                        fontWeight:
+                            isSelected ? FontWeight.w800 : FontWeight.w600,
                         color: isSelected
                             ? Colors.white
-                            : (isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight),
+                            : (isDark
+                                ? AppColors.textPrimaryDark
+                                : AppColors.textPrimaryLight),
                       ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                         side: BorderSide(
                           color: isSelected
                               ? AppColors.honeyGold
-                              : (isDark ? AppColors.darkCardBorder : Colors.black.withValues(alpha: 0.06)),
+                              : (isDark
+                                  ? AppColors.darkCardBorder
+                                  : Colors.black.withValues(alpha: 0.06)),
                         ),
                       ),
                       onSelected: (selected) {
@@ -130,6 +160,14 @@ class _JournalListScreenState extends State<JournalListScreen> {
               ),
             ),
             const SizedBox(height: 6),
+
+            if (journalProvider.isLoading)
+              const LinearProgressIndicator(minHeight: 2),
+            if (journalProvider.errorMessage != null)
+              SyncStatusBanner(
+                message: journalProvider.errorMessage!,
+                onRetry: journalProvider.fetchJournalEntries,
+              ),
 
             // Entries List
             Expanded(
@@ -143,7 +181,8 @@ class _JournalListScreenState extends State<JournalListScreen> {
                             Container(
                               padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
-                                color: AppColors.honeyGold.withValues(alpha: 0.15),
+                                color:
+                                    AppColors.honeyGold.withValues(alpha: 0.15),
                                 shape: BoxShape.circle,
                               ),
                               child: const Icon(
@@ -160,7 +199,9 @@ class _JournalListScreenState extends State<JournalListScreen> {
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w800,
-                                color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                color: isDark
+                                    ? AppColors.textPrimaryDark
+                                    : AppColors.textPrimaryLight,
                               ),
                             ),
                             const SizedBox(height: 6),
@@ -169,7 +210,9 @@ class _JournalListScreenState extends State<JournalListScreen> {
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 13,
-                                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                color: isDark
+                                    ? AppColors.textSecondaryDark
+                                    : AppColors.textSecondaryLight,
                               ),
                             ),
                           ],
@@ -178,7 +221,8 @@ class _JournalListScreenState extends State<JournalListScreen> {
                     )
                   : ListView.builder(
                       physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 8),
                       itemCount: entries.length,
                       itemBuilder: (context, index) {
                         final entry = entries[index];
@@ -191,7 +235,8 @@ class _JournalListScreenState extends State<JournalListScreen> {
                             return await CozyConfirmSheet.show(
                               context,
                               title: 'Palayain ang Tala?',
-                              message: 'Sigurado ka bang nais mong alisin ang journal note na "${entry.title}"? Valid at mahalaga ang bawat alaala mo.',
+                              message:
+                                  'Sigurado ka bang nais mong alisin ang journal note na "${entry.title}"? Valid at mahalaga ang bawat alaala mo.',
                               confirmLabel: 'Let Go',
                               cancelLabel: 'Keep Note',
                               icon: Icons.edit_note_rounded,
@@ -201,7 +246,8 @@ class _JournalListScreenState extends State<JournalListScreen> {
                             journalProvider.deleteJournalEntry(entry.id);
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('Journal reflection gently let go.'),
+                                content:
+                                    Text('Journal reflection gently let go.'),
                                 behavior: SnackBarBehavior.floating,
                                 duration: Duration(seconds: 2),
                               ),
@@ -218,7 +264,10 @@ class _JournalListScreenState extends State<JournalListScreen> {
                             child: const Row(
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
-                                Text('Let Go', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                                Text('Let Go',
+                                    style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w700)),
                                 SizedBox(width: 8),
                                 Icon(Icons.delete_outline, color: Colors.white),
                               ],
@@ -230,48 +279,63 @@ class _JournalListScreenState extends State<JournalListScreen> {
                               color: isDark ? AppColors.darkCard : Colors.white,
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
-                                color: isDark ? AppColors.darkCardBorder : Colors.black.withValues(alpha: 0.05),
+                                color: isDark
+                                    ? AppColors.darkCardBorder
+                                    : Colors.black.withValues(alpha: 0.05),
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.02),
+                                  color: Colors.black
+                                      .withValues(alpha: isDark ? 0.15 : 0.02),
                                   blurRadius: 8,
                                   offset: const Offset(0, 2),
                                 ),
                               ],
                             ),
                             child: ListTile(
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 10),
                               onTap: () {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) => JournalEditorScreen(entry: entry),
+                                    builder: (_) =>
+                                        JournalEditorScreen(entry: entry),
                                   ),
                                 );
                               },
                               title: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Expanded(
                                     child: Text(
-                                      entry.title.isEmpty ? 'Untitled Reflection' : entry.title,
+                                      entry.title.isEmpty
+                                          ? 'Untitled Reflection'
+                                          : entry.title,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
                                         fontSize: 15.5,
                                         fontWeight: FontWeight.w700,
-                                        color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                        color: isDark
+                                            ? AppColors.textPrimaryDark
+                                            : AppColors.textPrimaryLight,
                                       ),
                                     ),
                                   ),
                                   IconButton(
                                     icon: Icon(
-                                      entry.isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                                      entry.isFavorite
+                                          ? Icons.favorite_rounded
+                                          : Icons.favorite_border_rounded,
                                       size: 20,
-                                      color: entry.isFavorite ? AppColors.moodAwful : Colors.grey,
+                                      color: entry.isFavorite
+                                          ? AppColors.moodAwful
+                                          : Colors.grey,
                                     ),
-                                    onPressed: () => journalProvider.toggleFavorite(entry.id),
+                                    onPressed: () => journalProvider
+                                        .toggleFavorite(entry.id),
                                   ),
                                 ],
                               ),
@@ -285,17 +349,22 @@ class _JournalListScreenState extends State<JournalListScreen> {
                                     style: TextStyle(
                                       fontSize: 13,
                                       height: 1.35,
-                                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                      color: isDark
+                                          ? AppColors.textSecondaryDark
+                                          : AppColors.textSecondaryLight,
                                     ),
                                   ),
                                   const SizedBox(height: 8),
                                   Row(
                                     children: [
                                       Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 2),
                                         decoration: BoxDecoration(
-                                          color: mascot.primaryColor.withValues(alpha: 0.15),
-                                          borderRadius: BorderRadius.circular(8),
+                                          color: mascot.primaryColor
+                                              .withValues(alpha: 0.15),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
                                         ),
                                         child: Text(
                                           '${mascot.avatarIcon} ${mascot.name}',
@@ -308,10 +377,13 @@ class _JournalListScreenState extends State<JournalListScreen> {
                                       ),
                                       const Spacer(),
                                       Text(
-                                        DateFormatter.formatShortDate(entry.createdAt),
+                                        DateFormatter.formatShortDate(
+                                            entry.createdAt),
                                         style: TextStyle(
                                           fontSize: 11,
-                                          color: isDark ? Colors.white38 : Colors.black38,
+                                          color: isDark
+                                              ? Colors.white38
+                                              : Colors.black38,
                                         ),
                                       ),
                                     ],

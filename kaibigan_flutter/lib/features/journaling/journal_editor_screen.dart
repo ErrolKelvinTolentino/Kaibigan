@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -9,6 +11,8 @@ import '../../core/constants/app_colors.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../core/services/pdf_service.dart';
 import '../../core/services/ai_service.dart';
+import '../../core/services/journal_draft_service.dart';
+import '../../core/services/supabase_service.dart';
 import '../companion/companion_model.dart';
 import '../settings/user_provider.dart';
 import '../comfort_corner/akbay_safety_sheet.dart';
@@ -19,10 +23,14 @@ import 'journal_model.dart';
 class JournalTurn {
   final TextEditingController userController;
   String? aiResponse;
+  CompanionMode mode;
+  String? companionId;
 
   JournalTurn({
     required String userText,
     this.aiResponse,
+    this.mode = CompanionMode.companion,
+    this.companionId,
   }) : userController = TextEditingController(text: userText);
 
   void dispose() {
@@ -49,8 +57,13 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
 
   final List<JournalTurn> _turns = [];
   bool _isGeneratingAi = false;
+  AIRequestCancellationToken? _aiCancellationToken;
   String _selectedMood = 'calm';
+  CompanionMode _currentMode = CompanionMode.companion;
+  String? _activeCompanionId;
   int _promptIndex = 0;
+  Timer? _draftTimer;
+  bool _restoringDraft = false;
 
   final List<String> _guidingPrompts = [
     "What is occupying the most space in your head right now?",
@@ -68,17 +81,113 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
     if (target != null) {
       _titleController.text = target.title;
       _selectedMood = target.mood;
-      _turns.add(JournalTurn(
+      _activeCompanionId = target.companionId;
+
+      CompanionMode initMode = CompanionMode.companion;
+      for (final m in CompanionMode.values) {
+        if (m.name == target.reflectionMode) {
+          initMode = m;
+          break;
+        }
+      }
+      _currentMode = initMode;
+
+      _addTurn(JournalTurn(
         userText: target.content,
         aiResponse: target.aiResponse,
+        mode: initMode,
+        companionId: target.companionId,
       ));
     } else {
-      _turns.add(JournalTurn(userText: ''));
+      _addTurn(JournalTurn(userText: ''));
+      _restoreDraft();
     }
+    _titleController.addListener(_scheduleDraftSave);
+  }
+
+  String? get _draftUserId => SupabaseService.isInitialized
+      ? SupabaseService.client.auth.currentUser?.id
+      : null;
+
+  void _addTurn(JournalTurn turn) {
+    turn.userController.addListener(_scheduleDraftSave);
+    _turns.add(turn);
+  }
+
+  Future<void> _restoreDraft() async {
+    final userId = _draftUserId;
+    if (userId == null) return;
+    final draft = await JournalDraftService.read(userId);
+    if (!mounted || draft == null) return;
+    final turns = draft['turns'] as List<dynamic>?;
+    final hasContent = (draft['title'] as String? ?? '').trim().isNotEmpty ||
+        (turns?.any((item) =>
+                ((item as Map<String, dynamic>)['text'] as String? ?? '')
+                    .trim()
+                    .isNotEmpty) ??
+            false);
+    if (!hasContent) return;
+
+    _restoringDraft = true;
+    for (final turn in _turns) {
+      turn.dispose();
+    }
+    _turns.clear();
+    _titleController.text = draft['title'] as String? ?? '';
+    _selectedMood = draft['mood'] as String? ?? 'calm';
+    final modeName = draft['mode'] as String?;
+    _currentMode = CompanionMode.values.firstWhere(
+      (mode) => mode.name == modeName,
+      orElse: () => CompanionMode.companion,
+    );
+    for (final item in turns ?? const []) {
+      final map = item as Map<String, dynamic>;
+      _addTurn(JournalTurn(
+        userText: map['text'] as String? ?? '',
+        aiResponse: map['aiResponse'] as String?,
+        mode: _currentMode,
+        companionId: map['companionId'] as String?,
+      ));
+    }
+    if (_turns.isEmpty) _addTurn(JournalTurn(userText: ''));
+    _restoringDraft = false;
+    setState(() {});
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Your unsaved journal draft was restored.')),
+      );
+    }
+  }
+
+  void _scheduleDraftSave() {
+    if (_restoringDraft || widget.targetEntry != null) return;
+    _draftTimer?.cancel();
+    _draftTimer = Timer(const Duration(milliseconds: 700), _saveDraft);
+  }
+
+  Future<void> _saveDraft() async {
+    final userId = _draftUserId;
+    if (userId == null || widget.targetEntry != null) return;
+    await JournalDraftService.write(userId, {
+      'title': _titleController.text,
+      'mood': _selectedMood,
+      'mode': _currentMode.name,
+      'updatedAt': DateTime.now().toIso8601String(),
+      'turns': _turns
+          .map((turn) => {
+                'text': turn.userController.text,
+                'aiResponse': turn.aiResponse,
+                'companionId': turn.companionId,
+              })
+          .toList(),
+    });
   }
 
   @override
   void dispose() {
+    _aiCancellationToken?.cancel();
+    _draftTimer?.cancel();
     _titleController.dispose();
     _scrollController.dispose();
     _activeFocusNode.dispose();
@@ -127,17 +236,21 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
     if (textToReflectOn.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please write something in your note before reflecting! ✨'),
+          content: Text(
+              'Write at least one thought before asking for a reflection.'),
           behavior: SnackBarBehavior.floating,
         ),
       );
       return;
     }
 
+    final cancellationToken = AIRequestCancellationToken();
+    _aiCancellationToken?.cancel();
+    _aiCancellationToken = cancellationToken;
     setState(() => _isGeneratingAi = true);
 
     final userProvider = Provider.of<UserProvider>(context, listen: false);
-    final companionId = userProvider.selectedCompanion;
+    final companionId = _activeCompanionId ?? userProvider.selectedCompanion;
     final language = userProvider.language;
 
     try {
@@ -145,16 +258,20 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
         userText: textToReflectOn,
         companionId: companionId,
         language: language,
+        mode: _currentMode,
         mood: _selectedMood,
+        cancellationToken: cancellationToken,
       );
 
-      if (mounted) {
+      if (mounted && !cancellationToken.isCancelled) {
         setState(() {
           lastTurn.aiResponse = aiReply;
-          _isGeneratingAi = false;
+          lastTurn.mode = _currentMode;
+          lastTurn.companionId = companionId;
 
           // Prepare next turn prompt area
-          _turns.add(JournalTurn(userText: ''));
+          _addTurn(JournalTurn(
+              userText: '', mode: _currentMode, companionId: companionId));
         });
 
         // Auto-scroll to bottom
@@ -171,18 +288,271 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
           }
         });
       }
-    } catch (e) {
+    } on AIRequestCancelledException {
+      // Cancellation is user-directed and does not need an error message.
+    } catch (_) {
       if (mounted) {
-        setState(() => _isGeneratingAi = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not generate reflection: $e')),
+          const SnackBar(
+            content: Text(
+              'The reflection could not load. Your journal entry is still safe.',
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
+      }
+    } finally {
+      if (identical(_aiCancellationToken, cancellationToken)) {
+        _aiCancellationToken = null;
+        if (mounted) setState(() => _isGeneratingAi = false);
       }
     }
   }
 
-  Widget _buildAiReplyBox(BuildContext context, MascotInfo mascot, String reply, bool isDark) {
-    final isCrisisReply = reply.contains('1553') || reply.contains('Hotline') || reply.contains('Crisis');
+  void _showModeSelectorSheet(
+      BuildContext context, bool isDark, MascotInfo mascot) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.darkCard : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
+              blurRadius: 20,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white24 : Colors.black12,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Text(
+                    'How should ${mascot.name} be with you today?',
+                    style: TextStyle(
+                      fontSize: 16.5,
+                      fontWeight: FontWeight.w800,
+                      color: isDark
+                          ? AppColors.textPrimaryDark
+                          : AppColors.textPrimaryLight,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              ...CompanionMode.values.map((m) {
+                final isSelected = _currentMode == m;
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? mascot.primaryColor
+                            .withValues(alpha: isDark ? 0.22 : 0.12)
+                        : (isDark
+                            ? Colors.white.withValues(alpha: 0.04)
+                            : AppColors.warmCream.withValues(alpha: 0.5)),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isSelected
+                          ? mascot.primaryColor
+                          : (isDark
+                              ? AppColors.darkCardBorder
+                              : Colors.black.withValues(alpha: 0.05)),
+                      width: isSelected ? 1.5 : 1.0,
+                    ),
+                  ),
+                  child: ListTile(
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? mascot.primaryColor.withValues(alpha: 0.25)
+                            : (isDark
+                                ? Colors.white10
+                                : Colors.black.withValues(alpha: 0.05)),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(m.iconEmoji,
+                          style: const TextStyle(fontSize: 18)),
+                    ),
+                    title: Text(
+                      m.label,
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        fontWeight:
+                            isSelected ? FontWeight.w800 : FontWeight.w600,
+                        color: isSelected
+                            ? mascot.primaryColor
+                            : (isDark
+                                ? AppColors.textPrimaryDark
+                                : AppColors.textPrimaryLight),
+                      ),
+                    ),
+                    subtitle: Text(
+                      m.tagDescription,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : AppColors.textSecondaryLight,
+                      ),
+                    ),
+                    trailing: isSelected
+                        ? Icon(Icons.check_circle_rounded,
+                            color: mascot.primaryColor, size: 20)
+                        : null,
+                    onTap: () {
+                      setState(() => _currentMode = m);
+                      Navigator.of(ctx).pop();
+                    },
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showCompanionPickerSheet(BuildContext context, bool isDark) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.darkCard : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white24 : Colors.black12,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Choose Companion for this note',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: isDark
+                      ? AppColors.textPrimaryDark
+                      : AppColors.textPrimaryLight,
+                ),
+              ),
+              const SizedBox(height: 14),
+              ...MascotInfo.companions.map((comp) {
+                final currentCompId = _activeCompanionId ??
+                    Provider.of<UserProvider>(context, listen: false)
+                        .selectedCompanion;
+                final isSelected = currentCompId == comp.id;
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? comp.primaryColor
+                            .withValues(alpha: isDark ? 0.22 : 0.12)
+                        : (isDark
+                            ? Colors.white.withValues(alpha: 0.04)
+                            : AppColors.warmCream.withValues(alpha: 0.5)),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color:
+                          isSelected ? comp.primaryColor : Colors.transparent,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: ListTile(
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    leading: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: comp.primaryColor.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(comp.materialIcon,
+                          color: comp.primaryColor, size: 22),
+                    ),
+                    title: Text(
+                      comp.name,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: isSelected
+                            ? comp.primaryColor
+                            : (isDark
+                                ? AppColors.textPrimaryDark
+                                : AppColors.textPrimaryLight),
+                      ),
+                    ),
+                    subtitle: Text(
+                      comp.description,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : AppColors.textSecondaryLight,
+                      ),
+                    ),
+                    onTap: () {
+                      setState(() {
+                        _activeCompanionId = comp.id;
+                      });
+                      Navigator.of(ctx).pop();
+                    },
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAiReplyBox(
+    BuildContext context,
+    MascotInfo mascot,
+    String reply,
+    CompanionMode turnMode,
+    bool isDark,
+  ) {
+    final isCrisisReply = reply.contains('1553') ||
+        reply.contains('Hotline') ||
+        reply.contains('Crisis');
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 12),
@@ -191,7 +561,7 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
         color: isDark
             ? mascot.primaryColor.withValues(alpha: 0.14)
             : mascot.lightBgColor.withValues(alpha: 0.8),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(
           color: mascot.primaryColor.withValues(alpha: isDark ? 0.35 : 0.25),
           width: 1.5,
@@ -207,6 +577,7 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header: Avatar, Name, Mode Badge, Copy Action
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -218,7 +589,8 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                       color: mascot.primaryColor.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                     ),
-                    child: Text(mascot.avatarIcon, style: const TextStyle(fontSize: 16)),
+                    child: Icon(mascot.materialIcon,
+                        size: 16, color: mascot.primaryColor),
                   ),
                   const SizedBox(width: 8),
                   Text(
@@ -231,13 +603,14 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                   ),
                   const SizedBox(width: 6),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
                       color: mascot.primaryColor.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      'AI Companion Reflection',
+                      '${turnMode.iconEmoji} ${turnMode.label}',
                       style: TextStyle(
                         fontSize: 10.5,
                         fontWeight: FontWeight.w700,
@@ -265,6 +638,8 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
             ],
           ),
           const SizedBox(height: 12),
+
+          // Markdown Body
           MarkdownBody(
             data: reply,
             selectable: true,
@@ -273,7 +648,9 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                 fontSize: 15,
                 height: 1.6,
                 fontWeight: FontWeight.w500,
-                color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                color: isDark
+                    ? AppColors.textPrimaryDark
+                    : AppColors.textPrimaryLight,
               ),
               em: GoogleFonts.lora(
                 fontStyle: FontStyle.italic,
@@ -301,25 +678,89 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
               ),
             ),
           ),
+
+          // Follow-up suggestion chips
+          if (!isCrisisReply) ...[
+            const SizedBox(height: 14),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: Row(
+                children: [
+                  _buildFollowUpChip(
+                    context,
+                    label: "Let's explore this",
+                    icon: Icons.bubble_chart_outlined,
+                    isDark: isDark,
+                    mascot: mascot,
+                    onTap: () {
+                      _turns.last.userController.text =
+                          "Gusto ko pa mas himayin 'to...";
+                      _activeFocusNode.requestFocus();
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  _buildFollowUpChip(
+                    context,
+                    label: "What's a gentle step?",
+                    icon: Icons.lightbulb_outline,
+                    isDark: isDark,
+                    mascot: mascot,
+                    onTap: () {
+                      setState(() => _currentMode = CompanionMode.advice);
+                      _turns.last.userController.text =
+                          "Anong pinakamaliit na hakbang na pwede kong gawin?";
+                      _triggerAiReflection();
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  _buildFollowUpChip(
+                    context,
+                    label: "Just listening helps",
+                    icon: Icons.favorite_outline,
+                    isDark: isDark,
+                    mascot: mascot,
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                              '${mascot.name} will stay with what you shared—no fixing needed.'),
+                          behavior: SnackBarBehavior.floating,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // Crisis Hotlines Card
           if (isCrisisReply) ...[
             const SizedBox(height: 14),
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: Colors.redAccent.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+                borderRadius: BorderRadius.circular(16),
+                border:
+                    Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Row(
                     children: [
-                      Icon(Icons.shield_outlined, color: Colors.redAccent, size: 18),
+                      Icon(Icons.shield_outlined,
+                          color: Colors.redAccent, size: 18),
                       SizedBox(width: 8),
                       Text(
-                        '24/7 Free Crisis Hotlines (Philippines)',
-                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Colors.redAccent),
+                        '24/7 Free Crisis Support (Philippines)',
+                        style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.redAccent),
                       ),
                     ],
                   ),
@@ -330,42 +771,73 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                     children: [
                       ElevatedButton.icon(
                         onPressed: () async {
-                          final uri = Uri(scheme: 'tel', path: '1553');
+                          final uri = Uri(scheme: 'tel', path: '911');
                           if (await canLaunchUrl(uri)) await launchUrl(uri);
                         },
-                        icon: const Icon(Icons.phone, size: 14, color: Colors.white),
-                        label: const Text('Call NCMH 1553', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                        icon: const Icon(Icons.emergency_rounded,
+                            size: 14, color: Colors.white),
+                        label: const Text('Emergency 911',
+                            style: TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w700)),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.redAccent,
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          final uri = Uri(scheme: 'tel', path: '1553');
+                          if (await canLaunchUrl(uri)) await launchUrl(uri);
+                        },
+                        icon: const Icon(Icons.phone,
+                            size: 14, color: Colors.white),
+                        label: const Text('Call NCMH 1553',
+                            style: TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w700)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.sageGreen,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
                       ),
                       OutlinedButton.icon(
                         onPressed: () async {
-                          final uri = Uri(scheme: 'tel', path: '09175584673');
+                          final uri = Uri(scheme: 'tel', path: '09178001123');
                           if (await canLaunchUrl(uri)) await launchUrl(uri);
                         },
-                        icon: const Icon(Icons.phone_in_talk, size: 14, color: Colors.redAccent),
-                        label: const Text('Hopeline 0917-558-4673', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                        icon: const Icon(Icons.phone_in_talk,
+                            size: 14, color: Colors.redAccent),
+                        label: const Text('In Touch 0917-800-1123',
+                            style: TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w700)),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.redAccent,
                           side: const BorderSide(color: Colors.redAccent),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
                       ),
                       OutlinedButton.icon(
                         onPressed: () => AkbaySafetySheet.show(context),
-                        icon: const Icon(Icons.info_outline, size: 14, color: AppColors.sageGreen),
-                        label: const Text('All Safety Lines', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                        icon: const Icon(Icons.info_outline,
+                            size: 14, color: AppColors.sageGreen),
+                        label: const Text('All Safety Lines',
+                            style: TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w700)),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.sageGreen,
                           side: const BorderSide(color: AppColors.sageGreen),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
@@ -381,11 +853,52 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
     ).animate().fadeIn(duration: 350.ms).slideY(begin: 0.05, end: 0);
   }
 
+  Widget _buildFollowUpChip(
+    BuildContext context, {
+    required String label,
+    required IconData icon,
+    required bool isDark,
+    required MascotInfo mascot,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: mascot.primaryColor.withValues(alpha: isDark ? 0.3 : 0.2),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13, color: mascot.primaryColor),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                color: isDark
+                    ? AppColors.textPrimaryDark
+                    : AppColors.textPrimaryLight,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final userProvider = Provider.of<UserProvider>(context);
-    final mascot = MascotInfo.getById(userProvider.selectedCompanion);
+    final activeId = _activeCompanionId ?? userProvider.selectedCompanion;
+    final mascot = MascotInfo.getById(activeId);
     final wordCount = _calculateWordCount();
 
     return Scaffold(
@@ -394,22 +907,58 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white : Colors.black87),
+          icon: Icon(Icons.arrow_back_ios_new_rounded,
+              color: isDark ? Colors.white : Colors.black87),
           onPressed: () => _saveAndPop(),
         ),
+        title: GestureDetector(
+          onTap: () => _showCompanionPickerSheet(context, isDark),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: mascot.primaryColor.withValues(alpha: isDark ? 0.2 : 0.12),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: mascot.primaryColor.withValues(alpha: 0.3),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(mascot.materialIcon, size: 14, color: mascot.primaryColor),
+                const SizedBox(width: 6),
+                Text(
+                  'With ${mascot.name}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: mascot.primaryColor,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(Icons.keyboard_arrow_down_rounded,
+                    size: 16, color: mascot.primaryColor),
+              ],
+            ),
+          ),
+        ),
+        centerTitle: true,
         actions: [
           if (widget.targetEntry != null)
             IconButton(
-              icon: const Icon(Icons.delete_outline_rounded, size: 22, color: Colors.redAccent),
+              icon: const Icon(Icons.delete_outline_rounded,
+                  size: 22, color: Colors.redAccent),
               tooltip: 'Delete Entry',
               onPressed: () async {
-                final provider = Provider.of<JournalProvider>(context, listen: false);
+                final provider =
+                    Provider.of<JournalProvider>(context, listen: false);
                 final nav = Navigator.of(context);
                 final messenger = ScaffoldMessenger.of(context);
                 final confirmed = await CozyConfirmSheet.show(
                   context,
                   title: 'Palayain ang Tala?',
-                  message: 'Sigurado ka bang nais mong alisin ang reflection na ito mula sa iyong journal?',
+                  message:
+                      'Sigurado ka bang nais mong alisin ang reflection na ito mula sa iyong journal?',
                   confirmLabel: 'Let Go',
                   cancelLabel: 'Keep Note',
                   icon: Icons.edit_note_rounded,
@@ -436,7 +985,9 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
               if (content.isEmpty) return;
 
               await PdfService.exportJournalPdf(
-                title: _titleController.text.isEmpty ? 'Journal Entry' : _titleController.text,
+                title: _titleController.text.isEmpty
+                    ? 'Journal Entry'
+                    : _titleController.text,
                 content: content,
                 aiResponse: _getAllAiResponses(),
                 createdAt: widget.initialEntry?.createdAt ?? DateTime.now(),
@@ -444,7 +995,8 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
             },
           ),
           IconButton(
-            icon: const Icon(Icons.check_rounded, size: 24, color: AppColors.sageGreen),
+            icon: const Icon(Icons.check_rounded,
+                size: 24, color: AppColors.sageGreen),
             tooltip: 'Save Reflection',
             onPressed: () => _saveAndPop(),
           ),
@@ -457,17 +1009,21 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
             Expanded(
               child: SingleChildScrollView(
                 controller: _scrollController,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Guiding Prompt Banner with Reshuffle Icon
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
-                        color: AppColors.honeyGold.withValues(alpha: isDark ? 0.16 : 0.12),
+                        color: AppColors.honeyGold
+                            .withValues(alpha: isDark ? 0.16 : 0.12),
                         borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: AppColors.honeyGold.withValues(alpha: 0.3)),
+                        border: Border.all(
+                            color: AppColors.honeyGold.withValues(alpha: 0.3)),
                       ),
                       child: Row(
                         children: [
@@ -479,12 +1035,15 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
-                                color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                color: isDark
+                                    ? AppColors.textPrimaryDark
+                                    : AppColors.textPrimaryLight,
                               ),
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.shuffle_rounded, color: AppColors.honeyAmber, size: 20),
+                            icon: const Icon(Icons.shuffle_rounded,
+                                color: AppColors.honeyAmber, size: 20),
                             tooltip: 'Reshuffle prompt',
                             onPressed: _shufflePrompt,
                           ),
@@ -494,12 +1053,13 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
 
                     const SizedBox(height: 14),
 
-                    // Header Date Subtitle & Mood Chips
+                    // Header Date Subtitle & Mood Selector Chips
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          DateFormatter.formatFullDate(widget.initialEntry?.createdAt ?? DateTime.now()),
+                          DateFormatter.formatFullDate(
+                              widget.initialEntry?.createdAt ?? DateTime.now()),
                           style: TextStyle(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w600,
@@ -516,17 +1076,23 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                       physics: const BouncingScrollPhysics(),
                       child: Row(
                         children: [
-                          _buildMoodChip('calm', 'Kalmado', Icons.spa_outlined, isDark),
+                          _buildMoodChip(
+                              'calm', 'Kalmado', Icons.spa_outlined, isDark),
                           const SizedBox(width: 6),
-                          _buildMoodChip('grateful', 'Mapagpasalamat', Icons.favorite_outline_rounded, isDark),
+                          _buildMoodChip('grateful', 'Mapagpasalamat',
+                              Icons.favorite_outline_rounded, isDark),
                           const SizedBox(width: 6),
-                          _buildMoodChip('reflective', 'Nagmumuni', Icons.self_improvement_rounded, isDark),
+                          _buildMoodChip('reflective', 'Nagmumuni',
+                              Icons.self_improvement_rounded, isDark),
                           const SizedBox(width: 6),
-                          _buildMoodChip('hopeful', 'May Pag-asa', Icons.wb_sunny_outlined, isDark),
+                          _buildMoodChip('hopeful', 'May Pag-asa',
+                              Icons.wb_sunny_outlined, isDark),
                           const SizedBox(width: 6),
-                          _buildMoodChip('tired', 'Pagod', Icons.bedtime_outlined, isDark),
+                          _buildMoodChip(
+                              'tired', 'Pagod', Icons.bedtime_outlined, isDark),
                           const SizedBox(width: 6),
-                          _buildMoodChip('heavy', 'Mabigat', Icons.cloud_outlined, isDark),
+                          _buildMoodChip(
+                              'heavy', 'Mabigat', Icons.cloud_outlined, isDark),
                         ],
                       ),
                     ),
@@ -538,7 +1104,9 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.w800,
-                        color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                        color: isDark
+                            ? AppColors.textPrimaryDark
+                            : AppColors.textPrimaryLight,
                       ),
                       decoration: InputDecoration(
                         hintText: 'Title of your reflection...',
@@ -560,6 +1128,8 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                       final idx = entry.key;
                       final turn = entry.value;
                       final isLastTurn = idx == _turns.length - 1;
+                      final turnMascot =
+                          MascotInfo.getById(turn.companionId ?? activeId);
 
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -573,10 +1143,14 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                             style: TextStyle(
                               fontSize: 16,
                               height: 1.6,
-                              color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                              color: isDark
+                                  ? AppColors.textPrimaryDark
+                                  : AppColors.textPrimaryLight,
                             ),
                             decoration: InputDecoration(
-                              hintText: idx == 0 ? 'Start writing freely here...' : 'Continue writing...',
+                              hintText: idx == 0
+                                  ? 'Start writing freely here...'
+                                  : 'Continue writing...',
                               hintStyle: TextStyle(
                                 fontSize: 16,
                                 color: isDark ? Colors.white24 : Colors.black26,
@@ -588,7 +1162,8 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                             ),
                           ),
                           if (turn.aiResponse != null)
-                            _buildAiReplyBox(context, mascot, turn.aiResponse!, isDark),
+                            _buildAiReplyBox(context, turnMascot,
+                                turn.aiResponse!, turn.mode, isDark),
                         ],
                       );
                     }),
@@ -603,17 +1178,24 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                               height: 18,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(mascot.primaryColor),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                    mascot.primaryColor),
                               ),
                             ),
                             const SizedBox(width: 12),
-                            Text(
-                              '${mascot.name} is reading and reflecting with you...',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: mascot.primaryColor,
+                            Expanded(
+                              child: Text(
+                                '${mascot.name} is reading your reflection...',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: mascot.primaryColor,
+                                ),
                               ),
+                            ),
+                            TextButton(
+                              onPressed: () => _aiCancellationToken?.cancel(),
+                              child: const Text('Cancel'),
                             ),
                           ],
                         ),
@@ -625,49 +1207,96 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
               ),
             ),
 
-            // Bottom Floating Notes Toolbar
+            // Bottom Floating Notes Toolbar & Mode Selector
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
                 color: isDark
                     ? AppColors.darkCard.withValues(alpha: 0.95)
                     : Colors.white.withValues(alpha: 0.95),
                 border: Border(
                   top: BorderSide(
-                    color: isDark ? AppColors.darkCardBorder : Colors.black.withValues(alpha: 0.05),
+                    color: isDark
+                        ? AppColors.darkCardBorder
+                        : Colors.black.withValues(alpha: 0.05),
                   ),
                 ),
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
+                  // Word count
                   Text(
                     '$wordCount ${wordCount == 1 ? 'word' : 'words'}',
                     style: TextStyle(
-                      fontSize: 12.5,
+                      fontSize: 12,
                       fontWeight: FontWeight.w600,
                       color: isDark ? Colors.white54 : Colors.black45,
                     ),
                   ),
+                  const SizedBox(width: 8),
+
+                  // Mode Picker Chip
+                  GestureDetector(
+                    onTap: () =>
+                        _showModeSelectorSheet(context, isDark, mascot),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: mascot.primaryColor
+                            .withValues(alpha: isDark ? 0.2 : 0.1),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: mascot.primaryColor.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(_currentMode.iconEmoji,
+                              style: const TextStyle(fontSize: 12)),
+                          const SizedBox(width: 5),
+                          Text(
+                            _currentMode.label,
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: mascot.primaryColor,
+                            ),
+                          ),
+                          const SizedBox(width: 3),
+                          Icon(Icons.arrow_drop_down_rounded,
+                              size: 16, color: mascot.primaryColor),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const Spacer(),
+
+                  // Reflect Button
                   ElevatedButton.icon(
                     onPressed: _isGeneratingAi ? null : _triggerAiReflection,
-                    icon: Icon(Icons.auto_awesome_rounded, size: 16, color: mascot.primaryColor),
+                    icon: Icon(Icons.auto_awesome_rounded,
+                        size: 15, color: mascot.primaryColor),
                     label: Text(
-                      'Reflect with ${mascot.name} ✨',
+                      'Reflect with ${mascot.name}',
                       style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
                         color: mascot.primaryColor,
                       ),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: mascot.primaryColor.withValues(alpha: 0.12),
+                      backgroundColor:
+                          mascot.primaryColor.withValues(alpha: 0.15),
                       elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(18),
                         side: BorderSide(
-                          color: mascot.primaryColor.withValues(alpha: 0.3),
+                          color: mascot.primaryColor.withValues(alpha: 0.35),
                           width: 1,
                         ),
                       ),
@@ -682,13 +1311,16 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
     );
   }
 
-  void _saveAndPop() {
+  Future<void> _saveAndPop() async {
+    _aiCancellationToken?.cancel();
     final title = _titleController.text.trim();
     final content = _getAllUserContent();
 
     if (title.isNotEmpty || content.isNotEmpty) {
       final provider = Provider.of<JournalProvider>(context, listen: false);
       final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final activeCompanion =
+          _activeCompanionId ?? userProvider.selectedCompanion;
 
       final target = widget.targetEntry;
       if (target != null) {
@@ -696,32 +1328,48 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
           title: title.isEmpty ? 'Untitled Entry' : title,
           content: content,
           aiResponse: _getAllAiResponses(),
+          companionId: activeCompanion,
           mood: _selectedMood,
+          reflectionMode: _currentMode.name,
         );
-        provider.updateJournalEntry(updated);
+        await provider.updateJournalEntry(updated);
       } else {
-        provider.addJournalEntry(
+        await provider.addJournalEntry(
           title: title.isEmpty ? 'Untitled Entry' : title,
           content: content,
           aiResponse: _getAllAiResponses(),
-          companionId: userProvider.selectedCompanion,
+          companionId: activeCompanion,
           mood: _selectedMood,
+          reflectionMode: _currentMode.name,
         );
       }
+      if (provider.errorMessage != null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(provider.errorMessage!)),
+        );
+        return;
+      }
+      final userId = _draftUserId;
+      if (userId != null) await JournalDraftService.clear(userId);
     }
+    if (!mounted) return;
     Navigator.pop(context);
   }
 
-  Widget _buildMoodChip(String moodKey, String label, IconData icon, bool isDark) {
+  Widget _buildMoodChip(
+      String moodKey, String label, IconData icon, bool isDark) {
     final isSelected = _selectedMood == moodKey;
     final activeColor = isDark ? AppColors.honeyGold : AppColors.honeyAmber;
-    final inactiveColor = isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
+    final inactiveColor =
+        isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
 
     return GestureDetector(
       onTap: () {
         setState(() {
           _selectedMood = moodKey;
         });
+        _scheduleDraftSave();
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
@@ -734,7 +1382,9 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
           border: Border.all(
             color: isSelected
                 ? AppColors.honeyGold
-                : (isDark ? AppColors.darkCardBorder : Colors.black.withValues(alpha: 0.07)),
+                : (isDark
+                    ? AppColors.darkCardBorder
+                    : Colors.black.withValues(alpha: 0.07)),
             width: isSelected ? 1.5 : 1.0,
           ),
         ),

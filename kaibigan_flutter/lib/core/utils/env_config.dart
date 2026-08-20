@@ -1,19 +1,16 @@
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-
 class EnvConfig {
-  static Future<void> init() async {
-    try {
-      await dotenv.load(fileName: ".env");
-    } catch (e) {
-      print("Notice: .env file not found or failed to load ($e). Using environment fallback or empty credentials.");
-    }
-  }
+  static Future<void> init() async {}
 
-  static String get supabaseUrl => dotenv.get('SUPABASE_URL', fallback: '');
-  static String get supabaseAnonKey => dotenv.get('SUPABASE_ANON_KEY', fallback: '');
-  static String get groqApiKey => dotenv.get('GROQ_API_KEY', fallback: '');
-
-  static String get primaryAiModel => dotenv.get('PRIMARY_AI_MODEL', fallback: 'llama-3.3-70b-versatile');
-  static String get fallbackAiModel => dotenv.get('FALLBACK_AI_MODEL', fallback: 'llama-3.1-8b-instant');
-  static String get reasoningAiModel => dotenv.get('REASONING_AI_MODEL', fallback: 'llama-3.3-70b-versatile');
+  // These values are public client configuration, supplied at build/run time:
+  // flutter run --dart-define-from-file=dart_defines.local.json
+  // Private provider secrets (such as GROQ_API_KEY) must never be added here.
+  static const String supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  static const String supabaseAnonKey =
+      String.fromEnvironment('SUPABASE_ANON_KEY');
+  static const String passwordResetRedirectUrl =
+      String.fromEnvironment('PASSWORD_RESET_REDIRECT_URL');
+  static const String oauthRedirectUrl =
+      String.fromEnvironment('OAUTH_REDIRECT_URL');
+  static const bool googleAuthEnabled =
+      bool.fromEnvironment('ENABLE_GOOGLE_AUTH');
 }

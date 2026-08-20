@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/utils/env_config.dart';
 import '../companion/companion_model.dart';
-import '../home/home_screen.dart';
 import '../settings/user_provider.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -14,7 +14,7 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
-  int _activeTabIndex = 1; // 0 for Login, 1 for Register
+  int _activeTabIndex = 0; // 0 for Login, 1 for Register
 
   final TextEditingController _loginEmailController = TextEditingController();
   final TextEditingController _loginPasswordController =
@@ -41,7 +41,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Future<void> _handleLogin() async {
     final email = _loginEmailController.text.trim();
-    final password = _loginPasswordController.text.trim();
+    final password = _loginPasswordController.text;
 
     if (email.isEmpty || !email.contains('@')) {
       setState(() => _errorMessage = 'Please enter a valid email address.');
@@ -65,11 +65,6 @@ class _AuthScreenState extends State<AuthScreen> {
       if (!success) {
         setState(
             () => _errorMessage = userProvider.authError ?? 'Login failed.');
-      } else {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-          (route) => false,
-        );
       }
     }
   }
@@ -77,7 +72,7 @@ class _AuthScreenState extends State<AuthScreen> {
   Future<void> _handleRegister() async {
     final name = _regNameController.text.trim();
     final email = _regEmailController.text.trim();
-    final password = _regPasswordController.text.trim();
+    final password = _regPasswordController.text;
 
     if (name.isEmpty) {
       setState(() => _errorMessage = 'Please enter your display name.');
@@ -109,12 +104,51 @@ class _AuthScreenState extends State<AuthScreen> {
       if (!success) {
         setState(() =>
             _errorMessage = userProvider.authError ?? 'Registration failed.');
-      } else {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-          (route) => false,
-        );
       }
+    }
+  }
+
+  Future<void> _handleGoogleLogin() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    final provider = context.read<UserProvider>();
+    final started = await provider.loginWithGoogle();
+    if (!mounted) return;
+    if (!started) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = provider.authError ?? 'Google sign-in failed.';
+      });
+    }
+  }
+
+  Future<void> _handlePasswordReset() async {
+    final email = _loginEmailController.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      setState(() => _errorMessage =
+          'Enter your email address above, then tap Forgot password again.');
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    final provider = context.read<UserProvider>();
+    final sent = await provider.resetPassword(email);
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      if (!sent) _errorMessage = provider.authError;
+    });
+    if (sent) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Password reset email sent. Check your inbox and spam folder.'),
+        ),
+      );
     }
   }
 
@@ -303,6 +337,41 @@ class _AuthScreenState extends State<AuthScreen> {
                         ? _buildLoginForm(isDark)
                         : _buildRegisterForm(isDark),
                   ),
+                  if (EnvConfig.googleAuthEnabled) ...[
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        const Expanded(child: Divider()),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Text(
+                            'or',
+                            style: TextStyle(
+                              color: isDark ? Colors.white54 : Colors.black45,
+                            ),
+                          ),
+                        ),
+                        const Expanded(child: Divider()),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: OutlinedButton.icon(
+                        onPressed: _isLoading ? null : _handleGoogleLogin,
+                        icon: const Text(
+                          'G',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF4285F4),
+                          ),
+                        ),
+                        label: const Text('Continue with Google'),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 8),
                 ],
               ),
@@ -401,7 +470,14 @@ class _AuthScreenState extends State<AuthScreen> {
                   () => _obscureLoginPassword = !_obscureLoginPassword),
             ),
           ),
-          const SizedBox(height: 24),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: _isLoading ? null : _handlePasswordReset,
+              child: const Text('Forgot password?'),
+            ),
+          ),
+          const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
             height: 52,

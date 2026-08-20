@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/services/supabase_service.dart';
+import '../../core/utils/api_logger.dart';
 import '../../core/utils/uuid_helper.dart';
 
 class FutureLetter {
@@ -42,12 +43,12 @@ class FutureLetter {
       id: map['id'] ?? '',
       title: map['title'] ?? '',
       content: map['content'] ?? '',
-      deliverAt: map['deliver_at'] != null 
-          ? DateTime.parse(map['deliver_at']) 
+      deliverAt: map['deliver_at'] != null
+          ? DateTime.parse(map['deliver_at'])
           : DateTime.now().add(const Duration(days: 7)),
       isOpened: map['is_opened'] ?? false,
-      createdAt: map['created_at'] != null 
-          ? DateTime.parse(map['created_at']) 
+      createdAt: map['created_at'] != null
+          ? DateTime.parse(map['created_at'])
           : DateTime.now(),
     );
   }
@@ -56,55 +57,58 @@ class FutureLetter {
 class LettersProvider extends ChangeNotifier {
   final List<FutureLetter> _letters = [];
   bool _isLoading = false;
+  String? _errorMessage;
+  String? _activeUserId;
 
   List<FutureLetter> get letters => List.unmodifiable(_letters);
   bool get isLoading => _isLoading;
+  String? get errorMessage => _errorMessage;
 
   LettersProvider() {
-    _initSampleData();
-    fetchLetters();
+    syncForCurrentUser();
   }
 
-  void _initSampleData() {
-    final now = DateTime.now();
-    _letters.addAll([
-      FutureLetter(
-        id: UuidHelper.generateV4(),
-        title: 'Para sa akin sa susunod na buwan',
-        content: 'Sana mas magaan na ang puso mo habang binabasa mo ito. Remember how hard you worked on your capstone project! I am so proud of you.',
-        deliverAt: now.add(const Duration(days: 30)),
-        isOpened: false,
-        createdAt: now.subtract(const Duration(days: 2)),
-      ),
-      FutureLetter(
-        id: UuidHelper.generateV4(),
-        title: 'A note from last week',
-        content: 'You felt stressed on Monday, but look—you made it through gracefully! Always trust your resilience.',
-        deliverAt: now.subtract(const Duration(hours: 1)),
-        isOpened: true,
-        createdAt: now.subtract(const Duration(days: 7)),
-      ),
-    ]);
+  void syncForCurrentUser() {
+    final userId = SupabaseService.isInitialized
+        ? SupabaseService.client.auth.currentUser?.id
+        : null;
+    if (userId == _activeUserId) return;
+    _activeUserId = userId;
+    _letters.clear();
+    _errorMessage = null;
+    notifyListeners();
+    if (userId != null) fetchLetters();
   }
 
   Future<void> fetchLetters() async {
-    if (!SupabaseService.isInitialized) return;
+    _errorMessage = null;
+    if (!SupabaseService.isInitialized) {
+      _errorMessage = 'Future Letter sync is unavailable.';
+      notifyListeners();
+      return;
+    }
+    final userId = SupabaseService.client.auth.currentUser?.id;
+    if (userId == null) return;
     _isLoading = true;
     notifyListeners();
 
     try {
-      final userId = SupabaseService.client.auth.currentUser?.id;
-      var query = SupabaseService.client.from('future_letters').select();
-      if (userId != null) {
-        query = query.eq('user_id', userId);
-      }
+      final query = SupabaseService.client
+          .from('future_letters')
+          .select()
+          .eq('user_id', userId);
       final response = await query.order('created_at', ascending: false);
 
       final List data = response as List;
       _letters.clear();
       _letters.addAll(data.map((e) => FutureLetter.fromMap(e)).toList());
     } catch (e) {
-      print("Error fetching letters from Supabase: $e");
+      _errorMessage = 'We could not refresh your Future Letters.';
+      ApiLogger.logDatabase(
+        operation: 'SELECT',
+        table: 'future_letters',
+        error: e.toString(),
+      );
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -117,6 +121,7 @@ class LettersProvider extends ChangeNotifier {
     required DateTime deliverAt,
   }) async {
     _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
 
     final newLetter = FutureLetter(
@@ -128,18 +133,30 @@ class LettersProvider extends ChangeNotifier {
       createdAt: DateTime.now(),
     );
 
-    _letters.insert(0, newLetter);
-
-    if (SupabaseService.isInitialized) {
+    var saved = false;
+    if (SupabaseService.isInitialized &&
+        SupabaseService.client.auth.currentUser != null) {
       try {
-        final userId = SupabaseService.client.auth.currentUser?.id;
+        final userId = SupabaseService.client.auth.currentUser!.id;
         await SupabaseService.client
             .from('future_letters')
             .insert(newLetter.toMap(userId: userId));
+        saved = true;
       } catch (e) {
-        print("Error saving letter to Supabase: $e");
+        _errorMessage =
+            'Your Future Letter could not be saved. Please try again.';
+        ApiLogger.logDatabase(
+          operation: 'INSERT',
+          table: 'future_letters',
+          error: e.toString(),
+        );
       }
+    } else {
+      _errorMessage =
+          'Your Future Letter could not be saved because sync is unavailable.';
     }
+
+    if (saved) _letters.insert(0, newLetter);
 
     _isLoading = false;
     notifyListeners();
@@ -147,7 +164,17 @@ class LettersProvider extends ChangeNotifier {
   }
 
   Future<void> deleteLetter(String id) async {
-    _letters.removeWhere((l) => l.id == id);
+    _errorMessage = null;
+    if (!SupabaseService.isInitialized ||
+        SupabaseService.client.auth.currentUser == null) {
+      _errorMessage =
+          'The letter could not be deleted because sync is unavailable.';
+      notifyListeners();
+      return;
+    }
+    final index = _letters.indexWhere((letter) => letter.id == id);
+    if (index == -1) return;
+    final removed = _letters.removeAt(index);
     notifyListeners();
 
     if (SupabaseService.isInitialized && UuidHelper.isValidUuid(id)) {
@@ -157,8 +184,16 @@ class LettersProvider extends ChangeNotifier {
             .delete()
             .eq('id', id);
       } catch (e) {
-        print("Error deleting letter from Supabase: $e");
+        _letters.insert(index.clamp(0, _letters.length), removed);
+        _errorMessage =
+            'The letter could not be deleted. It has been restored.';
+        ApiLogger.logDatabase(
+          operation: 'DELETE',
+          table: 'future_letters',
+          error: e.toString(),
+        );
       }
     }
+    notifyListeners();
   }
 }

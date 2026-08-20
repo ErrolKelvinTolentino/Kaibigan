@@ -15,6 +15,7 @@ import '../mood_tracking/mood_provider.dart';
 import '../mood_tracking/mood_model.dart';
 import '../routines/routines_provider.dart';
 import '../routines/routine_model.dart';
+import '../companion/companion_model.dart';
 
 enum EntryCategory {
   all,
@@ -581,50 +582,62 @@ class _UnifiedEntriesScreenState extends State<UnifiedEntriesScreen> {
 
                     if (item.aiInsight != null && item.aiInsight!.isNotEmpty) ...[
                       const SizedBox(height: 18),
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: AppColors.honeyGold.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(color: AppColors.honeyGold.withValues(alpha: 0.25)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.auto_awesome_rounded, size: 18, color: AppColors.honeyAmber),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Companion Reflection',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.honeyAmber,
+                      Builder(builder: (context) {
+                        final entryMascot = item.rawData is JournalEntry
+                            ? MascotInfo.getById((item.rawData as JournalEntry).companionId)
+                            : null;
+                        final mascotName = entryMascot?.name ?? 'Companion';
+                        final mascotColor = entryMascot?.primaryColor ?? AppColors.honeyAmber;
+
+                        return Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: mascotColor.withValues(alpha: isDark ? 0.16 : 0.12),
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: mascotColor.withValues(alpha: 0.25)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    entryMascot != null ? entryMascot.materialIcon : Icons.auto_awesome_rounded,
+                                    size: 16,
+                                    color: mascotColor,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '$mascotName\'s Reflection',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: mascotColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              MarkdownBody(
+                                data: item.aiInsight!,
+                                selectable: true,
+                                styleSheet: MarkdownStyleSheet(
+                                  p: TextStyle(
+                                    fontSize: 13.5,
+                                    height: 1.4,
+                                    color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                  ),
+                                  em: GoogleFonts.lora(
+                                    fontStyle: FontStyle.italic,
+                                    fontSize: 13.5,
+                                    color: isDark ? AppColors.honeyGold : AppColors.honeyAmber,
                                   ),
                                 ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            MarkdownBody(
-                              data: item.aiInsight!,
-                              selectable: true,
-                              styleSheet: MarkdownStyleSheet(
-                                p: TextStyle(
-                                  fontSize: 13.5,
-                                  height: 1.4,
-                                  color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
-                                ),
-                                em: GoogleFonts.lora(
-                                  fontStyle: FontStyle.italic,
-                                  fontSize: 13.5,
-                                  color: isDark ? AppColors.honeyGold : AppColors.honeyAmber,
-                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
+                            ],
+                          ),
+                        );
+                      }),
                     ],
                   ],
                 ),
