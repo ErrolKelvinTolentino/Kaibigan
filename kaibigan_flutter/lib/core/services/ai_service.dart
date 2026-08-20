@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../utils/api_logger.dart';
 import '../utils/env_config.dart';
 import 'ai_memory_service.dart';
 
@@ -77,12 +78,31 @@ class AIService {
     }
 
     final apiKey = EnvConfig.groqApiKey;
+    final systemPrompt = _getSystemPrompt(companionId, language);
+
+    ApiLogger.logRequest(
+      apiName: 'Groq AI Service',
+      method: 'POST',
+      url: 'https://api.groq.com/openai/v1/chat/completions',
+      headers: {
+        'Authorization': 'Bearer $apiKey',
+        'Content-Type': 'application/json; charset=utf-8',
+      },
+      body: {
+        'model': EnvConfig.primaryAiModel,
+        'companion': companionId,
+        'language': language,
+        'messages': [
+          {'role': 'system', 'content': systemPrompt},
+          {'role': 'user', 'content': userText},
+        ],
+        'temperature': 0.7,
+      },
+    );
 
     if (apiKey.isEmpty || apiKey == 'gsk_your_groq_api_key_here') {
       return _getOfflineFallbackResponse(companionId, userText, language);
     }
-
-    final systemPrompt = _getSystemPrompt(companionId, language);
 
     if (useReasoning) {
       try {
@@ -151,14 +171,32 @@ class AIService {
       requestBody['reasoning_effort'] = 'medium';
     }
 
+    final headers = {
+      'Authorization': 'Bearer $apiKey',
+      'Content-Type': 'application/json; charset=utf-8',
+    };
+
+    ApiLogger.logRequest(
+      apiName: 'Groq AI (Reasoning: $model)',
+      method: 'POST',
+      url: url.toString(),
+      headers: headers,
+      body: requestBody,
+    );
+
     final response = await http.post(
       url,
-      headers: {
-        'Authorization': 'Bearer $apiKey',
-        'Content-Type': 'application/json; charset=utf-8',
-      },
+      headers: headers,
       body: jsonEncode(requestBody),
     ).timeout(const Duration(seconds: 15));
+
+    ApiLogger.logResponse(
+      apiName: 'Groq AI (Reasoning: $model)',
+      statusCode: response.statusCode,
+      url: url.toString(),
+      body: response.body,
+      reasonPhrase: response.reasonPhrase,
+    );
 
     if (response.statusCode == 200) {
       final data = jsonDecode(utf8.decode(response.bodyBytes));
@@ -174,6 +212,13 @@ class AIService {
       if (cleanedContent.isEmpty && content.toString().isNotEmpty) {
         cleanedContent = content.toString().trim();
       }
+
+      ApiLogger.logRetrievedDataDisplayed(
+        screenName: 'JournalEditorScreen / UnifiedEntriesScreen',
+        componentName: '_buildAiReplyBox (MarkdownBody)',
+        displayedData: cleanedContent,
+        note: 'Rendered dynamically in UI with companion mascot theme',
+      );
 
       return GroqResponse(
         content: cleanedContent,
@@ -192,27 +237,54 @@ class AIService {
     required String userText,
   }) async {
     final url = Uri.parse('https://api.groq.com/openai/v1/chat/completions');
+    final headers = {
+      'Authorization': 'Bearer $apiKey',
+      'Content-Type': 'application/json; charset=utf-8',
+    };
+    final requestBody = {
+      'model': model,
+      'messages': [
+        {'role': 'system', 'content': systemPrompt},
+        {'role': 'user', 'content': userText},
+      ],
+      'temperature': 0.7,
+      'max_tokens': 750,
+    };
+
+    ApiLogger.logRequest(
+      apiName: 'Groq AI ($model)',
+      method: 'POST',
+      url: url.toString(),
+      headers: headers,
+      body: requestBody,
+    );
+
     final response = await http.post(
       url,
-      headers: {
-        'Authorization': 'Bearer $apiKey',
-        'Content-Type': 'application/json; charset=utf-8',
-      },
-      body: jsonEncode({
-        'model': model,
-        'messages': [
-          {'role': 'system', 'content': systemPrompt},
-          {'role': 'user', 'content': userText},
-        ],
-        'temperature': 0.7,
-        'max_tokens': 750,
-      }),
+      headers: headers,
+      body: jsonEncode(requestBody),
     ).timeout(const Duration(seconds: 12));
+
+    ApiLogger.logResponse(
+      apiName: 'Groq AI ($model)',
+      statusCode: response.statusCode,
+      url: url.toString(),
+      body: response.body,
+      reasonPhrase: response.reasonPhrase,
+    );
 
     if (response.statusCode == 200) {
       final data = jsonDecode(utf8.decode(response.bodyBytes));
-      final text = data['choices'][0]['message']['content'];
-      return text.toString().trim();
+      final text = data['choices'][0]['message']['content'].toString().trim();
+
+      ApiLogger.logRetrievedDataDisplayed(
+        screenName: 'JournalEditorScreen / UnifiedEntriesScreen',
+        componentName: '_buildAiReplyBox (MarkdownBody)',
+        displayedData: text,
+        note: 'Rendered dynamically in UI with companion mascot theme',
+      );
+
+      return text;
     } else {
       throw Exception('Groq Text API error ${response.statusCode}: ${response.body}');
     }
@@ -265,24 +337,49 @@ ${memoryContext.isNotEmpty ? "$memoryContext\n\n" : ""}GUIDELINES FOR YOUR REFLE
   }
 
   static String _getOfflineFallbackResponse(String companionId, String userText, String language) {
+    String reply;
     if (companionId == 'ann') {
       if (language == 'english') {
-        return "I hear you, and your feelings are completely valid. Take a deep breath—you don't have to carry all this pressure at once. How are you taking care of yourself today?";
+        reply = "I hear you, and your feelings are completely valid. Take a deep breath—you don't have to carry all this pressure at once. How are you taking care of yourself today?";
       } else {
-        return "Naiintindihan ko ang nararamdaman mo. Mahirap man ang mga pinagdadaanan mo ngayon, nandito lang ako para makinig. Huwag mong kalimutang magpahinga kahit sandali.";
+        reply = "Naiintindihan ko ang nararamdaman mo. Mahirap man ang mga pinagdadaanan mo ngayon, nandito lang ako para makinig. Huwag mong kalimutang magpahinga kahit sandali.";
       }
     } else if (companionId == 'bee') {
       if (language == 'english') {
-        return "Thank you for sharing your heart with me! You are doing so much better than you give yourself credit for. What is one small gentle thing you can do for yourself right now?";
+        reply = "Thank you for sharing your heart with me! You are doing so much better than you give yourself credit for. What is one small gentle thing you can do for yourself right now?";
       } else {
-        return "Ang galing mo kasi pinili mong mag-express ngayon! Valid na valid ang nararamdaman mo. Anong maliit na bagay ang pwedeng magpagaan ng dibdib mo ngayon?";
+        reply = "Ang galing mo kasi pinili mong mag-express ngayon! Valid na valid ang nararamdaman mo. Anong maliit na bagay ang pwedeng magpagaan ng dibdib mo ngayon?";
       }
     } else { // Kai
       if (language == 'english') {
-        return "I understand how you feel. When everything feels heavy at once, it's okay to slow down. What do you think is causing the biggest pressure right now?";
+        reply = "I understand how you feel. When everything feels heavy at once, it's okay to slow down. What do you think is causing the biggest pressure right now?";
       } else {
-        return "Naiintindihan ko. Kapag sabay-sabay dumadating ang mga bagay, madaling maramdaman na sobra na. Kahit alam kong kaya mo naman, parang ang bigat pa rin sa dibdib. Nandito lang ako para makinig.";
+        reply = "Naiintindihan ko. Kapag sabay-sabay dumadating ang mga bagay, madaling maramdaman na sobra na. Kahit alam kong kaya mo naman, parang ang bigat pa rin sa dibdib. Nandito lang ako para makinig.";
       }
     }
+
+    ApiLogger.logResponse(
+      apiName: 'Groq AI (Local Fallback Engine)',
+      statusCode: 200,
+      url: 'https://api.groq.com/openai/v1/chat/completions',
+      body: {
+        'id': 'chatcmpl-fallback-${DateTime.now().millisecondsSinceEpoch}',
+        'model': EnvConfig.primaryAiModel,
+        'choices': [
+          {
+            'message': {'role': 'assistant', 'content': reply}
+          }
+        ]
+      },
+    );
+
+    ApiLogger.logRetrievedDataDisplayed(
+      screenName: 'JournalEditorScreen / UnifiedEntriesScreen',
+      componentName: '_buildAiReplyBox (MarkdownBody)',
+      displayedData: reply,
+      note: 'Rendered dynamically in UI with companion mascot theme',
+    );
+
+    return reply;
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/services/supabase_service.dart';
+import '../../core/utils/api_logger.dart';
 import '../../core/utils/uuid_helper.dart';
 import 'mood_model.dart';
 
@@ -54,8 +55,19 @@ class MoodProvider extends ChangeNotifier {
       final List data = response as List;
       _logs.clear();
       _logs.addAll(data.map((e) => MoodLog.fromMap(e)).toList());
+
+      ApiLogger.logDatabase(
+        operation: 'SELECT',
+        table: 'mood_logs',
+        payload: {'user_id': userId, 'order': 'created_at DESC'},
+        result: {'count': data.length, 'sample': data.isNotEmpty ? data.first : null},
+      );
     } catch (e) {
-      print("Error fetching mood logs from Supabase: $e");
+      ApiLogger.logDatabase(
+        operation: 'SELECT',
+        table: 'mood_logs',
+        error: e.toString(),
+      );
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -91,11 +103,21 @@ class MoodProvider extends ChangeNotifier {
     if (SupabaseService.isInitialized) {
       try {
         final userId = SupabaseService.client.auth.currentUser?.id;
-        await SupabaseService.client
-            .from('mood_logs')
-            .insert(newLog.toMap(userId: userId));
+        final map = newLog.toMap(userId: userId);
+        await SupabaseService.client.from('mood_logs').insert(map);
+
+        ApiLogger.logDatabase(
+          operation: 'INSERT',
+          table: 'mood_logs',
+          payload: map,
+          result: {'status': 'success', 'id': newLog.id},
+        );
       } catch (e) {
-        print("Error saving mood log to Supabase: $e");
+        ApiLogger.logDatabase(
+          operation: 'INSERT',
+          table: 'mood_logs',
+          error: e.toString(),
+        );
       }
     }
 
@@ -113,12 +135,24 @@ class MoodProvider extends ChangeNotifier {
       if (SupabaseService.isInitialized && UuidHelper.isValidUuid(updated.id)) {
         try {
           final userId = SupabaseService.client.auth.currentUser?.id;
+          final map = updated.toMap(userId: userId);
           await SupabaseService.client
               .from('mood_logs')
-              .update(updated.toMap(userId: userId))
+              .update(map)
               .eq('id', updated.id);
+
+          ApiLogger.logDatabase(
+            operation: 'UPDATE',
+            table: 'mood_logs',
+            payload: map,
+            result: {'status': 'success', 'id': updated.id},
+          );
         } catch (e) {
-          print("Error updating mood log in Supabase: $e");
+          ApiLogger.logDatabase(
+            operation: 'UPDATE',
+            table: 'mood_logs',
+            error: e.toString(),
+          );
         }
       }
     }
@@ -134,8 +168,19 @@ class MoodProvider extends ChangeNotifier {
             .from('mood_logs')
             .delete()
             .eq('id', id);
+
+        ApiLogger.logDatabase(
+          operation: 'DELETE',
+          table: 'mood_logs',
+          payload: {'id': id},
+          result: {'status': 'success', 'id': id},
+        );
       } catch (e) {
-        print("Error deleting mood log: $e");
+        ApiLogger.logDatabase(
+          operation: 'DELETE',
+          table: 'mood_logs',
+          error: e.toString(),
+        );
       }
     }
   }

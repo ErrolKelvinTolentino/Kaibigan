@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/services/ai_memory_service.dart';
 import '../../core/services/supabase_service.dart';
+import '../../core/utils/api_logger.dart';
 import '../../core/utils/uuid_helper.dart';
 import 'journal_model.dart';
 
@@ -100,8 +101,19 @@ class JournalProvider extends ChangeNotifier {
       final List data = response as List;
       _entries.clear();
       _entries.addAll(data.map((e) => JournalEntry.fromMap(e)).toList());
+
+      ApiLogger.logDatabase(
+        operation: 'SELECT',
+        table: 'journal_entries',
+        payload: {'user_id': userId, 'order': 'created_at DESC'},
+        result: {'count': data.length, 'sample': data.isNotEmpty ? data.first : null},
+      );
     } catch (e) {
-      print("Error fetching journal entries from Supabase: $e");
+      ApiLogger.logDatabase(
+        operation: 'SELECT',
+        table: 'journal_entries',
+        error: e.toString(),
+      );
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -139,11 +151,21 @@ class JournalProvider extends ChangeNotifier {
     if (SupabaseService.isInitialized) {
       try {
         final userId = SupabaseService.client.auth.currentUser?.id;
-        await SupabaseService.client
-            .from('journal_entries')
-            .insert(newEntry.toMap(userId: userId));
+        final map = newEntry.toMap(userId: userId);
+        await SupabaseService.client.from('journal_entries').insert(map);
+
+        ApiLogger.logDatabase(
+          operation: 'INSERT',
+          table: 'journal_entries',
+          payload: map,
+          result: {'status': 'success', 'id': newEntry.id},
+        );
       } catch (e) {
-        print("Error saving entry to Supabase: $e");
+        ApiLogger.logDatabase(
+          operation: 'INSERT',
+          table: 'journal_entries',
+          error: e.toString(),
+        );
       }
     }
 
@@ -167,8 +189,19 @@ class JournalProvider extends ChangeNotifier {
           await SupabaseService.client
               .from('journal_entries')
               .update({'is_favorite': updated.isFavorite}).eq('id', id);
+
+          ApiLogger.logDatabase(
+            operation: 'UPDATE',
+            table: 'journal_entries (favorite)',
+            payload: {'id': id, 'is_favorite': updated.isFavorite},
+            result: {'status': 'success'},
+          );
         } catch (e) {
-          print("Error updating favorite status: $e");
+          ApiLogger.logDatabase(
+            operation: 'UPDATE',
+            table: 'journal_entries (favorite)',
+            error: e.toString(),
+          );
         }
       }
     }
@@ -183,12 +216,24 @@ class JournalProvider extends ChangeNotifier {
       if (SupabaseService.isInitialized && UuidHelper.isValidUuid(entry.id)) {
         try {
           final userId = SupabaseService.client.auth.currentUser?.id;
+          final map = entry.toMap(userId: userId);
           await SupabaseService.client
               .from('journal_entries')
-              .update(entry.toMap(userId: userId))
+              .update(map)
               .eq('id', entry.id);
+
+          ApiLogger.logDatabase(
+            operation: 'UPDATE',
+            table: 'journal_entries',
+            payload: map,
+            result: {'status': 'success', 'id': entry.id},
+          );
         } catch (e) {
-          print("Error updating entry in Supabase: $e");
+          ApiLogger.logDatabase(
+            operation: 'UPDATE',
+            table: 'journal_entries',
+            error: e.toString(),
+          );
         }
       }
 
@@ -206,8 +251,19 @@ class JournalProvider extends ChangeNotifier {
             .from('journal_entries')
             .delete()
             .eq('id', id);
+
+        ApiLogger.logDatabase(
+          operation: 'DELETE',
+          table: 'journal_entries',
+          payload: {'id': id},
+          result: {'status': 'success', 'id': id},
+        );
       } catch (e) {
-        print("Error deleting entry from Supabase: $e");
+        ApiLogger.logDatabase(
+          operation: 'DELETE',
+          table: 'journal_entries',
+          error: e.toString(),
+        );
       }
     }
   }
