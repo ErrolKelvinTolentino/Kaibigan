@@ -22,6 +22,7 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
   final TextEditingController _focusController = TextEditingController();
   int _promptIndex = 0;
   bool _isSubmitted = false;
+  bool _isSaving = false;
   String _generatedAiInsight = '';
 
   final List<String> _guidingPrompts = [
@@ -45,20 +46,25 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
 
   void _submitFocus(UserProvider userProvider, MascotInfo mascot) async {
     final text = _focusController.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty || _isSaving) return;
+    setState(() => _isSaving = true);
 
     // Generate localized AI guidance based on user language
     final lang = userProvider.language;
     if (lang == 'filipino') {
-      _generatedAiInsight = "Napakagandang layunin nito para sa araw na ito! Tandaan, hindi kailangang magmadali. Mag-focus sa paisa-isang hakbang, at huwag kalimutang huminga kapag medyo mabigat. Kasama mo ako sa bawat sandali. Padayon!";
+      _generatedAiInsight =
+          "Napakagandang layunin nito para sa araw na ito! Tandaan, hindi kailangang magmadali. Mag-focus sa paisa-isang hakbang, at huwag kalimutang huminga kapag medyo mabigat. Kasama mo ako sa bawat sandali. Padayon!";
     } else if (lang == 'taglish') {
-      _generatedAiInsight = "Ganda ng focus mo today! Advice ko lang: break it down into small, bite-sized tasks para hindi ka ma-overwhelm. Take mindful breathers in between. Wishing you the best of luck today, kaya mo yan! 🐝✨";
+      _generatedAiInsight =
+          "Ganda ng focus mo today! Advice ko lang: break it down into small, bite-sized tasks para hindi ka ma-overwhelm. Take mindful breathers in between. Wishing you the best of luck today, kaya mo yan! 🐝✨";
     } else {
-      _generatedAiInsight = "What a clear and meaningful intention for today. Remember to approach it one gentle step at a time without rushing. Protect your energy and remember that your peace matters most. Wishing you the very best today!";
+      _generatedAiInsight =
+          "What a clear and meaningful intention for today. Remember to approach it one gentle step at a time without rushing. Protect your energy and remember that your peace matters most. Wishing you the very best today!";
     }
 
-    final routinesProvider = Provider.of<RoutinesProvider>(context, listen: false);
-    await routinesProvider.addLog(
+    final routinesProvider =
+        Provider.of<RoutinesProvider>(context, listen: false);
+    final success = await routinesProvider.addLog(
       RoutineLog(
         id: '',
         routineId: 'focus_${DateTime.now().millisecondsSinceEpoch}',
@@ -68,9 +74,22 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
       ),
     );
 
+    if (!mounted) return;
     setState(() {
-      _isSubmitted = true;
+      _isSaving = false;
+      _isSubmitted = success;
     });
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            routinesProvider.errorMessage ??
+                'Your focus could not be saved. Please try again.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   @override
@@ -85,7 +104,10 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.close_rounded, color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight),
+          icon: Icon(Icons.close_rounded,
+              color: isDark
+                  ? AppColors.textPrimaryDark
+                  : AppColors.textPrimaryLight),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
@@ -105,7 +127,8 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
     );
   }
 
-  Widget _buildGuidedInputView(BuildContext context, bool isDark, UserProvider userProvider, MascotInfo mascot) {
+  Widget _buildGuidedInputView(BuildContext context, bool isDark,
+      UserProvider userProvider, MascotInfo mascot) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -117,7 +140,8 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
               width: 120,
               height: 120,
               fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) => const Text('🎯', style: TextStyle(fontSize: 56)),
+              errorBuilder: (context, error, stackTrace) =>
+                  const Text('🎯', style: TextStyle(fontSize: 56)),
             ),
           ),
         ).animate().scale(duration: 400.ms, curve: Curves.easeOutBack),
@@ -130,7 +154,8 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
           decoration: BoxDecoration(
             color: AppColors.honeyGold.withValues(alpha: 0.14),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: AppColors.honeyGold.withValues(alpha: 0.3)),
+            border:
+                Border.all(color: AppColors.honeyGold.withValues(alpha: 0.3)),
           ),
           child: Row(
             children: [
@@ -140,12 +165,15 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
                   style: TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w600,
-                    color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                    color: isDark
+                        ? AppColors.textPrimaryDark
+                        : AppColors.textPrimaryLight,
                   ),
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.shuffle_rounded, color: AppColors.honeyAmber, size: 20),
+                icon: const Icon(Icons.shuffle_rounded,
+                    color: AppColors.honeyAmber, size: 20),
                 tooltip: 'Shuffle guiding question',
                 onPressed: _shufflePrompt,
               ),
@@ -160,7 +188,8 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w800,
-            color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+            color:
+                isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
           ),
         ),
 
@@ -172,7 +201,9 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
             color: isDark ? AppColors.darkCard : Colors.white,
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: isDark ? AppColors.darkCardBorder : Colors.black.withValues(alpha: 0.08),
+              color: isDark
+                  ? AppColors.darkCardBorder
+                  : Colors.black.withValues(alpha: 0.08),
               width: 1.5,
             ),
             boxShadow: [
@@ -188,12 +219,16 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
             maxLines: 4,
             style: TextStyle(
               fontSize: 16,
-              color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+              color: isDark
+                  ? AppColors.textPrimaryDark
+                  : AppColors.textPrimaryLight,
             ),
             decoration: InputDecoration(
               hintText: "Write your priority or intention for today...",
               hintStyle: TextStyle(
-                color: isDark ? AppColors.textSecondaryDark.withValues(alpha: 0.5) : AppColors.textSecondaryLight.withValues(alpha: 0.5),
+                color: isDark
+                    ? AppColors.textSecondaryDark.withValues(alpha: 0.5)
+                    : AppColors.textSecondaryLight.withValues(alpha: 0.5),
               ),
               border: InputBorder.none,
             ),
@@ -206,29 +241,40 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
           width: double.infinity,
           height: 56,
           child: ElevatedButton(
-            onPressed: () => _submitFocus(userProvider, mascot),
+            onPressed:
+                _isSaving ? null : () => _submitFocus(userProvider, mascot),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.sageGreen,
               foregroundColor: Colors.white,
               elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20)),
             ),
-            child: const Text(
-              "Set Focus & Get Insight",
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-            ),
+            child: _isSaving
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.4,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Text(
+                    "Set Focus & Get Insight",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildAiInsightView(BuildContext context, bool isDark, MascotInfo mascot) {
+  Widget _buildAiInsightView(
+      BuildContext context, bool isDark, MascotInfo mascot) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         const SizedBox(height: 16),
-
         Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
@@ -241,24 +287,22 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
             color: mascot.primaryColor,
           ),
         ).animate().scale(duration: 400.ms, curve: Curves.easeOutBack),
-
         const SizedBox(height: 20),
-
         Text(
           "${mascot.name}'s Insight & Wish",
           style: TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.w800,
-            color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+            color:
+                isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
           ),
         ),
-
         const SizedBox(height: 12),
-
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.04),
+            color:
+                isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.04),
             borderRadius: BorderRadius.circular(14),
           ),
           child: Text(
@@ -272,16 +316,16 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
             ),
           ),
         ),
-
         const SizedBox(height: 20),
-
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: isDark ? AppColors.darkCard : Colors.white,
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: isDark ? AppColors.darkCardBorder : Colors.black.withValues(alpha: 0.08),
+              color: isDark
+                  ? AppColors.darkCardBorder
+                  : Colors.black.withValues(alpha: 0.08),
             ),
             boxShadow: [
               BoxShadow(
@@ -296,13 +340,13 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
             style: TextStyle(
               fontSize: 15,
               height: 1.5,
-              color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+              color: isDark
+                  ? AppColors.textPrimaryDark
+                  : AppColors.textPrimaryLight,
             ),
           ),
         ).animate().fadeIn(delay: 200.ms),
-
         const Spacer(),
-
         SizedBox(
           width: double.infinity,
           height: 52,
@@ -317,9 +361,11 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.sageGreen,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18)),
             ),
-            child: const Text("I'm Ready!", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            child: const Text("I'm Ready!",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
           ),
         ),
       ],

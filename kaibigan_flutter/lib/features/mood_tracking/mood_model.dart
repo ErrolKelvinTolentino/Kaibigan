@@ -79,7 +79,7 @@ class MoodLog {
       anxietyLevel: map['anxiety_level'] ?? 3,
       note: map['note'],
       createdAt: map['created_at'] != null
-          ? DateTime.parse(map['created_at'])
+          ? DateTime.parse(map['created_at']).toLocal()
           : DateTime.now(),
     );
   }
@@ -186,18 +186,23 @@ class SleepAssetHelper {
 }
 
 class FeatureIconHelper {
-  static const String dailyReflection = 'assets/feature icons/Daily Reflection.png';
+  static const String dailyReflection =
+      'assets/feature icons/Daily Reflection.png';
   static const String entries = 'assets/feature icons/Entries.png';
-  static const String gratitudeGarden = 'assets/feature icons/Gratitude Garden.png';
+  static const String gratitudeGarden =
+      'assets/feature icons/Gratitude Garden.png';
   static const String journal = 'assets/feature icons/Journal.png';
-  static const String midDayRoutine = 'assets/feature icons/Mid-day routine.png';
+  static const String midDayRoutine =
+      'assets/feature icons/Mid-day routine.png';
   static const String moodTracker = 'assets/feature icons/Mood Tracker.png';
-  static const String morningRoutine = 'assets/feature icons/Morning Routine.png';
+  static const String morningRoutine =
+      'assets/feature icons/Morning Routine.png';
   static const String nightRoutine = 'assets/feature icons/Night Routine.png';
   static const String routines = 'assets/feature icons/Routines.png';
   static const String sleepLog = 'assets/feature icons/Sleep log.png';
   static const String todaysFocus = 'assets/feature icons/Today\'s Focus.png';
-  static const String todaysHighlight = 'assets/feature icons/Today\'s Higlight.png';
+  static const String todaysHighlight =
+      'assets/feature icons/Today\'s Higlight.png';
 }
 
 enum EmotionalWeatherType {
@@ -227,7 +232,8 @@ class EmotionalWeatherInfo {
       return const EmotionalWeatherInfo(
         type: EmotionalWeatherType.sunny,
         title: 'Sunny & Bright Sky',
-        description: 'Your emotional atmosphere has been radiant and clear this week.',
+        description:
+            'Your emotional atmosphere has been radiant and clear this week.',
         icon: '☀️',
         gradientColors: [Color(0xFFFFF3B0), Color(0xFFE9C46A)],
       );
@@ -235,7 +241,8 @@ class EmotionalWeatherInfo {
       return const EmotionalWeatherInfo(
         type: EmotionalWeatherType.goldenSunset,
         title: 'Golden Sunset',
-        description: 'A warm, calm atmosphere with mild passing clouds of reflection.',
+        description:
+            'A warm, calm atmosphere with mild passing clouds of reflection.',
         icon: '🌤️',
         gradientColors: [Color(0xFFF8C8BA), Color(0xFFE8AEB7)],
       );
@@ -243,7 +250,8 @@ class EmotionalWeatherInfo {
       return const EmotionalWeatherInfo(
         type: EmotionalWeatherType.gentleRain,
         title: 'Gentle Calming Rain',
-        description: 'Rain brings nourishment and growth. Take time for slow, quiet care.',
+        description:
+            'Rain brings nourishment and growth. Take time for slow, quiet care.',
         icon: '🌧️',
         gradientColors: [Color(0xFFA8DADC), Color(0xFF457B9D)],
       );
@@ -251,7 +259,8 @@ class EmotionalWeatherInfo {
       return const EmotionalWeatherInfo(
         type: EmotionalWeatherType.starryNight,
         title: 'Peaceful Starry Night',
-        description: 'Rest in the quiet stillness. Every night gives way to a new dawn.',
+        description:
+            'Rest in the quiet stillness. Every night gives way to a new dawn.',
         icon: '🌌',
         gradientColors: [Color(0xFF2B2D42), Color(0xFF1D3557)],
       );

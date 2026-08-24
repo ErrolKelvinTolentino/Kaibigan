@@ -10,6 +10,7 @@ class RoutinesProvider extends ChangeNotifier {
   final List<RoutineLog> _logs = [];
   String? _activeUserId;
   String? _errorMessage;
+  bool _isLoading = false;
 
   RoutinesProvider() {
     _initDefaultRoutines();
@@ -19,6 +20,25 @@ class RoutinesProvider extends ChangeNotifier {
   List<RoutineConfig> get allRoutines => _routines.values.toList();
   List<RoutineLog> get logs => List.unmodifiable(_logs);
   String? get errorMessage => _errorMessage;
+  bool get isLoading => _isLoading;
+
+  RoutineLog? get todayHighlight {
+    final now = DateTime.now();
+    for (final log in _logs) {
+      final text = log.focusOrHighlight?.trim() ?? '';
+      if (log.routineType == RoutineType.night &&
+          text.isNotEmpty &&
+          _isSameDay(log.completedAt, now)) {
+        return log;
+      }
+    }
+    return null;
+  }
+
+  static bool _isSameDay(DateTime left, DateTime right) =>
+      left.year == right.year &&
+      left.month == right.month &&
+      left.day == right.day;
 
   void syncForCurrentUser() {
     final userId = SupabaseService.isInitialized
@@ -63,24 +83,41 @@ class RoutinesProvider extends ChangeNotifier {
     final now = DateTime.now();
     return _logs
         .where((log) =>
-            log.completedAt.year == now.year &&
-            log.completedAt.month == now.month &&
-            log.completedAt.day == now.day)
+            log.routineId == log.routineType.name &&
+            _isSameDay(log.completedAt, now))
         .length;
   }
 
   int get streakDays {
-    if (_logs.isEmpty) return 3; // Friendly default streak count
-    return 4;
+    final completedDays = _logs
+        .where((log) => log.routineId == log.routineType.name)
+        .map((log) => DateTime(
+              log.completedAt.year,
+              log.completedAt.month,
+              log.completedAt.day,
+            ))
+        .toSet();
+    if (completedDays.isEmpty) return 0;
+
+    var cursor = DateTime.now();
+    cursor = DateTime(cursor.year, cursor.month, cursor.day);
+    if (!completedDays.contains(cursor)) {
+      cursor = cursor.subtract(const Duration(days: 1));
+    }
+    var streak = 0;
+    while (completedDays.contains(cursor)) {
+      streak++;
+      cursor = cursor.subtract(const Duration(days: 1));
+    }
+    return streak;
   }
 
   bool isRoutineCompletedToday(RoutineType type) {
     final now = DateTime.now();
     return _logs.any((log) =>
+        log.routineId == type.name &&
         log.routineType == type &&
-        log.completedAt.year == now.year &&
-        log.completedAt.month == now.month &&
-        log.completedAt.day == now.day);
+        _isSameDay(log.completedAt, now));
   }
 
   void _initDefaultRoutines() {
@@ -227,9 +264,17 @@ class RoutinesProvider extends ChangeNotifier {
 
   Future<void> fetchRoutineLogs() async {
     _errorMessage = null;
-    if (!SupabaseService.isInitialized) return;
+    if (!SupabaseService.isInitialized) {
+      _errorMessage =
+          'Routine sync is unavailable. Check your connection and try again.';
+      notifyListeners();
+      return;
+    }
     final userId = SupabaseService.client.auth.currentUser?.id;
     if (userId == null) return;
+
+    _isLoading = true;
+    notifyListeners();
 
     try {
       final query = SupabaseService.client
@@ -250,7 +295,16 @@ class RoutinesProvider extends ChangeNotifier {
         error: e.toString(),
       );
       notifyListeners();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
+  }
+
+  void clearError() {
+    if (_errorMessage == null) return;
+    _errorMessage = null;
+    notifyListeners();
   }
 
   void toggleStep(String routineId, String stepId) {
@@ -328,8 +382,14 @@ class RoutinesProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> addLog(RoutineLog log) async {
+  Future<bool> addLog(RoutineLog log) async {
     _errorMessage = null;
+    if (log.routineId.trim().isEmpty ||
+        (log.moodScore != null && (log.moodScore! < 1 || log.moodScore! > 5))) {
+      _errorMessage = 'This routine contains invalid data and was not saved.';
+      notifyListeners();
+      return false;
+    }
     final finalLog = log.id.startsWith('log-') || log.id.isEmpty
         ? RoutineLog(
             id: UuidHelper.generateV4(),
@@ -344,36 +404,55 @@ class RoutinesProvider extends ChangeNotifier {
           )
         : log;
 
-    if (SupabaseService.isInitialized &&
-        SupabaseService.client.auth.currentUser != null) {
-      try {
-        final userId = SupabaseService.client.auth.currentUser!.id;
-        await SupabaseService.client
-            .from('routine_logs')
-            .insert(finalLog.toMap(userId: userId));
-        _logs.insert(0, finalLog);
-      } catch (e) {
-        _errorMessage =
-            'Routine completion could not be saved. Please try again.';
-        ApiLogger.logDatabase(
-          operation: 'INSERT',
-          table: 'routine_logs',
-          error: e.toString(),
-        );
-      }
-    } else {
+    if (!SupabaseService.isInitialized ||
+        SupabaseService.client.auth.currentUser == null) {
       _errorMessage =
           'Routine completion could not be saved because sync is unavailable.';
+      notifyListeners();
+      return false;
     }
+
+    _isLoading = true;
     notifyListeners();
+    try {
+      final userId = SupabaseService.client.auth.currentUser!.id;
+      final response = await SupabaseService.client
+          .from('routine_logs')
+          .insert(finalLog.toMap(userId: userId))
+          .select()
+          .single();
+      final savedLog = RoutineLog.fromMap(response);
+      _logs.removeWhere((item) => item.id == savedLog.id);
+      _logs.insert(0, savedLog);
+      ApiLogger.logDatabase(
+        operation: 'INSERT',
+        table: 'routine_logs',
+        payload: finalLog.toMap(userId: userId),
+        result: {'status': 'success', 'id': savedLog.id},
+      );
+      return true;
+    } catch (e) {
+      _errorMessage =
+          'Routine completion could not be saved. Please try again.';
+      ApiLogger.logDatabase(
+        operation: 'INSERT',
+        table: 'routine_logs',
+        error: e.toString(),
+      );
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
-  Future<void> completeRoutine(RoutineType type,
+  Future<bool> completeRoutine(RoutineType type,
       {String? focusOrHighlight,
       SleepFeeling? sleepFeeling,
       int? moodScore,
       String? moodNote,
       String? gratitudeContent}) async {
+    if (isRoutineCompletedToday(type)) return true;
     final log = RoutineLog(
       id: UuidHelper.generateV4(),
       routineId: type.name,
@@ -385,26 +464,83 @@ class RoutinesProvider extends ChangeNotifier {
       moodNote: moodNote,
       gratitudeContent: gratitudeContent,
     );
-    await addLog(log);
+    return addLog(log);
   }
 
-  Future<void> deleteLog(String id) async {
+  Future<bool> updateLog(RoutineLog updated) async {
+    _errorMessage = null;
+    final userId = SupabaseService.isInitialized
+        ? SupabaseService.client.auth.currentUser?.id
+        : null;
+    if (userId == null || !UuidHelper.isValidUuid(updated.id)) {
+      _errorMessage =
+          'This saved item cannot be updated because sync is unavailable.';
+      notifyListeners();
+      return false;
+    }
+
+    final index = _logs.indexWhere((log) => log.id == updated.id);
+    if (index == -1) {
+      _errorMessage = 'This saved item is no longer available.';
+      notifyListeners();
+      return false;
+    }
+
+    final previous = _logs[index];
+    _logs[index] = updated;
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final response = await SupabaseService.client
+          .from('routine_logs')
+          .update(updated.toMap(userId: userId))
+          .eq('id', updated.id)
+          .eq('user_id', userId)
+          .select()
+          .single();
+      _logs[index] = RoutineLog.fromMap(response);
+      return true;
+    } catch (e) {
+      _logs[index] = previous;
+      _errorMessage = 'Your changes could not be saved. Please try again.';
+      ApiLogger.logDatabase(
+        operation: 'UPDATE',
+        table: 'routine_logs',
+        error: e.toString(),
+      );
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> deleteLog(String id) async {
     _errorMessage = null;
     if (!SupabaseService.isInitialized ||
         SupabaseService.client.auth.currentUser == null) {
       _errorMessage =
           'The routine log could not be deleted because sync is unavailable.';
       notifyListeners();
-      return;
+      return false;
     }
     final index = _logs.indexWhere((log) => log.id == id);
-    if (index == -1) return;
+    if (index == -1) return true;
     final removed = _logs.removeAt(index);
     notifyListeners();
 
     if (SupabaseService.isInitialized && UuidHelper.isValidUuid(id)) {
       try {
-        await SupabaseService.client.from('routine_logs').delete().eq('id', id);
+        final userId = SupabaseService.client.auth.currentUser!.id;
+        await SupabaseService.client
+            .from('routine_logs')
+            .delete()
+            .eq('id', id)
+            .eq('user_id', userId)
+            .select()
+            .single();
+        notifyListeners();
+        return true;
       } catch (e) {
         _logs.insert(index.clamp(0, _logs.length), removed);
         _errorMessage =
@@ -414,8 +550,11 @@ class RoutinesProvider extends ChangeNotifier {
           table: 'routine_logs',
           error: e.toString(),
         );
+        notifyListeners();
+        return false;
       }
     }
     notifyListeners();
+    return true;
   }
 }

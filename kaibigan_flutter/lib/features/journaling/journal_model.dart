@@ -7,7 +7,8 @@ class JournalEntry {
   final String? aiResponse;
   final String companionId;
   final String mood;
-  final String reflectionMode; // 'companion', 'reflection', 'advice', 'vent', 'celebration'
+  final String
+      reflectionMode; // 'companion', 'reflection', 'advice', 'vent', 'celebration'
   final List<String> tags;
   final bool isFavorite;
   final int reflectionSeedStage; // 1: Seed, 2: Sprout, 3: Bloom
@@ -88,8 +89,8 @@ class JournalEntry {
       tags: List<String>.from(map['tags'] ?? []),
       isFavorite: map['is_favorite'] ?? false,
       reflectionSeedStage: map['reflection_seed_stage'] ?? 1,
-      createdAt: map['created_at'] != null 
-          ? DateTime.parse(map['created_at']) 
+      createdAt: map['created_at'] != null
+          ? DateTime.parse(map['created_at']).toLocal()
           : DateTime.now(),
     );
   }

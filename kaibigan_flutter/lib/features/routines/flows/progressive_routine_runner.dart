@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/widgets/cozy_action_sheet.dart';
 import '../../companion/companion_model.dart';
 import '../../settings/user_provider.dart';
 import '../routine_model.dart';
+import '../routines_provider.dart';
 import '../screens/todays_focus_screen.dart';
 import '../screens/todays_highlight_screen.dart';
 import '../screens/daily_reflection_screen.dart';
@@ -16,7 +18,8 @@ class ProgressiveRoutineRunner extends StatefulWidget {
   const ProgressiveRoutineRunner({super.key, required this.routineType});
 
   @override
-  State<ProgressiveRoutineRunner> createState() => _ProgressiveRoutineRunnerState();
+  State<ProgressiveRoutineRunner> createState() =>
+      _ProgressiveRoutineRunnerState();
 }
 
 class _ProgressiveRoutineRunnerState extends State<ProgressiveRoutineRunner> {
@@ -30,7 +33,7 @@ class _ProgressiveRoutineRunnerState extends State<ProgressiveRoutineRunner> {
 
     if (widget.routineType == RoutineType.morning) {
       return TodaysFocusScreen(
-        onCompleted: () => Navigator.of(context).pop(),
+        onCompleted: () => _finishRoutine(),
       );
     } else if (widget.routineType == RoutineType.midday) {
       if (_stepIndex == 0) {
@@ -38,7 +41,7 @@ class _ProgressiveRoutineRunnerState extends State<ProgressiveRoutineRunner> {
           onCompleted: () => setState(() => _stepIndex = 1),
         );
       } else if (_stepIndex == 1) {
-        return const GardenScreen();
+        return GardenScreen(onEntrySaved: _finishRoutine);
       }
     } else {
       // Night Routine: Mood -> Highlight -> Reflection prompt
@@ -48,11 +51,11 @@ class _ProgressiveRoutineRunnerState extends State<ProgressiveRoutineRunner> {
         );
       } else if (_stepIndex == 1) {
         return TodaysHighlightScreen(
-          onCompleted: () => _promptDailyReflection(context, isDark, mascot),
+          onCompleted: () => _promptDailyReflection(context, mascot),
         );
       } else if (_stepIndex == 2) {
         return DailyReflectionScreen(
-          onCompleted: () => Navigator.of(context).pop(),
+          onCompleted: () => _finishRoutine(),
         );
       }
     }
@@ -65,7 +68,8 @@ class _ProgressiveRoutineRunnerState extends State<ProgressiveRoutineRunner> {
           children: [
             Text(mascot.avatarIcon, style: const TextStyle(fontSize: 48)),
             const SizedBox(height: 16),
-            const Text('Routine Complete! 🐝✨', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+            const Text('Routine Complete! 🐝✨',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -77,84 +81,47 @@ class _ProgressiveRoutineRunnerState extends State<ProgressiveRoutineRunner> {
     );
   }
 
-  void _promptDailyReflection(BuildContext context, bool isDark, MascotInfo mascot) {
-    showModalBottomSheet(
-      context: context,
+  Future<void> _promptDailyReflection(
+    BuildContext sourceContext,
+    MascotInfo mascot,
+  ) async {
+    final shouldReflect = await CozyActionSheet.show(
+      sourceContext,
+      eyebrow: 'A gentle next step',
+      title: 'Close the day with a little clarity',
+      message:
+          'Write down what mattered, what felt difficult, and what you want to carry forward with ${mascot.name}.',
+      primaryLabel: 'Begin reflection',
+      secondaryLabel: 'Finish my routine',
+      emoji: '🪞',
+      detail: 'About 3 minutes · private and saved to your journal',
       isDismissible: false,
-      enableDrag: false,
-      backgroundColor: isDark ? AppColors.darkCard : Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-      ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.honeyGold.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
-              ),
-              child: const Text('🪞', style: TextStyle(fontSize: 40)),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Want to start writing your Daily Reflection?',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Take a few unhurried minutes to unpack your day with ${mascot.name}, or complete your routine now.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13.5,
-                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () {
-                      Navigator.of(ctx).pop();
-                      Navigator.of(context).pop(); // Close routine
-                    },
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                    ),
-                    child: const Text('Skip for Now', style: TextStyle(fontWeight: FontWeight.w700)),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.of(ctx).pop();
-                      setState(() => _stepIndex = 2);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.honeyGold,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                    ),
-                    child: const Text('Start Reflection ✨', style: TextStyle(fontWeight: FontWeight.w700)),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
     );
+
+    if (!mounted) return;
+    if (shouldReflect) {
+      setState(() => _stepIndex = 2);
+    } else {
+      Navigator.of(context).pop();
+    }
+  }
+
+  Future<void> _finishRoutine() async {
+    final provider = Provider.of<RoutinesProvider>(context, listen: false);
+    final success = await provider.completeRoutine(widget.routineType);
+    if (!mounted) return;
+    if (success) {
+      Navigator.of(context).pop(true);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            provider.errorMessage ??
+                'Your routine could not be saved. Please try again.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 }

@@ -4,7 +4,8 @@ import '../../core/utils/uuid_helper.dart';
 class GratitudeEntry {
   final String id;
   final String content;
-  final String flowerType; // 'sunflower', 'sampaguita', 'tulip', 'orchid', 'rose'
+  final String
+      flowerType; // 'sunflower', 'sampaguita', 'tulip', 'orchid', 'rose'
   final int growthStage; // 1: Seedling, 2: Bud, 3: Full Bloom
   final int waterCount;
   final DateTime createdAt;
@@ -60,7 +61,7 @@ class GratitudeEntry {
       growthStage: map['growth_stage'] ?? 3,
       waterCount: map['water_count'] ?? 1,
       createdAt: map['created_at'] != null
-          ? DateTime.parse(map['created_at'])
+          ? DateTime.parse(map['created_at']).toLocal()
           : DateTime.now(),
     );
   }
@@ -145,4 +146,3 @@ class GratitudeEntry {
     }
   }
 }
-

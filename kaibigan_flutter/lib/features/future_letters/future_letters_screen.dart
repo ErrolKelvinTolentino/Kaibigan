@@ -143,14 +143,22 @@ class _FutureLettersScreenState extends State<FutureLettersScreen> {
                                         icon: Icons.mark_email_read_outlined,
                                       );
                                       if (confirmed && context.mounted) {
-                                        lettersProvider.deleteLetter(letter.id);
+                                        final deleted = await lettersProvider
+                                            .deleteLetter(letter.id);
+                                        if (!context.mounted) return;
                                         ScaffoldMessenger.of(context)
                                             .showSnackBar(
-                                          const SnackBar(
+                                          SnackBar(
                                             content: Text(
-                                                'Future letter gently removed.'),
+                                              deleted
+                                                  ? 'Future letter gently removed.'
+                                                  : lettersProvider
+                                                          .errorMessage ??
+                                                      'The letter could not be removed.',
+                                            ),
                                             behavior: SnackBarBehavior.floating,
-                                            duration: Duration(seconds: 2),
+                                            duration:
+                                                const Duration(seconds: 2),
                                           ),
                                         );
                                       }

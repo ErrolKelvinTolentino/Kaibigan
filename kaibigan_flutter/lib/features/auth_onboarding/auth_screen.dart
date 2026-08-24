@@ -28,6 +28,8 @@ class _AuthScreenState extends State<AuthScreen> {
   bool _obscureRegPassword = true;
   bool _isLoading = false;
   String? _errorMessage;
+  String? _confirmationMessage;
+  String? _pendingConfirmationEmail;
 
   @override
   void dispose() {
@@ -55,6 +57,7 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _confirmationMessage = null;
     });
 
     final userProvider = Provider.of<UserProvider>(context, listen: false);
@@ -90,6 +93,7 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _confirmationMessage = null;
     });
 
     final userProvider = Provider.of<UserProvider>(context, listen: false);
@@ -102,10 +106,41 @@ class _AuthScreenState extends State<AuthScreen> {
     if (mounted) {
       setState(() => _isLoading = false);
       if (!success) {
-        setState(() =>
-            _errorMessage = userProvider.authError ?? 'Registration failed.');
+        final message = userProvider.authError ?? 'Registration failed.';
+        if (message.startsWith('Account created!')) {
+          setState(() {
+            _errorMessage = null;
+            _pendingConfirmationEmail = email;
+            _confirmationMessage =
+                'Account created. Check your inbox or spam folder, then open the confirmation link while Kaibigan is running on localhost:3000.';
+          });
+        } else {
+          setState(() => _errorMessage = message);
+        }
       }
     }
+  }
+
+  Future<void> _handleResendConfirmation() async {
+    final email = _pendingConfirmationEmail;
+    if (email == null || _isLoading) return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+      _confirmationMessage = null;
+    });
+    final provider = context.read<UserProvider>();
+    final sent = await provider.resendConfirmation(email);
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      if (sent) {
+        _confirmationMessage =
+            'A new confirmation email was sent. Use the newest link and check your spam folder.';
+      } else {
+        _errorMessage = provider.authError;
+      }
+    });
   }
 
   Future<void> _handleGoogleLogin() async {
@@ -238,6 +273,7 @@ class _AuthScreenState extends State<AuthScreen> {
                             onTap: () => setState(() {
                               _activeTabIndex = 0;
                               _errorMessage = null;
+                              _confirmationMessage = null;
                             }),
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 200),
@@ -269,6 +305,7 @@ class _AuthScreenState extends State<AuthScreen> {
                             onTap: () => setState(() {
                               _activeTabIndex = 1;
                               _errorMessage = null;
+                              _confirmationMessage = null;
                             }),
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 200),
@@ -299,6 +336,52 @@ class _AuthScreenState extends State<AuthScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
+
+                  if (_confirmationMessage != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: AppColors.sageGreen.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: AppColors.sageGreen.withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(Icons.mark_email_read_outlined,
+                                  color: AppColors.sageGreen, size: 20),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  _confirmationMessage!,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.sageGreen,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (_pendingConfirmationEmail != null) ...[
+                            const SizedBox(height: 8),
+                            TextButton(
+                              onPressed: _isLoading
+                                  ? null
+                                  : _handleResendConfirmation,
+                              child: const Text('Resend confirmation email'),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ).animate().fadeIn(),
+                    const SizedBox(height: 16),
+                  ],
 
                   // Error Alert Banner
                   if (_errorMessage != null) ...[

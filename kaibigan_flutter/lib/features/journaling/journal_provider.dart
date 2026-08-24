@@ -117,7 +117,7 @@ class JournalProvider extends ChangeNotifier {
     }
   }
 
-  Future<JournalEntry> addJournalEntry({
+  Future<JournalEntry?> addJournalEntry({
     required String title,
     required String content,
     String? aiReply,
@@ -128,14 +128,21 @@ class JournalProvider extends ChangeNotifier {
     List<String> tags = const [],
     int seedStage = 1,
   }) async {
+    final cleanTitle = title.trim();
+    final cleanContent = content.trim();
+    if (cleanTitle.isEmpty && cleanContent.isEmpty) {
+      _errorMessage = 'Add a title or a reflection before saving.';
+      notifyListeners();
+      return null;
+    }
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     final newEntry = JournalEntry(
       id: UuidHelper.generateV4(),
-      title: title,
-      content: content,
+      title: cleanTitle.isEmpty ? 'Untitled Entry' : cleanTitle,
+      content: cleanContent,
       aiResponse: aiResponse ?? aiReply,
       companionId: companionId,
       mood: mood,
@@ -182,17 +189,17 @@ class JournalProvider extends ChangeNotifier {
 
     _isLoading = false;
     notifyListeners();
-    return newEntry;
+    return saved ? newEntry : null;
   }
 
-  Future<void> toggleFavorite(String id) async {
+  Future<bool> toggleFavorite(String id) async {
     _errorMessage = null;
     if (!SupabaseService.isInitialized ||
         SupabaseService.client.auth.currentUser == null) {
       _errorMessage =
           'The favorite change could not be saved because sync is unavailable.';
       notifyListeners();
-      return;
+      return false;
     }
     final index = _entries.indexWhere((e) => e.id == id);
     if (index != -1) {
@@ -204,9 +211,14 @@ class JournalProvider extends ChangeNotifier {
 
       if (SupabaseService.isInitialized && UuidHelper.isValidUuid(id)) {
         try {
+          final userId = SupabaseService.client.auth.currentUser!.id;
           await SupabaseService.client
               .from('journal_entries')
-              .update({'is_favorite': updated.isFavorite}).eq('id', id);
+              .update({'is_favorite': updated.isFavorite})
+              .eq('id', id)
+              .eq('user_id', userId)
+              .select()
+              .single();
 
           ApiLogger.logDatabase(
             operation: 'UPDATE',
@@ -225,17 +237,26 @@ class JournalProvider extends ChangeNotifier {
         }
       }
       notifyListeners();
+      return _errorMessage == null;
     }
+    _errorMessage = 'This journal entry is no longer available.';
+    notifyListeners();
+    return false;
   }
 
-  Future<void> updateJournalEntry(JournalEntry entry) async {
+  Future<bool> updateJournalEntry(JournalEntry entry) async {
     _errorMessage = null;
+    if (entry.title.trim().isEmpty && entry.content.trim().isEmpty) {
+      _errorMessage = 'A journal entry cannot be completely empty.';
+      notifyListeners();
+      return false;
+    }
     if (!SupabaseService.isInitialized ||
         SupabaseService.client.auth.currentUser == null) {
       _errorMessage =
           'Your changes could not be saved because sync is unavailable.';
       notifyListeners();
-      return;
+      return false;
     }
     final index = _entries.indexWhere((e) => e.id == entry.id);
     if (index != -1) {
@@ -247,10 +268,14 @@ class JournalProvider extends ChangeNotifier {
         try {
           final userId = SupabaseService.client.auth.currentUser?.id;
           final map = entry.toMap(userId: userId);
+          map['updated_at'] = DateTime.now().toUtc().toIso8601String();
           await SupabaseService.client
               .from('journal_entries')
               .update(map)
-              .eq('id', entry.id);
+              .eq('id', entry.id)
+              .eq('user_id', userId!)
+              .select()
+              .single();
 
           ApiLogger.logDatabase(
             operation: 'UPDATE',
@@ -273,29 +298,37 @@ class JournalProvider extends ChangeNotifier {
         AIMemoryService.extractMemoryFromNote(entry.title, entry.content);
       }
       notifyListeners();
+      return _errorMessage == null;
     }
+    _errorMessage = 'This journal entry is no longer available.';
+    notifyListeners();
+    return false;
   }
 
-  Future<void> deleteJournalEntry(String id) async {
+  Future<bool> deleteJournalEntry(String id) async {
     _errorMessage = null;
     if (!SupabaseService.isInitialized ||
         SupabaseService.client.auth.currentUser == null) {
       _errorMessage =
           'The entry could not be deleted because sync is unavailable.';
       notifyListeners();
-      return;
+      return false;
     }
     final index = _entries.indexWhere((e) => e.id == id);
-    if (index == -1) return;
+    if (index == -1) return true;
     final removed = _entries.removeAt(index);
     notifyListeners();
 
     if (SupabaseService.isInitialized && UuidHelper.isValidUuid(id)) {
       try {
+        final userId = SupabaseService.client.auth.currentUser!.id;
         await SupabaseService.client
             .from('journal_entries')
             .delete()
-            .eq('id', id);
+            .eq('id', id)
+            .eq('user_id', userId)
+            .select()
+            .single();
 
         ApiLogger.logDatabase(
           operation: 'DELETE',
@@ -311,8 +344,11 @@ class JournalProvider extends ChangeNotifier {
           table: 'journal_entries',
           error: e.toString(),
         );
+        notifyListeners();
+        return false;
       }
     }
     notifyListeners();
+    return true;
   }
 }

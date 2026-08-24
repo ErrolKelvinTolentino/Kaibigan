@@ -90,8 +90,14 @@ class GratitudeProvider extends ChangeNotifier {
     }
   }
 
-  Future<GratitudeEntry> addGratitudeEntry(String content,
+  Future<GratitudeEntry?> addGratitudeEntry(String content,
       {String flowerType = 'sunflower', bool shareToCommunity = false}) async {
+    final cleanContent = content.trim();
+    if (cleanContent.isEmpty) {
+      _errorMessage = 'Write one thing you are grateful for before planting.';
+      notifyListeners();
+      return null;
+    }
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -109,7 +115,7 @@ class GratitudeProvider extends ChangeNotifier {
 
     final newEntry = GratitudeEntry(
       id: UuidHelper.generateV4(),
-      content: content,
+      content: cleanContent,
       flowerType: chosenType,
       growthStage: 3,
       waterCount: 1,
@@ -149,17 +155,17 @@ class GratitudeProvider extends ChangeNotifier {
 
     _isLoading = false;
     notifyListeners();
-    return newEntry;
+    return saved ? newEntry : null;
   }
 
-  Future<void> waterFlower(String id) async {
+  Future<bool> waterFlower(String id) async {
     _errorMessage = null;
     if (!SupabaseService.isInitialized ||
         SupabaseService.client.auth.currentUser == null) {
       _errorMessage =
           'This flower could not be watered because sync is unavailable.';
       notifyListeners();
-      return;
+      return false;
     }
     final index = _entries.indexWhere((e) => e.id == id);
     if (index != -1) {
@@ -171,9 +177,14 @@ class GratitudeProvider extends ChangeNotifier {
 
       if (SupabaseService.isInitialized && UuidHelper.isValidUuid(id)) {
         try {
+          final userId = SupabaseService.client.auth.currentUser!.id;
           await SupabaseService.client
               .from('gratitude_entries')
-              .update({'water_count': updated.waterCount}).eq('id', id);
+              .update({'water_count': updated.waterCount})
+              .eq('id', id)
+              .eq('user_id', userId)
+              .select()
+              .single();
 
           ApiLogger.logDatabase(
             operation: 'UPDATE',
@@ -192,35 +203,50 @@ class GratitudeProvider extends ChangeNotifier {
         }
       }
       notifyListeners();
+      return _errorMessage == null;
     }
+    _errorMessage = 'This flower is no longer available.';
+    notifyListeners();
+    return false;
   }
 
-  Future<void> updateGratitudeEntry(String id, String newContent) async {
+  Future<bool> updateGratitudeEntry(String id, String newContent) async {
     _errorMessage = null;
+    final cleanContent = newContent.trim();
+    if (cleanContent.isEmpty) {
+      _errorMessage = 'A gratitude note cannot be empty.';
+      notifyListeners();
+      return false;
+    }
     if (!SupabaseService.isInitialized ||
         SupabaseService.client.auth.currentUser == null) {
       _errorMessage =
           'This gratitude could not be updated because sync is unavailable.';
       notifyListeners();
-      return;
+      return false;
     }
     final index = _entries.indexWhere((e) => e.id == id);
     if (index != -1) {
       final previous = _entries[index];
-      final updated = _entries[index].copyWith(content: newContent);
+      final updated = _entries[index].copyWith(content: cleanContent);
       _entries[index] = updated;
       notifyListeners();
 
       if (SupabaseService.isInitialized && UuidHelper.isValidUuid(id)) {
         try {
+          final userId = SupabaseService.client.auth.currentUser!.id;
           await SupabaseService.client
               .from('gratitude_entries')
-              .update({'content': newContent}).eq('id', id);
+              .update({'content': cleanContent})
+              .eq('id', id)
+              .eq('user_id', userId)
+              .select()
+              .single();
 
           ApiLogger.logDatabase(
             operation: 'UPDATE',
             table: 'gratitude_entries',
-            payload: {'id': id, 'content': newContent},
+            payload: {'id': id, 'content': cleanContent},
             result: {'status': 'success'},
           );
         } catch (e) {
@@ -235,29 +261,37 @@ class GratitudeProvider extends ChangeNotifier {
         }
       }
       notifyListeners();
+      return _errorMessage == null;
     }
+    _errorMessage = 'This gratitude entry is no longer available.';
+    notifyListeners();
+    return false;
   }
 
-  Future<void> deleteGratitudeEntry(String id) async {
+  Future<bool> deleteGratitudeEntry(String id) async {
     _errorMessage = null;
     if (!SupabaseService.isInitialized ||
         SupabaseService.client.auth.currentUser == null) {
       _errorMessage =
           'This flower could not be deleted because sync is unavailable.';
       notifyListeners();
-      return;
+      return false;
     }
     final index = _entries.indexWhere((entry) => entry.id == id);
-    if (index == -1) return;
+    if (index == -1) return true;
     final removed = _entries.removeAt(index);
     notifyListeners();
 
     if (SupabaseService.isInitialized && UuidHelper.isValidUuid(id)) {
       try {
+        final userId = SupabaseService.client.auth.currentUser!.id;
         await SupabaseService.client
             .from('gratitude_entries')
             .delete()
-            .eq('id', id);
+            .eq('id', id)
+            .eq('user_id', userId)
+            .select()
+            .single();
 
         ApiLogger.logDatabase(
           operation: 'DELETE',
@@ -274,8 +308,11 @@ class GratitudeProvider extends ChangeNotifier {
           table: 'gratitude_entries',
           error: e.toString(),
         );
+        notifyListeners();
+        return false;
       }
     }
     notifyListeners();
+    return true;
   }
 }

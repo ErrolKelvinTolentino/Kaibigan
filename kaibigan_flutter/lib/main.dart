@@ -45,6 +45,25 @@ class AppScrollBehavior extends MaterialScrollBehavior {
       };
 }
 
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<UserProvider>(
+      builder: (context, userProvider, child) {
+        if (userProvider.isPasswordRecovery) {
+          return const ResetPasswordScreen();
+        }
+        if (userProvider.isAuthenticated) {
+          return const HomeScreen();
+        }
+        return const AuthScreen();
+      },
+    );
+  }
+}
+
 class KaibiganApp extends StatelessWidget {
   const KaibiganApp({super.key});
 
@@ -122,11 +141,7 @@ class KaibiganApp extends StatelessWidget {
             ],
             themeMode:
                 userProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
-            home: userProvider.isPasswordRecovery
-                ? const ResetPasswordScreen()
-                : userProvider.isAuthenticated
-                    ? const HomeScreen()
-                    : const AuthScreen(),
+            home: const AuthGate(),
           );
         },
       ),

@@ -128,13 +128,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       IconButton(
                         icon: const Icon(Icons.check_circle_rounded,
                             color: AppColors.sageGreen),
-                        onPressed: () {
+                        onPressed: () async {
                           if (_nameController.text.trim().isNotEmpty) {
-                            userProvider
+                            final saved = await userProvider
                                 .updateDisplayName(_nameController.text.trim());
+                            if (!context.mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text('Name updated successfully!')),
+                              SnackBar(
+                                content: Text(
+                                  saved
+                                      ? 'Name updated successfully!'
+                                      : userProvider.dataError ??
+                                          'Your name could not be updated.',
+                                ),
+                              ),
                             );
                           }
                         },

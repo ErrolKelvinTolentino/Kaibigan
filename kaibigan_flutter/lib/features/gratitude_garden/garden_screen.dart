@@ -11,7 +11,9 @@ import 'gratitude_provider.dart';
 import 'gratitude_model.dart';
 
 class GardenScreen extends StatefulWidget {
-  const GardenScreen({super.key});
+  final VoidCallback? onEntrySaved;
+
+  const GardenScreen({super.key, this.onEntrySaved});
 
   @override
   State<GardenScreen> createState() => _GardenScreenState();
@@ -591,6 +593,8 @@ class _GardenScreenState extends State<GardenScreen> {
                         _entryController.clear();
                         Navigator.pop(context);
 
+                        widget.onEntrySaved?.call();
+
                         // Celebratory Feedback
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
@@ -746,12 +750,17 @@ class _GardenScreenState extends State<GardenScreen> {
                               fontWeight: FontWeight.w700,
                               color: Colors.white),
                         ),
-                        onPressed: () {
-                          provider.waterFlower(entry.id);
+                        onPressed: () async {
+                          final saved = await provider.waterFlower(entry.id);
+                          if (!context.mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
+                            SnackBar(
                               content: Text(
-                                  '💧 You nourished this gratitude flower! (+3 💧 Drops)'),
+                                saved
+                                    ? '💧 You nourished this gratitude flower! (+3 💧 Drops)'
+                                    : provider.errorMessage ??
+                                        'The flower could not be watered.',
+                              ),
                               duration: Duration(seconds: 2),
                             ),
                           );
@@ -784,12 +793,18 @@ class _GardenScreenState extends State<GardenScreen> {
                         icon: Icons.local_florist_rounded,
                       );
                       if (confirmed && context.mounted) {
-                        provider.deleteGratitudeEntry(entry.id);
-                        Navigator.pop(context);
+                        final deleted =
+                            await provider.deleteGratitudeEntry(entry.id);
+                        if (!context.mounted) return;
+                        if (deleted) Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content:
-                                Text('Flower gently removed from your garden.'),
+                          SnackBar(
+                            content: Text(
+                              deleted
+                                  ? 'Flower gently removed from your garden.'
+                                  : provider.errorMessage ??
+                                      'The flower could not be removed.',
+                            ),
                             behavior: SnackBarBehavior.floating,
                             duration: Duration(seconds: 2),
                           ),
@@ -856,14 +871,22 @@ class _GardenScreenState extends State<GardenScreen> {
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16)),
             ),
-            onPressed: () {
+            onPressed: () async {
               if (editController.text.trim().isNotEmpty) {
-                provider.updateGratitudeEntry(
-                    entry.id, editController.text.trim());
-                Navigator.pop(ctx);
+                final saved = await provider.updateGratitudeEntry(
+                  entry.id,
+                  editController.text.trim(),
+                );
+                if (!ctx.mounted) return;
+                if (saved) Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Gratitude note updated! ✨'),
+                  SnackBar(
+                    content: Text(
+                      saved
+                          ? 'Gratitude note updated! ✨'
+                          : provider.errorMessage ??
+                              'The note could not be updated.',
+                    ),
                     behavior: SnackBarBehavior.floating,
                   ),
                 );
@@ -1006,11 +1029,17 @@ class _GardenScreenState extends State<GardenScreen> {
               icon: const Icon(Icons.water_drop_rounded,
                   color: Colors.blueAccent, size: 20),
               tooltip: 'Water Flower',
-              onPressed: () {
-                provider.waterFlower(entry.id);
+              onPressed: () async {
+                final saved = await provider.waterFlower(entry.id);
+                if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('💧 Watered flower (+3 💧 Drops)!'),
+                  SnackBar(
+                    content: Text(
+                      saved
+                          ? '💧 Watered flower (+3 💧 Drops)!'
+                          : provider.errorMessage ??
+                              'The flower could not be watered.',
+                    ),
                     behavior: SnackBarBehavior.floating,
                     duration: Duration(seconds: 1),
                   ),

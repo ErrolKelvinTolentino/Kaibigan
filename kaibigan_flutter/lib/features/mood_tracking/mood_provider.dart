@@ -87,7 +87,7 @@ class MoodProvider extends ChangeNotifier {
     }
   }
 
-  Future<MoodLog> logMood({
+  Future<MoodLog?> logMood({
     required int score,
     required String label,
     int stress = 3,
@@ -96,6 +96,11 @@ class MoodProvider extends ChangeNotifier {
     int anxiety = 3,
     String? note,
   }) async {
+    if (score < 1 || score > 5 || label.trim().isEmpty) {
+      _errorMessage = 'Choose a valid mood before saving your check-in.';
+      notifyListeners();
+      return null;
+    }
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -145,17 +150,24 @@ class MoodProvider extends ChangeNotifier {
 
     _isLoading = false;
     notifyListeners();
-    return newLog;
+    return saved ? newLog : null;
   }
 
-  Future<void> updateMoodLog(MoodLog updated) async {
+  Future<bool> updateMoodLog(MoodLog updated) async {
     _errorMessage = null;
+    if (updated.moodScore < 1 ||
+        updated.moodScore > 5 ||
+        updated.moodLabel.trim().isEmpty) {
+      _errorMessage = 'This mood check-in contains invalid values.';
+      notifyListeners();
+      return false;
+    }
     if (!SupabaseService.isInitialized ||
         SupabaseService.client.auth.currentUser == null) {
       _errorMessage =
           'Your mood update could not be saved because sync is unavailable.';
       notifyListeners();
-      return;
+      return false;
     }
     final index = _logs.indexWhere((l) => l.id == updated.id);
     if (index != -1) {
@@ -170,7 +182,10 @@ class MoodProvider extends ChangeNotifier {
           await SupabaseService.client
               .from('mood_logs')
               .update(map)
-              .eq('id', updated.id);
+              .eq('id', updated.id)
+              .eq('user_id', userId!)
+              .select()
+              .single();
 
           ApiLogger.logDatabase(
             operation: 'UPDATE',
@@ -189,26 +204,37 @@ class MoodProvider extends ChangeNotifier {
         }
       }
       notifyListeners();
+      return _errorMessage == null;
     }
+    _errorMessage = 'This mood check-in is no longer available.';
+    notifyListeners();
+    return false;
   }
 
-  Future<void> deleteMoodLog(String id) async {
+  Future<bool> deleteMoodLog(String id) async {
     _errorMessage = null;
     if (!SupabaseService.isInitialized ||
         SupabaseService.client.auth.currentUser == null) {
       _errorMessage =
           'The mood log could not be deleted because sync is unavailable.';
       notifyListeners();
-      return;
+      return false;
     }
     final index = _logs.indexWhere((log) => log.id == id);
-    if (index == -1) return;
+    if (index == -1) return true;
     final removed = _logs.removeAt(index);
     notifyListeners();
 
     if (SupabaseService.isInitialized && UuidHelper.isValidUuid(id)) {
       try {
-        await SupabaseService.client.from('mood_logs').delete().eq('id', id);
+        final userId = SupabaseService.client.auth.currentUser!.id;
+        await SupabaseService.client
+            .from('mood_logs')
+            .delete()
+            .eq('id', id)
+            .eq('user_id', userId)
+            .select()
+            .single();
 
         ApiLogger.logDatabase(
           operation: 'DELETE',
@@ -225,8 +251,11 @@ class MoodProvider extends ChangeNotifier {
           table: 'mood_logs',
           error: e.toString(),
         );
+        notifyListeners();
+        return false;
       }
     }
     notifyListeners();
+    return true;
   }
 }

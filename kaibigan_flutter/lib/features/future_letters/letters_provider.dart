@@ -22,6 +22,22 @@ class FutureLetter {
 
   bool get isReadyToUnlock => DateTime.now().isAfter(deliverAt);
 
+  FutureLetter copyWith({
+    String? title,
+    String? content,
+    DateTime? deliverAt,
+    bool? isOpened,
+  }) {
+    return FutureLetter(
+      id: id,
+      title: title ?? this.title,
+      content: content ?? this.content,
+      deliverAt: deliverAt ?? this.deliverAt,
+      isOpened: isOpened ?? this.isOpened,
+      createdAt: createdAt,
+    );
+  }
+
   Map<String, dynamic> toMap({String? userId}) {
     final validId = UuidHelper.isValidUuid(id) ? id : UuidHelper.generateV4();
     final map = <String, dynamic>{
@@ -44,11 +60,11 @@ class FutureLetter {
       title: map['title'] ?? '',
       content: map['content'] ?? '',
       deliverAt: map['deliver_at'] != null
-          ? DateTime.parse(map['deliver_at'])
+          ? DateTime.parse(map['deliver_at']).toLocal()
           : DateTime.now().add(const Duration(days: 7)),
       isOpened: map['is_opened'] ?? false,
       createdAt: map['created_at'] != null
-          ? DateTime.parse(map['created_at'])
+          ? DateTime.parse(map['created_at']).toLocal()
           : DateTime.now(),
     );
   }
@@ -115,19 +131,31 @@ class LettersProvider extends ChangeNotifier {
     }
   }
 
-  Future<FutureLetter> createLetter({
+  Future<FutureLetter?> createLetter({
     required String title,
     required String content,
     required DateTime deliverAt,
   }) async {
+    final cleanTitle = title.trim();
+    final cleanContent = content.trim();
+    if (cleanContent.isEmpty) {
+      _errorMessage = 'Write a message before sealing your Future Letter.';
+      notifyListeners();
+      return null;
+    }
+    if (!deliverAt.isAfter(DateTime.now())) {
+      _errorMessage = 'Choose a delivery date in the future.';
+      notifyListeners();
+      return null;
+    }
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     final newLetter = FutureLetter(
       id: UuidHelper.generateV4(),
-      title: title,
-      content: content,
+      title: cleanTitle.isEmpty ? 'Letter to Future Self' : cleanTitle,
+      content: cleanContent,
       deliverAt: deliverAt,
       isOpened: false,
       createdAt: DateTime.now(),
@@ -160,29 +188,81 @@ class LettersProvider extends ChangeNotifier {
 
     _isLoading = false;
     notifyListeners();
-    return newLetter;
+    return saved ? newLetter : null;
   }
 
-  Future<void> deleteLetter(String id) async {
+  Future<bool> updateLetter(FutureLetter updated) async {
+    _errorMessage = null;
+    if (updated.title.trim().isEmpty || updated.content.trim().isEmpty) {
+      _errorMessage = 'A Future Letter needs both a title and a message.';
+      notifyListeners();
+      return false;
+    }
+    final userId = SupabaseService.isInitialized
+        ? SupabaseService.client.auth.currentUser?.id
+        : null;
+    if (userId == null || !UuidHelper.isValidUuid(updated.id)) {
+      _errorMessage =
+          'The letter could not be updated because sync is unavailable.';
+      notifyListeners();
+      return false;
+    }
+    final index = _letters.indexWhere((letter) => letter.id == updated.id);
+    if (index == -1) {
+      _errorMessage = 'This Future Letter is no longer available.';
+      notifyListeners();
+      return false;
+    }
+
+    final previous = _letters[index];
+    _letters[index] = updated;
+    notifyListeners();
+    try {
+      await SupabaseService.client
+          .from('future_letters')
+          .update(updated.toMap(userId: userId))
+          .eq('id', updated.id)
+          .eq('user_id', userId)
+          .select()
+          .single();
+      return true;
+    } catch (e) {
+      _letters[index] = previous;
+      _errorMessage = 'The letter could not be updated. Please try again.';
+      ApiLogger.logDatabase(
+        operation: 'UPDATE',
+        table: 'future_letters',
+        error: e.toString(),
+      );
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> deleteLetter(String id) async {
     _errorMessage = null;
     if (!SupabaseService.isInitialized ||
         SupabaseService.client.auth.currentUser == null) {
       _errorMessage =
           'The letter could not be deleted because sync is unavailable.';
       notifyListeners();
-      return;
+      return false;
     }
     final index = _letters.indexWhere((letter) => letter.id == id);
-    if (index == -1) return;
+    if (index == -1) return true;
     final removed = _letters.removeAt(index);
     notifyListeners();
 
     if (SupabaseService.isInitialized && UuidHelper.isValidUuid(id)) {
       try {
+        final userId = SupabaseService.client.auth.currentUser!.id;
         await SupabaseService.client
             .from('future_letters')
             .delete()
-            .eq('id', id);
+            .eq('id', id)
+            .eq('user_id', userId)
+            .select()
+            .single();
       } catch (e) {
         _letters.insert(index.clamp(0, _letters.length), removed);
         _errorMessage =
@@ -192,8 +272,11 @@ class LettersProvider extends ChangeNotifier {
           table: 'future_letters',
           error: e.toString(),
         );
+        notifyListeners();
+        return false;
       }
     }
     notifyListeners();
+    return true;
   }
 }

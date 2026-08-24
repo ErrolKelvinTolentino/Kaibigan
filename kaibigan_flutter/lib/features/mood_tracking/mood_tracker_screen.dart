@@ -207,35 +207,42 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
 
         const SizedBox(height: 18),
 
-        // ROW 1: 3 Beemojis (Struggling, Low, Okay)
-        Row(
-          children: [
-            Expanded(
-                child:
-                    _buildBeemojiItem(1, 'Struggling', isDark, imageSize: 62)),
-            const SizedBox(width: 10),
-            Expanded(child: _buildBeemojiItem(2, 'Low', isDark, imageSize: 62)),
-            const SizedBox(width: 10),
-            Expanded(
-                child: _buildBeemojiItem(3, 'Okay', isDark, imageSize: 62)),
-          ],
-        ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            const gap = 10.0;
+            final cardWidth = (constraints.maxWidth - (gap * 2)) / 3;
 
-        const SizedBox(height: 12),
-
-        // ROW 2: 2 Beemojis (Good, Awesome)
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Row(
-            children: [
-              Expanded(
-                  child: _buildBeemojiItem(4, 'Good', isDark, imageSize: 68)),
-              const SizedBox(width: 14),
-              Expanded(
-                  child:
-                      _buildBeemojiItem(5, 'Awesome', isDark, imageSize: 68)),
-            ],
-          ),
+            return Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildBeemojiItem(1, 'Struggling', isDark),
+                    ),
+                    const SizedBox(width: gap),
+                    Expanded(child: _buildBeemojiItem(2, 'Low', isDark)),
+                    const SizedBox(width: gap),
+                    Expanded(child: _buildBeemojiItem(3, 'Okay', isDark)),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: cardWidth,
+                      child: _buildBeemojiItem(4, 'Good', isDark),
+                    ),
+                    const SizedBox(width: gap),
+                    SizedBox(
+                      width: cardWidth,
+                      child: _buildBeemojiItem(5, 'Awesome', isDark),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
         ),
 
         const Spacer(),
@@ -318,7 +325,7 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
   }
 
   Widget _buildBeemojiItem(int score, String label, bool isDark,
-      {double imageSize = 64}) {
+      {double imageSize = 96}) {
     final isSelected = _selectedScore == score;
     final moodColor = MoodLog.getMoodColor(score);
 
@@ -331,6 +338,7 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
+        height: 168,
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
         decoration: BoxDecoration(
           color: isSelected
@@ -1075,11 +1083,17 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
                           icon: Icons.sentiment_neutral_rounded,
                         );
                         if (confirmed && context.mounted) {
-                          provider.deleteMoodLog(log.id);
-                          Navigator.pop(ctx);
+                          final deleted = await provider.deleteMoodLog(log.id);
+                          if (!context.mounted) return;
+                          if (deleted) Navigator.pop(ctx);
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Mood check-in gently removed.'),
+                            SnackBar(
+                              content: Text(
+                                deleted
+                                    ? 'Mood check-in gently removed.'
+                                    : provider.errorMessage ??
+                                        'The mood check-in could not be removed.',
+                              ),
                               behavior: SnackBarBehavior.floating,
                               duration: Duration(seconds: 2),
                             ),
@@ -1150,13 +1164,19 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16)),
             ),
-            onPressed: () {
+            onPressed: () async {
               final updated = log.copyWith(note: noteController.text.trim());
-              provider.updateMoodLog(updated);
-              Navigator.pop(ctx);
+              final saved = await provider.updateMoodLog(updated);
+              if (!ctx.mounted) return;
+              if (saved) Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Mood note updated! ✨'),
+                SnackBar(
+                  content: Text(
+                    saved
+                        ? 'Mood note updated! ✨'
+                        : provider.errorMessage ??
+                            'The mood note could not be updated.',
+                  ),
                   behavior: SnackBarBehavior.floating,
                 ),
               );

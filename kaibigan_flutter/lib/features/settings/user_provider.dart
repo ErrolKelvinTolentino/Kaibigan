@@ -29,6 +29,7 @@ class UserProvider extends ChangeNotifier {
   AuthMode _authMode = AuthMode.pending;
   String? _userEmail;
   String? _authError;
+  String? _dataError;
   bool _isPasswordRecovery = false;
 
   String get displayName => _displayName;
@@ -42,6 +43,7 @@ class UserProvider extends ChangeNotifier {
   String? get userEmail => _userEmail;
   String get email => _userEmail ?? '';
   String? get authError => _authError;
+  String? get dataError => _dataError;
   bool get isPasswordRecovery => _isPasswordRecovery;
 
   Future<void> _ensureLoaded() async {
@@ -248,6 +250,7 @@ class UserProvider extends ChangeNotifier {
         email: email,
         password: password,
         data: {'display_name': displayName},
+        emailRedirectTo: EnvConfig.oauthRedirectUrl,
       );
 
       if (response.user != null) {
@@ -280,6 +283,35 @@ class UserProvider extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+  }
+
+  Future<bool> resendConfirmation(String email) async {
+    await _ensureLoaded();
+    _authError = null;
+
+    if (!SupabaseService.isInitialized) {
+      _authError =
+          'Supabase is not initialized. Please check your connection or credentials.';
+      notifyListeners();
+      return false;
+    }
+
+    try {
+      await SupabaseService.client.auth.resend(
+        type: OtpType.signup,
+        email: email.trim(),
+        emailRedirectTo: EnvConfig.oauthRedirectUrl,
+      );
+      notifyListeners();
+      return true;
+    } on AuthException catch (error) {
+      _authError = _friendlyAuthError(error);
+    } catch (_) {
+      _authError =
+          'We could not resend the confirmation email. Please try again.';
+    }
+    notifyListeners();
+    return false;
   }
 
   Future<bool> resetPassword(String email) async {
@@ -362,14 +394,18 @@ class UserProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _upsertProfileToSupabase({
+  Future<bool> _upsertProfileToSupabase({
     required String userId,
     required String email,
     required String displayName,
   }) async {
-    if (!SupabaseService.isInitialized) return;
+    if (!SupabaseService.isInitialized) {
+      _dataError = 'Profile sync is unavailable.';
+      return false;
+    }
 
     try {
+      _dataError = null;
       final client = SupabaseService.client;
       await client.from('profiles').upsert({
         'id': userId,
@@ -379,32 +415,36 @@ class UserProvider extends ChangeNotifier {
         'preferred_language': _preferredLanguage,
         'updated_at': DateTime.now().toIso8601String(),
       }, onConflict: 'id');
+      return true;
     } catch (e) {
+      _dataError = 'Your profile changes could not be synced.';
       ApiLogger.logDatabase(
         operation: 'UPSERT',
         table: 'profiles',
         error: e.toString(),
       );
+      notifyListeners();
+      return false;
     }
   }
 
-  Future<void> setCompanion(String companionId) async {
+  Future<bool> setCompanion(String companionId) async {
     _selectedCompanion = companionId;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('selected_companion', companionId);
-    await _syncCurrentProfile();
+    return _syncCurrentProfile();
   }
 
-  Future<void> setSelectedCompanion(String companionId) =>
+  Future<bool> setSelectedCompanion(String companionId) =>
       setCompanion(companionId);
 
-  Future<void> setLanguage(String lang) async {
+  Future<bool> setLanguage(String lang) async {
     _preferredLanguage = lang;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('preferred_language', lang);
-    await _syncCurrentProfile();
+    return _syncCurrentProfile();
   }
 
   Future<void> toggleDarkMode(bool val) async {
@@ -414,9 +454,13 @@ class UserProvider extends ChangeNotifier {
     await prefs.setBool('is_dark_mode', val);
   }
 
-  Future<void> updateDisplayName(String name) async {
+  Future<bool> updateDisplayName(String name) async {
     final cleanName = name.trim();
-    if (cleanName.isEmpty) return;
+    if (cleanName.isEmpty) {
+      _dataError = 'Display name cannot be empty.';
+      notifyListeners();
+      return false;
+    }
     _displayName = cleanName;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
@@ -427,19 +471,22 @@ class UserProvider extends ChangeNotifier {
       final userId = SupabaseService.client.auth.currentUser!.id;
       final email =
           SupabaseService.client.auth.currentUser!.email ?? _userEmail ?? '';
-      await _upsertProfileToSupabase(
+      return _upsertProfileToSupabase(
         userId: userId,
         email: email,
         displayName: cleanName,
       );
     }
+    _dataError = 'Profile sync is unavailable.';
+    notifyListeners();
+    return false;
   }
 
-  Future<void> _syncCurrentProfile() async {
-    if (!SupabaseService.isInitialized) return;
+  Future<bool> _syncCurrentProfile() async {
+    if (!SupabaseService.isInitialized) return false;
     final user = SupabaseService.client.auth.currentUser;
-    if (user == null) return;
-    await _upsertProfileToSupabase(
+    if (user == null) return false;
+    return _upsertProfileToSupabase(
       userId: user.id,
       email: user.email ?? _userEmail ?? '',
       displayName: _displayName,

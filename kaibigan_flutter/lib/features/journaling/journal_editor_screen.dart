@@ -964,15 +964,23 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                   icon: Icons.edit_note_rounded,
                 );
                 if (confirmed && mounted) {
-                  provider.deleteJournalEntry(widget.targetEntry!.id);
-                  nav.pop();
-                  messenger.showSnackBar(
-                    const SnackBar(
-                      content: Text('Journal note gently removed.'),
-                      behavior: SnackBarBehavior.floating,
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
+                  final deleted =
+                      await provider.deleteJournalEntry(widget.targetEntry!.id);
+                  if (!mounted) return;
+                  if (deleted) {
+                    nav.pop();
+                    messenger.showSnackBar(
+                      const SnackBar(
+                        content: Text('Journal note gently removed.'),
+                        behavior: SnackBarBehavior.floating,
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  } else {
+                    messenger.showSnackBar(
+                      SnackBar(content: Text(provider.errorMessage!)),
+                    );
+                  }
                 }
               },
             ),

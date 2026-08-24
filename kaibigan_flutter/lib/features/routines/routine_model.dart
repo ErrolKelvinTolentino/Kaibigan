@@ -192,7 +192,9 @@ class RoutineConfig {
   }
 
   int get activeStepsCount => steps.where((s) => s.isEnabled).length;
-  int get totalMinutes => steps.where((s) => s.isEnabled).fold(0, (sum, s) => sum + s.estimatedMinutes);
+  int get totalMinutes => steps
+      .where((s) => s.isEnabled)
+      .fold(0, (sum, s) => sum + s.estimatedMinutes);
 }
 
 class RoutineLog {
@@ -217,6 +219,30 @@ class RoutineLog {
     this.moodNote,
     this.gratitudeContent,
   });
+
+  RoutineLog copyWith({
+    String? id,
+    String? routineId,
+    RoutineType? routineType,
+    DateTime? completedAt,
+    SleepFeeling? sleepFeeling,
+    String? focusOrHighlight,
+    int? moodScore,
+    String? moodNote,
+    String? gratitudeContent,
+  }) {
+    return RoutineLog(
+      id: id ?? this.id,
+      routineId: routineId ?? this.routineId,
+      routineType: routineType ?? this.routineType,
+      completedAt: completedAt ?? this.completedAt,
+      sleepFeeling: sleepFeeling ?? this.sleepFeeling,
+      focusOrHighlight: focusOrHighlight ?? this.focusOrHighlight,
+      moodScore: moodScore ?? this.moodScore,
+      moodNote: moodNote ?? this.moodNote,
+      gratitudeContent: gratitudeContent ?? this.gratitudeContent,
+    );
+  }
 
   Map<String, dynamic> toMap({String? userId}) {
     final validId = UuidHelper.isValidUuid(id) ? id : UuidHelper.generateV4();
@@ -246,7 +272,7 @@ class RoutineLog {
         orElse: () => RoutineType.morning,
       ),
       completedAt: map['completed_at'] != null
-          ? DateTime.parse(map['completed_at'])
+          ? DateTime.parse(map['completed_at']).toLocal()
           : DateTime.now(),
       sleepFeeling: map['sleep_feeling'] != null
           ? SleepFeeling.values.firstWhere(

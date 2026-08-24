@@ -242,14 +242,20 @@ class _JournalListScreenState extends State<JournalListScreen> {
                               icon: Icons.edit_note_rounded,
                             );
                           },
-                          onDismissed: (_) {
-                            journalProvider.deleteJournalEntry(entry.id);
+                          onDismissed: (_) async {
+                            final deleted = await journalProvider
+                                .deleteJournalEntry(entry.id);
+                            if (!context.mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content:
-                                    Text('Journal reflection gently let go.'),
+                              SnackBar(
+                                content: Text(
+                                  deleted
+                                      ? 'Journal reflection gently let go.'
+                                      : journalProvider.errorMessage ??
+                                          'The entry could not be removed.',
+                                ),
                                 behavior: SnackBarBehavior.floating,
-                                duration: Duration(seconds: 2),
+                                duration: const Duration(seconds: 2),
                               ),
                             );
                           },
@@ -334,8 +340,20 @@ class _JournalListScreenState extends State<JournalListScreen> {
                                           ? AppColors.moodAwful
                                           : Colors.grey,
                                     ),
-                                    onPressed: () => journalProvider
-                                        .toggleFavorite(entry.id),
+                                    onPressed: () async {
+                                      final saved = await journalProvider
+                                          .toggleFavorite(entry.id);
+                                      if (!context.mounted || saved) return;
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            journalProvider.errorMessage ??
+                                                'The favorite change was not saved.',
+                                          ),
+                                        ),
+                                      );
+                                    },
                                   ),
                                 ],
                               ),
