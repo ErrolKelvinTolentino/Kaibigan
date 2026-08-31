@@ -197,6 +197,39 @@ class RoutineConfig {
       .fold(0, (sum, s) => sum + s.estimatedMinutes);
 }
 
+class RoutineSessionState {
+  const RoutineSessionState({
+    required this.routineId,
+    required this.nextStepIndex,
+    required this.skippedStepIds,
+    required this.updatedAt,
+  });
+
+  final String routineId;
+  final int nextStepIndex;
+  final Set<String> skippedStepIds;
+  final DateTime updatedAt;
+
+  Map<String, dynamic> toJson() => {
+        'routineId': routineId,
+        'nextStepIndex': nextStepIndex,
+        'skippedStepIds': skippedStepIds.toList(),
+        'updatedAt': updatedAt.toIso8601String(),
+      };
+
+  factory RoutineSessionState.fromJson(Map<String, dynamic> json) {
+    return RoutineSessionState(
+      routineId: json['routineId'] as String? ?? '',
+      nextStepIndex: json['nextStepIndex'] as int? ?? 0,
+      skippedStepIds: Set<String>.from(
+        json['skippedStepIds'] as List<dynamic>? ?? const [],
+      ),
+      updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '') ??
+          DateTime.now(),
+    );
+  }
+}
+
 class RoutineLog {
   final String id;
   final String routineId;

@@ -3,9 +3,13 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/utils/date_formatter.dart';
+import '../../core/utils/language_helper.dart';
 import '../../core/widgets/cozy_confirm_sheet.dart';
 import '../../core/widgets/sync_status_banner.dart';
+import '../../core/widgets/cozy_feature_banner.dart';
+import '../../core/widgets/kaibigan_state_view.dart';
 import '../companion/companion_model.dart';
+import '../settings/user_provider.dart';
 import 'journal_provider.dart';
 import 'journal_editor_screen.dart';
 
@@ -31,6 +35,12 @@ class _JournalListScreenState extends State<JournalListScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final journalProvider = Provider.of<JournalProvider>(context);
+    final language = context.watch<UserProvider>().language;
+    String copy(String english, String filipino) => LanguageHelper.pick(
+          language,
+          english: english,
+          filipino: filipino,
+        );
 
     var entries = journalProvider.entries;
 
@@ -56,7 +66,7 @@ class _JournalListScreenState extends State<JournalListScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          'Journal Reflections 📖',
+          copy('Journal reflections', 'Mga pagninilay'),
           style: AppTypography.heading3(context, isDark: isDark),
         ),
         centerTitle: true,
@@ -64,6 +74,25 @@ class _JournalListScreenState extends State<JournalListScreen> {
       body: SafeArea(
         child: Column(
           children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 6, 20, 10),
+              child: CozyFeatureBanner(
+                eyebrow: copy(
+                  'A place for the honest draft',
+                  'Lugar para sa tapat na saloobin',
+                ),
+                title: copy('Your reflections', 'Iyong mga pagninilay'),
+                subtitle: copy(
+                  'Keep what mattered. Return when you are ready.',
+                  'Itabi ang mahalaga. Balikan kapag handa ka na.',
+                ),
+                assetPath: 'assets/feature icons/Journal.png',
+                placeholderLabel: 'journal-landscape',
+                placeholderIcon: Icons.auto_stories_outlined,
+                imageAlignment: Alignment(0, -0.28),
+                height: 132,
+              ),
+            ),
             // Search Input
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
@@ -75,7 +104,10 @@ class _JournalListScreenState extends State<JournalListScreen> {
                         ? AppColors.textPrimaryDark
                         : AppColors.textPrimaryLight),
                 decoration: InputDecoration(
-                  hintText: 'Search reflections, thoughts, or tags...',
+                  hintText: copy(
+                    'Search reflections, thoughts, or tags…',
+                    'Maghanap sa mga pagninilay o tag…',
+                  ),
                   hintStyle: TextStyle(
                     fontSize: 13,
                     color: isDark ? Colors.white38 : Colors.black38,
@@ -126,7 +158,17 @@ class _JournalListScreenState extends State<JournalListScreen> {
                   return Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: ChoiceChip(
-                      label: Text(cat),
+                      label: Text(
+                        language == 'filipino'
+                            ? switch (cat) {
+                                'All' => 'Lahat',
+                                'Favorites' => 'Paborito',
+                                'Daily' => 'Araw-araw',
+                                'Gratitude' => 'Pasasalamat',
+                                _ => 'Pagninilay',
+                              }
+                            : cat,
+                      ),
                       selected: isSelected,
                       selectedColor: AppColors.honeyGold,
                       backgroundColor:
@@ -173,50 +215,24 @@ class _JournalListScreenState extends State<JournalListScreen> {
             Expanded(
               child: entries.isEmpty
                   ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(32),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color:
-                                    AppColors.honeyGold.withValues(alpha: 0.15),
-                                shape: BoxShape.circle,
+                      child: KaibiganStateView(
+                        icon: _selectedCategory == 'Favorites'
+                            ? Icons.favorite_border_rounded
+                            : Icons.auto_stories_outlined,
+                        title: _selectedCategory == 'Favorites'
+                            ? copy(
+                                'No favorites yet',
+                                'Wala pang paborito',
+                              )
+                            : copy(
+                                'This page is still quiet',
+                                'Tahimik pa ang pahinang ito',
                               ),
-                              child: const Icon(
-                                Icons.auto_stories_rounded,
-                                size: 36,
-                                color: AppColors.honeyAmber,
-                              ),
-                            ),
-                            const SizedBox(height: 14),
-                            Text(
-                              _selectedCategory == 'Favorites'
-                                  ? 'No favorite entries yet.'
-                                  : 'No journal reflections found.',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                                color: isDark
-                                    ? AppColors.textPrimaryDark
-                                    : AppColors.textPrimaryLight,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Write a gentle reflection with your companion to start your journey.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: isDark
-                                    ? AppColors.textSecondaryDark
-                                    : AppColors.textSecondaryLight,
-                              ),
-                            ),
-                          ],
+                        message: copy(
+                          'When something feels worth keeping, your reflection will wait for you here.',
+                          'Kapag may nais kang itabi, hihintayin ka rito ng iyong pagninilay.',
                         ),
+                        tone: KaibiganStateTone.warm,
                       ),
                     )
                   : ListView.builder(
@@ -234,11 +250,16 @@ class _JournalListScreenState extends State<JournalListScreen> {
                           confirmDismiss: (direction) async {
                             return await CozyConfirmSheet.show(
                               context,
-                              title: 'Palayain ang Tala?',
-                              message:
-                                  'Sigurado ka bang nais mong alisin ang journal note na "${entry.title}"? Valid at mahalaga ang bawat alaala mo.',
-                              confirmLabel: 'Let Go',
-                              cancelLabel: 'Keep Note',
+                              title: copy(
+                                'Delete this entry?',
+                                'Burahin ang talang ito?',
+                              ),
+                              message: copy(
+                                '“${entry.title}” will be permanently removed.',
+                                'Permanenteng buburahin ang “${entry.title}”.',
+                              ),
+                              confirmLabel: copy('Delete', 'Burahin'),
+                              cancelLabel: copy('Keep entry', 'Panatilihin'),
                               icon: Icons.edit_note_rounded,
                             );
                           },
@@ -250,9 +271,15 @@ class _JournalListScreenState extends State<JournalListScreen> {
                               SnackBar(
                                 content: Text(
                                   deleted
-                                      ? 'Journal reflection gently let go.'
+                                      ? copy(
+                                          'Journal entry deleted.',
+                                          'Nabura na ang tala.',
+                                        )
                                       : journalProvider.errorMessage ??
-                                          'The entry could not be removed.',
+                                          copy(
+                                            'The entry could not be removed.',
+                                            'Hindi mabura ang tala.',
+                                          ),
                                 ),
                                 behavior: SnackBarBehavior.floating,
                                 duration: const Duration(seconds: 2),
@@ -267,15 +294,16 @@ class _JournalListScreenState extends State<JournalListScreen> {
                               borderRadius: BorderRadius.circular(20),
                             ),
                             alignment: Alignment.centerRight,
-                            child: const Row(
+                            child: Row(
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
-                                Text('Let Go',
-                                    style: TextStyle(
+                                Text(copy('Delete', 'Burahin'),
+                                    style: const TextStyle(
                                         color: Colors.white,
                                         fontWeight: FontWeight.w700)),
-                                SizedBox(width: 8),
-                                Icon(Icons.delete_outline, color: Colors.white),
+                                const SizedBox(width: 8),
+                                const Icon(Icons.delete_outline,
+                                    color: Colors.white),
                               ],
                             ),
                           ),
@@ -316,9 +344,7 @@ class _JournalListScreenState extends State<JournalListScreen> {
                                 children: [
                                   Expanded(
                                     child: Text(
-                                      entry.title.isEmpty
-                                          ? 'Untitled Reflection'
-                                          : entry.title,
+                                      entry.displayTitle(language),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
@@ -420,9 +446,10 @@ class _JournalListScreenState extends State<JournalListScreen> {
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: AppColors.honeyAmber,
         icon: const Icon(Icons.edit_note_rounded, color: Colors.white),
-        label: const Text(
-          'Write Reflection',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        label: Text(
+          copy('Write reflection', 'Magsulat ng pagninilay'),
+          style:
+              const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
         ),
         onPressed: () {
           Navigator.push(

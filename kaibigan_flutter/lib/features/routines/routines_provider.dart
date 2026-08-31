@@ -1,4 +1,8 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/utils/uuid_helper.dart';
@@ -11,45 +15,280 @@ class RoutinesProvider extends ChangeNotifier {
   String? _activeUserId;
   String? _errorMessage;
   bool _isLoading = false;
+  bool _didInitializeIdentity = false;
+  RoutineSessionState? _activeSession;
 
-  RoutinesProvider() {
+  RoutinesProvider({
+    Iterable<RoutineLog> initialLogs = const [],
+    bool syncOnCreate = true,
+  }) {
     _initDefaultRoutines();
-    syncForCurrentUser();
+    _logs.addAll(initialLogs);
+    if (syncOnCreate) syncForCurrentUser();
   }
 
   List<RoutineConfig> get allRoutines => _routines.values.toList();
   List<RoutineLog> get logs => List.unmodifiable(_logs);
   String? get errorMessage => _errorMessage;
   bool get isLoading => _isLoading;
+  RoutineSessionState? get activeSession => _activeSession;
 
   RoutineLog? get todayHighlight {
     final now = DateTime.now();
-    for (final log in _logs) {
+    final candidates = _logs.where((log) {
       final text = log.focusOrHighlight?.trim() ?? '';
-      if (log.routineType == RoutineType.night &&
-          text.isNotEmpty &&
-          _isSameDay(log.completedAt, now)) {
+      return text.isNotEmpty && _isSameDay(log.completedAt, now);
+    }).toList()
+      ..sort((left, right) => right.completedAt.compareTo(left.completedAt));
+
+    // Highlights saved by the dedicated activity are authoritative. Older
+    // versions stored a night-routine highlight on the routine completion log,
+    // so keep that as a compatibility fallback without mistaking sleep/focus
+    // notes for the home highlight.
+    for (final log in candidates) {
+      if (log.routineId.startsWith('highlight_')) return log;
+    }
+    for (final log in candidates) {
+      if (log.routineId == 'night' && log.routineType == RoutineType.night) {
         return log;
       }
     }
     return null;
   }
 
-  static bool _isSameDay(DateTime left, DateTime right) =>
-      left.year == right.year &&
-      left.month == right.month &&
-      left.day == right.day;
+  static bool _isSameDay(DateTime left, DateTime right) {
+    final localLeft = left.toLocal();
+    final localRight = right.toLocal();
+    return localLeft.year == localRight.year &&
+        localLeft.month == localRight.month &&
+        localLeft.day == localRight.day;
+  }
 
   void syncForCurrentUser() {
     final userId = SupabaseService.isInitialized
         ? SupabaseService.client.auth.currentUser?.id
         : null;
-    if (userId == _activeUserId) return;
+    if (_didInitializeIdentity && userId == _activeUserId) return;
+    _didInitializeIdentity = true;
     _activeUserId = userId;
+    _activeSession = null;
+    _routines.clear();
+    _initDefaultRoutines();
     _logs.clear();
     _errorMessage = null;
     notifyListeners();
+    unawaited(_restoreRoutineState(userId));
     if (userId != null) fetchRoutineLogs();
+  }
+
+  Future<void> _restoreRoutineState(String? userId) async {
+    try {
+      await _restoreRoutineConfigs(userId);
+      await _restoreActiveSession(userId);
+    } catch (_) {
+      // Platform storage is not available in every host (for example, a
+      // provider-only unit test). Routines still work from their defaults.
+    }
+  }
+
+  String _sessionKey(String? userId) =>
+      'routine_active_session_v1_${userId ?? 'local'}';
+
+  String _configKey(String? userId) =>
+      'routine_configurations_v1_${userId ?? 'local'}';
+
+  Future<void> _restoreRoutineConfigs(String? userId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_configKey(userId));
+    if (_activeUserId != userId || raw == null) return;
+    try {
+      final decoded = jsonDecode(raw) as List<dynamic>;
+      final restored = <String, RoutineConfig>{};
+      for (final item in decoded) {
+        final routine = _routineFromJson(item as Map<String, dynamic>);
+        if (routine.id.isNotEmpty) {
+          restored[routine.id] = routine;
+        }
+      }
+      if (_activeUserId != userId || restored.isEmpty) return;
+      for (final entry in restored.entries) {
+        _routines[entry.key] = entry.value;
+      }
+      notifyListeners();
+    } catch (_) {
+      await prefs.remove(_configKey(userId));
+    }
+  }
+
+  Future<void> _persistRoutineConfigs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _configKey(_activeUserId),
+        jsonEncode(_routines.values.map(_routineToJson).toList()),
+      );
+    } catch (_) {
+      // Keep in-memory customization usable if local storage is unavailable.
+    }
+  }
+
+  Map<String, dynamic> _routineToJson(RoutineConfig routine) => {
+        'id': routine.id,
+        'title': routine.title,
+        'subtitle': routine.subtitle,
+        'type': routine.type.name,
+        'reminderHour': routine.reminderTime.hour,
+        'reminderMinute': routine.reminderTime.minute,
+        'isEnabled': routine.isEnabled,
+        'primaryColor': routine.primaryColor.toARGB32(),
+        'steps': routine.steps
+            .map(
+              (step) => {
+                'id': step.id,
+                'title': step.title,
+                'subtitle': step.subtitle,
+                'type': step.type.name,
+                'isEnabled': step.isEnabled,
+                'estimatedMinutes': step.estimatedMinutes,
+                'customPrompt': step.customPrompt,
+              },
+            )
+            .toList(),
+      };
+
+  RoutineConfig _routineFromJson(Map<String, dynamic> json) {
+    final type = RoutineType.values.firstWhere(
+      (value) => value.name == json['type'],
+      orElse: () => RoutineType.custom,
+    );
+    final steps = (json['steps'] as List<dynamic>? ?? const [])
+        .map((item) {
+          final map = item as Map<String, dynamic>;
+          final stepType = StepType.values.firstWhere(
+            (value) => value.name == map['type'],
+            orElse: () => StepType.custom,
+          );
+          return RoutineStep(
+            id: map['id'] as String? ?? '',
+            title: map['title'] as String? ?? 'Activity',
+            subtitle: map['subtitle'] as String? ?? '',
+            icon: _iconForStepType(stepType),
+            type: stepType,
+            isEnabled: map['isEnabled'] as bool? ?? true,
+            estimatedMinutes: map['estimatedMinutes'] as int? ?? 2,
+            customPrompt: map['customPrompt'] as String?,
+          );
+        })
+        .where((step) => step.id.isNotEmpty)
+        .toList();
+    return RoutineConfig(
+      id: json['id'] as String? ?? '',
+      title: json['title'] as String? ?? 'Routine',
+      subtitle: json['subtitle'] as String? ?? '',
+      type: type,
+      reminderTime: TimeOfDay(
+        hour: (json['reminderHour'] as int? ?? 12).clamp(0, 23),
+        minute: (json['reminderMinute'] as int? ?? 0).clamp(0, 59),
+      ),
+      isEnabled: json['isEnabled'] as bool? ?? true,
+      steps: steps,
+      primaryColor: Color(
+        json['primaryColor'] as int? ?? AppColors.honeyAmber.toARGB32(),
+      ),
+    );
+  }
+
+  IconData _iconForStepType(StepType type) => switch (type) {
+        StepType.sleepTracker => Icons.wb_twilight_rounded,
+        StepType.journalFocus => Icons.lightbulb_outline_rounded,
+        StepType.journalHighlight => Icons.auto_stories_outlined,
+        StepType.grounding => Icons.spa_outlined,
+        StepType.meditation => Icons.air_rounded,
+        StepType.moodTracker => Icons.sentiment_satisfied_alt_outlined,
+        StepType.gratitudeGarden => Icons.local_florist_outlined,
+        StepType.custom => Icons.star_outline_rounded,
+      };
+
+  Future<void> _restoreActiveSession(String? userId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_sessionKey(userId));
+    if (_activeUserId != userId || raw == null) return;
+    try {
+      final restored = RoutineSessionState.fromJson(
+        jsonDecode(raw) as Map<String, dynamic>,
+      );
+      final routine = _routines[restored.routineId];
+      final isToday = _isSameDay(restored.updatedAt, DateTime.now());
+      if (!isToday || routine == null || !routine.isEnabled) {
+        await prefs.remove(_sessionKey(userId));
+        return;
+      }
+      final stepCount = routine.activeStepsCount;
+      _activeSession = RoutineSessionState(
+        routineId: restored.routineId,
+        nextStepIndex: restored.nextStepIndex.clamp(0, stepCount),
+        skippedStepIds: restored.skippedStepIds,
+        updatedAt: restored.updatedAt,
+      );
+      notifyListeners();
+    } catch (_) {
+      await prefs.remove(_sessionKey(userId));
+    }
+  }
+
+  Future<void> _persistActiveSession() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = _sessionKey(_activeUserId);
+      final session = _activeSession;
+      if (session == null) {
+        await prefs.remove(key);
+      } else {
+        await prefs.setString(key, jsonEncode(session.toJson()));
+      }
+    } catch (_) {
+      // The current session remains valid in memory for this app run.
+    }
+  }
+
+  RoutineSessionState? sessionFor(String routineId) {
+    final session = _activeSession;
+    if (session == null || session.routineId != routineId) return null;
+    if (!_isSameDay(session.updatedAt, DateTime.now())) return null;
+    return session;
+  }
+
+  void startRoutineSession(String routineId) {
+    _activeSession = RoutineSessionState(
+      routineId: routineId,
+      nextStepIndex: 0,
+      skippedStepIds: const {},
+      updatedAt: DateTime.now(),
+    );
+    notifyListeners();
+    unawaited(_persistActiveSession());
+  }
+
+  void updateRoutineSession(
+    String routineId,
+    int nextStepIndex,
+    Set<String> skippedStepIds,
+  ) {
+    _activeSession = RoutineSessionState(
+      routineId: routineId,
+      nextStepIndex: nextStepIndex,
+      skippedStepIds: Set.unmodifiable(skippedStepIds),
+      updatedAt: DateTime.now(),
+    );
+    notifyListeners();
+    unawaited(_persistActiveSession());
+  }
+
+  void clearRoutineSession([String? routineId]) {
+    if (routineId != null && _activeSession?.routineId != routineId) return;
+    _activeSession = null;
+    notifyListeners();
+    unawaited(_persistActiveSession());
   }
 
   RoutineType get currentPhase {
@@ -67,14 +306,27 @@ class RoutinesProvider extends ChangeNotifier {
     final phase = currentPhase;
     switch (phase) {
       case RoutineType.morning:
-        return getRoutineById('morning');
+        return _availableRoutine('morning');
       case RoutineType.midday:
-        return getRoutineById('midday');
+        return _availableRoutine('midday');
       case RoutineType.night:
-        return getRoutineById('night');
+        return _availableRoutine('night');
       case RoutineType.custom:
-        return getRoutineById('morning');
+        return _availableRoutine('morning');
     }
+  }
+
+  RoutineConfig? _availableRoutine(String id) {
+    final routine = getRoutineById(id);
+    if (routine != null && routine.isEnabled && routine.activeStepsCount > 0) {
+      return routine;
+    }
+    for (final candidate in _routines.values) {
+      if (candidate.isEnabled && candidate.activeStepsCount > 0) {
+        return candidate;
+      }
+    }
+    return null;
   }
 
   RoutineConfig? getRoutineById(String id) => _routines[id];
@@ -83,20 +335,19 @@ class RoutinesProvider extends ChangeNotifier {
     final now = DateTime.now();
     return _logs
         .where((log) =>
-            log.routineId == log.routineType.name &&
+            _routines.containsKey(log.routineId) &&
             _isSameDay(log.completedAt, now))
+        .map((log) => log.routineId)
+        .toSet()
         .length;
   }
 
   int get streakDays {
-    final completedDays = _logs
-        .where((log) => log.routineId == log.routineType.name)
-        .map((log) => DateTime(
-              log.completedAt.year,
-              log.completedAt.month,
-              log.completedAt.day,
-            ))
-        .toSet();
+    final completedDays =
+        _logs.where((log) => _routines.containsKey(log.routineId)).map((log) {
+      final local = log.completedAt.toLocal();
+      return DateTime(local.year, local.month, local.day);
+    }).toSet();
     if (completedDays.isEmpty) return 0;
 
     var cursor = DateTime.now();
@@ -113,11 +364,13 @@ class RoutinesProvider extends ChangeNotifier {
   }
 
   bool isRoutineCompletedToday(RoutineType type) {
+    return isRoutineCompletedTodayById(type.name);
+  }
+
+  bool isRoutineCompletedTodayById(String routineId) {
     final now = DateTime.now();
     return _logs.any((log) =>
-        log.routineId == type.name &&
-        log.routineType == type &&
-        _isSameDay(log.completedAt, now));
+        log.routineId == routineId && _isSameDay(log.completedAt, now));
   }
 
   void _initDefaultRoutines() {
@@ -128,7 +381,7 @@ class RoutinesProvider extends ChangeNotifier {
       subtitle: 'Start your day with clarity & positivity',
       type: RoutineType.morning,
       reminderTime: const TimeOfDay(hour: 7, minute: 30),
-      primaryColor: AppColors.sageGreen,
+      primaryColor: AppColors.honeyAmber,
       steps: [
         RoutineStep(
           id: 'm-gratitude',
@@ -156,8 +409,8 @@ class RoutinesProvider extends ChangeNotifier {
         ),
         RoutineStep(
           id: 'm-breath',
-          title: 'Quick Breathing Exercise',
-          subtitle: '1-minute morning breathing pause',
+          title: '30-second breathing reset',
+          subtitle: 'Three calm breaths before you begin',
           icon: Icons.air,
           type: StepType.meditation,
           estimatedMinutes: 1,
@@ -172,7 +425,7 @@ class RoutinesProvider extends ChangeNotifier {
       subtitle: 'Pause, check in, and reset your day',
       type: RoutineType.midday,
       reminderTime: const TimeOfDay(hour: 13, minute: 0),
-      primaryColor: AppColors.softRose,
+      primaryColor: AppColors.honeyGold,
       steps: [
         RoutineStep(
           id: 'md-mood',
@@ -192,16 +445,16 @@ class RoutinesProvider extends ChangeNotifier {
         ),
         RoutineStep(
           id: 'md-grounding',
-          title: '5-4-3-2-1 Grounding',
-          subtitle: 'Anchor your senses to the present moment',
+          title: 'Quick 3-2-1 grounding',
+          subtitle: 'A focused sensory reset in about 30 seconds',
           icon: Icons.spa_outlined,
           type: StepType.grounding,
-          estimatedMinutes: 3,
+          estimatedMinutes: 1,
         ),
         RoutineStep(
           id: 'md-breath',
-          title: 'Quick Breathing Exercise',
-          subtitle: '1-minute calming box breathing',
+          title: '30-second breathing reset',
+          subtitle: 'Three calm breaths with a longer exhale',
           icon: Icons.air,
           type: StepType.meditation,
           estimatedMinutes: 1,
@@ -216,7 +469,7 @@ class RoutinesProvider extends ChangeNotifier {
       subtitle: 'Reflect on your day & transition toward rest',
       type: RoutineType.night,
       reminderTime: const TimeOfDay(hour: 21, minute: 30),
-      primaryColor: AppColors.lavenderMist,
+      primaryColor: AppColors.warmHoney,
       steps: [
         RoutineStep(
           id: 'n-highlight',
@@ -244,16 +497,16 @@ class RoutinesProvider extends ChangeNotifier {
         ),
         RoutineStep(
           id: 'n-grounding',
-          title: '5-4-3-2-1 Grounding',
-          subtitle: 'Unwind and bring attention back to present',
+          title: 'Quick 3-2-1 grounding',
+          subtitle: 'Return to the room in about 30 seconds',
           icon: Icons.spa_outlined,
           type: StepType.grounding,
-          estimatedMinutes: 3,
+          estimatedMinutes: 1,
         ),
         RoutineStep(
           id: 'n-breath',
-          title: 'Quick Breathing Exercise',
-          subtitle: 'Gentle evening breathing reset',
+          title: '30-second breathing reset',
+          subtitle: 'Three slower breaths before rest',
           icon: Icons.air,
           type: StepType.meditation,
           estimatedMinutes: 1,
@@ -317,6 +570,8 @@ class RoutinesProvider extends ChangeNotifier {
         return step;
       }).toList();
       _routines[routineId] = routine.copyWith(steps: updatedSteps);
+      clearRoutineSession(routineId);
+      unawaited(_persistRoutineConfigs());
       notifyListeners();
     }
   }
@@ -326,6 +581,8 @@ class RoutinesProvider extends ChangeNotifier {
     if (routine != null) {
       final updatedSteps = List<RoutineStep>.from(routine.steps)..add(step);
       _routines[routineId] = routine.copyWith(steps: updatedSteps);
+      clearRoutineSession(routineId);
+      unawaited(_persistRoutineConfigs());
       notifyListeners();
     }
   }
@@ -335,6 +592,8 @@ class RoutinesProvider extends ChangeNotifier {
     if (routine != null) {
       final updatedSteps = routine.steps.where((s) => s.id != stepId).toList();
       _routines[routineId] = routine.copyWith(steps: updatedSteps);
+      clearRoutineSession(routineId);
+      unawaited(_persistRoutineConfigs());
       notifyListeners();
     }
   }
@@ -347,6 +606,8 @@ class RoutinesProvider extends ChangeNotifier {
       final item = updatedSteps.removeAt(oldIndex);
       updatedSteps.insert(newIndex, item);
       _routines[routineId] = routine.copyWith(steps: updatedSteps);
+      clearRoutineSession(routineId);
+      unawaited(_persistRoutineConfigs());
       notifyListeners();
     }
   }
@@ -355,6 +616,7 @@ class RoutinesProvider extends ChangeNotifier {
     final routine = _routines[routineId];
     if (routine != null) {
       _routines[routineId] = routine.copyWith(reminderTime: time);
+      unawaited(_persistRoutineConfigs());
       notifyListeners();
     }
   }
@@ -363,12 +625,15 @@ class RoutinesProvider extends ChangeNotifier {
     final routine = _routines[routineId];
     if (routine != null) {
       _routines[routineId] = routine.copyWith(isEnabled: !routine.isEnabled);
+      if (routine.isEnabled) clearRoutineSession(routineId);
+      unawaited(_persistRoutineConfigs());
       notifyListeners();
     }
   }
 
   void addCustomRoutine(RoutineConfig routine) {
     _routines[routine.id] = routine;
+    unawaited(_persistRoutineConfigs());
     notifyListeners();
   }
 
@@ -378,6 +643,8 @@ class RoutinesProvider extends ChangeNotifier {
         routineId != 'midday' &&
         routineId != 'night') {
       _routines.remove(routineId);
+      clearRoutineSession(routineId);
+      unawaited(_persistRoutineConfigs());
       notifyListeners();
     }
   }

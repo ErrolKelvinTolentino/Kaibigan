@@ -16,18 +16,61 @@ class AddActionSheet extends StatefulWidget {
 class _AddActionSheetState extends State<AddActionSheet> {
   bool _isCreatingCustom = false;
   final TextEditingController _customTitleController = TextEditingController();
-  final TextEditingController _customSubtitleController = TextEditingController();
+  final TextEditingController _customSubtitleController =
+      TextEditingController();
   final TextEditingController _customPromptController = TextEditingController();
   int _estimatedMinutes = 2;
 
   final List<RoutineStep> _presetSteps = [
-    RoutineStep(id: 'preset-sleep', title: 'Sleep Feeling Check', subtitle: 'Log morning sleep restoration', icon: Icons.wb_twilight, type: StepType.sleepTracker, estimatedMinutes: 1),
-    RoutineStep(id: 'preset-focus', title: 'Morning Focus Journal', subtitle: 'Set intention & priority for today', icon: Icons.lightbulb_outline, type: StepType.journalFocus, estimatedMinutes: 2),
-    RoutineStep(id: 'preset-grounding', title: '5-4-3-2-1 Grounding', subtitle: 'Sensory reset session', icon: Icons.spa_outlined, type: StepType.grounding, estimatedMinutes: 3),
-    RoutineStep(id: 'preset-breath', title: 'Mindfulness Box Breathing', subtitle: 'Guided 1-minute calming breath', icon: Icons.air, type: StepType.meditation, estimatedMinutes: 2),
-    RoutineStep(id: 'preset-highlight', title: 'Night Highlight Journal', subtitle: 'Reflect on top moment today', icon: Icons.auto_stories_outlined, type: StepType.journalHighlight, estimatedMinutes: 3),
-    RoutineStep(id: 'preset-mood', title: 'Night Mood Check-In', subtitle: 'Track emotional state & factors', icon: Icons.sentiment_satisfied_alt_outlined, type: StepType.moodTracker, estimatedMinutes: 2),
-    RoutineStep(id: 'preset-gratitude', title: 'Gratitude Garden Planting', subtitle: 'Plant a gratitude flower', icon: Icons.local_florist_outlined, type: StepType.gratitudeGarden, estimatedMinutes: 2),
+    RoutineStep(
+        id: 'preset-sleep',
+        title: 'Sleep Feeling Check',
+        subtitle: 'Log morning sleep restoration',
+        icon: Icons.wb_twilight,
+        type: StepType.sleepTracker,
+        estimatedMinutes: 1),
+    RoutineStep(
+        id: 'preset-focus',
+        title: 'Morning Focus Journal',
+        subtitle: 'Set intention & priority for today',
+        icon: Icons.lightbulb_outline,
+        type: StepType.journalFocus,
+        estimatedMinutes: 2),
+    RoutineStep(
+        id: 'preset-grounding',
+        title: 'Quick 3-2-1 Grounding',
+        subtitle: 'About 30 seconds of sensory anchoring',
+        icon: Icons.spa_outlined,
+        type: StepType.grounding,
+        estimatedMinutes: 1),
+    RoutineStep(
+        id: 'preset-breath',
+        title: '30-second Breathing Reset',
+        subtitle: 'Three guided calming breaths',
+        icon: Icons.air,
+        type: StepType.meditation,
+        estimatedMinutes: 1),
+    RoutineStep(
+        id: 'preset-highlight',
+        title: 'Night Highlight Journal',
+        subtitle: 'Reflect on top moment today',
+        icon: Icons.auto_stories_outlined,
+        type: StepType.journalHighlight,
+        estimatedMinutes: 3),
+    RoutineStep(
+        id: 'preset-mood',
+        title: 'Night Mood Check-In',
+        subtitle: 'Track emotional state & factors',
+        icon: Icons.sentiment_satisfied_alt_outlined,
+        type: StepType.moodTracker,
+        estimatedMinutes: 2),
+    RoutineStep(
+        id: 'preset-gratitude',
+        title: 'Gratitude Garden Planting',
+        subtitle: 'Plant a gratitude flower',
+        icon: Icons.local_florist_outlined,
+        type: StepType.gratitudeGarden,
+        estimatedMinutes: 2),
   ];
 
   @override
@@ -39,7 +82,8 @@ class _AddActionSheetState extends State<AddActionSheet> {
   }
 
   void _addPresetAction(RoutineStep step) {
-    final routinesProvider = Provider.of<RoutinesProvider>(context, listen: false);
+    final routinesProvider =
+        Provider.of<RoutinesProvider>(context, listen: false);
     final newStep = step.copyWith(
       id: 'step_${DateTime.now().millisecondsSinceEpoch}',
       isEnabled: true,
@@ -51,11 +95,14 @@ class _AddActionSheetState extends State<AddActionSheet> {
   void _saveCustomAction() {
     if (_customTitleController.text.trim().isEmpty) return;
 
-    final routinesProvider = Provider.of<RoutinesProvider>(context, listen: false);
+    final routinesProvider =
+        Provider.of<RoutinesProvider>(context, listen: false);
     final newStep = RoutineStep(
       id: 'custom_step_${DateTime.now().millisecondsSinceEpoch}',
       title: _customTitleController.text.trim(),
-      subtitle: _customSubtitleController.text.trim().isEmpty ? 'Custom Action Step' : _customSubtitleController.text.trim(),
+      subtitle: _customSubtitleController.text.trim().isEmpty
+          ? 'Custom Action Step'
+          : _customSubtitleController.text.trim(),
       icon: Icons.star_outline,
       type: StepType.custom,
       estimatedMinutes: _estimatedMinutes,
@@ -91,11 +138,15 @@ class _AddActionSheetState extends State<AddActionSheet> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  _isCreatingCustom ? 'Create Custom Action' : 'Add Action to Routine',
+                  _isCreatingCustom
+                      ? 'Create Custom Action'
+                      : 'Add Action to Routine',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
-                    color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                    color: isDark
+                        ? AppColors.textPrimaryDark
+                        : AppColors.textPrimaryLight,
                   ),
                 ),
                 IconButton(
@@ -105,7 +156,6 @@ class _AddActionSheetState extends State<AddActionSheet> {
               ],
             ),
             const SizedBox(height: 16),
-
             if (!_isCreatingCustom) ...[
               ElevatedButton.icon(
                 onPressed: () => setState(() => _isCreatingCustom = true),
@@ -115,20 +165,27 @@ class _AddActionSheetState extends State<AddActionSheet> {
                   backgroundColor: AppColors.sageGreen,
                   foregroundColor: Colors.white,
                   minimumSize: const Size(double.infinity, 48),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16)),
                 ),
               ),
               const SizedBox(height: 20),
               Text(
                 'Or Pick Preset Action:',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight),
+                style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: isDark
+                        ? AppColors.textPrimaryDark
+                        : AppColors.textPrimaryLight),
               ),
               const SizedBox(height: 10),
               ..._presetSteps.map((step) {
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),
                   decoration: BoxDecoration(
-                    color: isDark ? AppColors.darkBackground : AppColors.warmCream,
+                    color:
+                        isDark ? AppColors.darkBackground : AppColors.warmCream,
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: ListTile(
@@ -138,10 +195,14 @@ class _AddActionSheetState extends State<AddActionSheet> {
                         color: AppColors.sageGreen.withValues(alpha: 0.15),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(step.icon, color: AppColors.sageGreen, size: 20),
+                      child:
+                          Icon(step.icon, color: AppColors.sageGreen, size: 20),
                     ),
-                    title: Text(step.title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                    subtitle: Text(step.subtitle, style: const TextStyle(fontSize: 12)),
+                    title: Text(step.title,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 14)),
+                    subtitle: Text(step.subtitle,
+                        style: const TextStyle(fontSize: 12)),
                     trailing: const Icon(Icons.add, color: AppColors.sageGreen),
                     onTap: () => _addPresetAction(step),
                   ),
@@ -154,8 +215,11 @@ class _AddActionSheetState extends State<AddActionSheet> {
                   labelText: 'Action Title',
                   hintText: 'e.g. 5-Min Warm Tea Stretch',
                   filled: true,
-                  fillColor: isDark ? AppColors.darkBackground : AppColors.warmCream,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                  fillColor:
+                      isDark ? AppColors.darkBackground : AppColors.warmCream,
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none),
                 ),
               ),
               const SizedBox(height: 12),
@@ -165,8 +229,11 @@ class _AddActionSheetState extends State<AddActionSheet> {
                   labelText: 'Subtitle',
                   hintText: 'e.g. Sip tea slowly and stretch',
                   filled: true,
-                  fillColor: isDark ? AppColors.darkBackground : AppColors.warmCream,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                  fillColor:
+                      isDark ? AppColors.darkBackground : AppColors.warmCream,
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none),
                 ),
               ),
               const SizedBox(height: 12),
@@ -174,17 +241,22 @@ class _AddActionSheetState extends State<AddActionSheet> {
                 controller: _customPromptController,
                 decoration: InputDecoration(
                   labelText: 'Custom Prompt (Optional)',
-                  hintText: 'e.g. What warm thoughts are you savoring right now?',
+                  hintText:
+                      'e.g. What warm thoughts are you savoring right now?',
                   filled: true,
-                  fillColor: isDark ? AppColors.darkBackground : AppColors.warmCream,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                  fillColor:
+                      isDark ? AppColors.darkBackground : AppColors.warmCream,
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none),
                 ),
               ),
               const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Estimated Duration:', style: TextStyle(fontWeight: FontWeight.w700)),
+                  const Text('Estimated Duration:',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
                   DropdownButton<int>(
                     value: _estimatedMinutes,
                     items: [1, 2, 3, 5, 10, 15].map((m) {
@@ -201,10 +273,12 @@ class _AddActionSheetState extends State<AddActionSheet> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () => setState(() => _isCreatingCustom = false),
+                      onPressed: () =>
+                          setState(() => _isCreatingCustom = false),
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20)),
                       ),
                       child: const Text('Back to Presets'),
                     ),
@@ -217,9 +291,11 @@ class _AddActionSheetState extends State<AddActionSheet> {
                         backgroundColor: AppColors.sageGreen,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20)),
                       ),
-                      child: const Text('Save Action', style: TextStyle(fontWeight: FontWeight.w700)),
+                      child: const Text('Save Action',
+                          style: TextStyle(fontWeight: FontWeight.w700)),
                     ),
                   ),
                 ],

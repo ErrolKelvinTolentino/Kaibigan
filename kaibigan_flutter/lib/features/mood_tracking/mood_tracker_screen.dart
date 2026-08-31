@@ -4,6 +4,9 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
+import '../../core/theme/kaibigan_tokens.dart';
+import '../../core/widgets/mobile_layout.dart';
+import '../../core/utils/language_helper.dart';
 import '../../core/widgets/cozy_confirm_sheet.dart';
 import '../../core/widgets/sync_status_banner.dart';
 import '../settings/user_provider.dart';
@@ -20,15 +23,73 @@ class MoodTrackerScreen extends StatefulWidget {
   State<MoodTrackerScreen> createState() => _MoodTrackerScreenState();
 }
 
-class _MoodTrackerScreenState extends State<MoodTrackerScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+/// Compact calendar marker: older check-ins sit behind while the most recent
+/// color is layered last and therefore remains easiest to read.
+class _MoodDotStack extends StatelessWidget {
+  const _MoodDotStack({required this.logs});
+
+  final List<MoodLog> logs;
+
+  @override
+  Widget build(BuildContext context) {
+    final ordered = List<MoodLog>.of(logs)
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    final visible =
+        ordered.length <= 5 ? ordered : ordered.sublist(ordered.length - 5);
+    const dotSize = 14.0;
+    const overlapStep = 5.5;
+    final width = dotSize + (visible.length - 1) * overlapStep;
+
+    return Semantics(
+      label:
+          '${logs.length} mood ${logs.length == 1 ? 'entry' : 'entries'}; newest is ${ordered.last.moodLabel}',
+      child: SizedBox(
+        width: width,
+        height: 18,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            for (var index = 0; index < visible.length; index++)
+              Positioned(
+                left: index * overlapStep,
+                top: (visible.length - index - 1) * 0.8,
+                child: Container(
+                  width: dotSize,
+                  height: dotSize,
+                  decoration: BoxDecoration(
+                    color: MoodLog.getMoodColor(visible[index].moodScore),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? AppColors.darkBackground
+                          : Colors.white,
+                      width: 1.4,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.08),
+                        blurRadius: 2,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
   int _currentStep =
       0; // 0: Beemoji, 1: Emotion Tags, 2: Free Reflection Note, 3: Completed Recap
   int _selectedScore = 4;
   String _selectedLabel = 'Good';
   final Set<String> _selectedEmotions = {};
   final TextEditingController _noteController = TextEditingController();
+  bool _showHistory = false;
 
   DateTime _focusedMonth = DateTime(DateTime.now().year, DateTime.now().month);
   DateTime? _selectedCalendarDate;
@@ -44,6 +105,11 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
     'Calm',
     'Proud',
     'Motivated',
+    'Joyful',
+    'Relieved',
+    'Confident',
+    'Curious',
+    'Connected',
     'Tired',
     'Anxious',
     'Overwhelmed',
@@ -52,17 +118,15 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
     'Lonely',
     'Confused',
     'Restless',
+    'Sad',
+    'Irritated',
+    'Disappointed',
+    'Insecure',
+    'Drained',
   ];
 
   @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-  }
-
-  @override
   void dispose() {
-    _tabController.dispose();
     _noteController.dispose();
     super.dispose();
   }
@@ -111,14 +175,16 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
         elevation: 0,
         leading: IconButton(
           icon: Icon(
-            _currentStep > 0 && _currentStep < 3
+            _showHistory || (_currentStep > 0 && _currentStep < 3)
                 ? Icons.arrow_back_ios_new_rounded
                 : Icons.close_rounded,
             color:
                 isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
           ),
           onPressed: () {
-            if (_currentStep > 0 && _currentStep < 3) {
+            if (_showHistory) {
+              setState(() => _showHistory = false);
+            } else if (_currentStep > 0 && _currentStep < 3) {
               setState(() => _currentStep--);
             } else {
               Navigator.of(context).pop();
@@ -126,41 +192,40 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
           },
         ),
         title: Text(
-          'Mood Tracker',
+          _showHistory ? 'Mood history' : 'Check in',
           style: AppTypography.heading3(context, isDark: isDark),
         ),
         centerTitle: true,
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: AppColors.honeyGold,
-          labelColor:
-              isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
-          unselectedLabelColor: isDark
-              ? AppColors.textSecondaryDark
-              : AppColors.textSecondaryLight,
-          indicatorSize: TabBarIndicatorSize.label,
-          labelStyle:
-              const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
-          tabs: const [
-            Tab(text: 'Daily Check-In'),
-            Tab(text: 'Mood Calendar'),
-          ],
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              child: _buildCheckInFlow(context, isDark, mascot),
+        actions: [
+          if (!_showHistory && _currentStep < 3)
+            IconButton(
+              tooltip: 'View mood history',
+              onPressed: () => setState(() => _showHistory = true),
+              icon: const Icon(Icons.calendar_month_outlined),
             ),
-          ),
-          SafeArea(
-            child: _buildCalendarView(context, isDark),
-          ),
+          const SizedBox(width: 4),
         ],
       ),
+      body: _showHistory
+          ? SafeArea(child: _buildCalendarView(context, isDark))
+          : SafeArea(
+              child: LayoutBuilder(
+                builder: (context, constraints) => SingleChildScrollView(
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: MobileLayout.pageInsets(
+                    context,
+                    top: 14,
+                    bottom: 20,
+                  ),
+                  child: ConstrainedBox(
+                    constraints:
+                        BoxConstraints(minHeight: constraints.maxHeight - 34),
+                    child: _buildCheckInFlow(context, isDark, mascot),
+                  ),
+                ),
+              ),
+            ),
     );
   }
 
@@ -184,7 +249,6 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
       children: [
         _buildProgressBar(1, 3, isDark),
         const SizedBox(height: 20),
-
         Text(
           "Which bee describes you the most right now?",
           style: TextStyle(
@@ -204,106 +268,41 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
                   ? AppColors.textSecondaryDark
                   : AppColors.textSecondaryLight),
         ),
-
         const SizedBox(height: 18),
-
         LayoutBuilder(
           builder: (context, constraints) {
-            const gap = 10.0;
-            final cardWidth = (constraints.maxWidth - (gap * 2)) / 3;
+            const labels = ['Struggling', 'Low', 'Okay', 'Good', 'Great'];
+            const spacing = 10.0;
+            final cardWidth = (constraints.maxWidth - spacing * 2) / 3;
+            final imageSize = (cardWidth - 24).clamp(70.0, 108.0);
+
+            Widget card(int index) => SizedBox(
+                  width: cardWidth,
+                  child: _buildBeemojiItem(
+                    index + 1,
+                    labels[index],
+                    isDark,
+                    imageSize: imageSize,
+                  ),
+                );
 
             return Column(
+              key: const ValueKey('mood-expression-list'),
               children: [
                 Row(
-                  children: [
-                    Expanded(
-                      child: _buildBeemojiItem(1, 'Struggling', isDark),
-                    ),
-                    const SizedBox(width: gap),
-                    Expanded(child: _buildBeemojiItem(2, 'Low', isDark)),
-                    const SizedBox(width: gap),
-                    Expanded(child: _buildBeemojiItem(3, 'Okay', isDark)),
-                  ],
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [card(0), card(1), card(2)],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: spacing),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    SizedBox(
-                      width: cardWidth,
-                      child: _buildBeemojiItem(4, 'Good', isDark),
-                    ),
-                    const SizedBox(width: gap),
-                    SizedBox(
-                      width: cardWidth,
-                      child: _buildBeemojiItem(5, 'Awesome', isDark),
-                    ),
-                  ],
+                  children: [card(3), const SizedBox(width: spacing), card(4)],
                 ),
               ],
             );
           },
         ),
-
-        const Spacer(),
-
-        // Selected Mood Pill (Positioned right above the Next button as requested)
-        Center(
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
-            decoration: BoxDecoration(
-              color: MoodLog.getMoodColor(_selectedScore)
-                  .withValues(alpha: isDark ? 0.25 : 0.16),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color:
-                    MoodLog.getMoodColor(_selectedScore).withValues(alpha: 0.4),
-                width: 1.5,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: MoodLog.getMoodColor(_selectedScore)
-                      .withValues(alpha: isDark ? 0.2 : 0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: Image.asset(
-                    MoodLog.getMoodAssetPath(_selectedScore),
-                    width: 24,
-                    height: 24,
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) => Icon(
-                      Icons.sentiment_satisfied_alt_rounded,
-                      size: 24,
-                      color: MoodLog.getMoodColor(_selectedScore),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  _selectedLabel,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: MoodLog.getMoodColor(_selectedScore),
-                    letterSpacing: -0.2,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 16),
-
+        const SizedBox(height: 18),
         SizedBox(
           width: double.infinity,
           height: 54,
@@ -311,12 +310,12 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
             onPressed: () => setState(() => _currentStep = 1),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.honeyGold,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.onHoney,
               elevation: 0,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20)),
             ),
-            child: const Text("Next: Identify Emotions",
+            child: const Text("Continue",
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
           ),
         ),
@@ -329,75 +328,81 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
     final isSelected = _selectedScore == score;
     final moodColor = MoodLog.getMoodColor(score);
 
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedScore = score;
-          _selectedLabel = label;
-        });
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        height: 168,
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? moodColor.withValues(alpha: isDark ? 0.25 : 0.16)
-              : (isDark ? AppColors.darkCard : Colors.white),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      label: '$label mood',
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _selectedScore = score;
+            _selectedLabel = label;
+          });
+        },
+        borderRadius: BorderRadius.circular(20),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          height: 158,
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+          decoration: BoxDecoration(
             color: isSelected
-                ? moodColor
-                : (isDark
-                    ? AppColors.darkCardBorder
-                    : Colors.black.withValues(alpha: 0.06)),
-            width: isSelected ? 2.0 : 1.0,
-          ),
-          boxShadow: [
-            BoxShadow(
+                ? moodColor.withValues(alpha: isDark ? 0.25 : 0.16)
+                : (isDark ? AppColors.darkCard : Colors.white),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
               color: isSelected
-                  ? moodColor.withValues(alpha: isDark ? 0.3 : 0.15)
-                  : Colors.black.withValues(alpha: isDark ? 0.15 : 0.03),
-              blurRadius: isSelected ? 10 : 6,
-              offset: const Offset(0, 3),
+                  ? moodColor
+                  : (isDark
+                      ? AppColors.darkCardBorder
+                      : Colors.black.withValues(alpha: 0.06)),
+              width: isSelected ? 2.0 : 1.0,
             ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedScale(
-              scale: isSelected ? 1.08 : 1.0,
-              duration: const Duration(milliseconds: 150),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: Image.asset(
-                  MoodLog.getMoodAssetPath(score),
-                  width: imageSize,
-                  height: imageSize,
-                  fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) => Text(
-                    MoodLog.getMoodEmoji(score),
-                    style: TextStyle(fontSize: imageSize * 0.65),
+            boxShadow: [
+              BoxShadow(
+                color: isSelected
+                    ? moodColor.withValues(alpha: isDark ? 0.3 : 0.15)
+                    : Colors.black.withValues(alpha: isDark ? 0.15 : 0.03),
+                blurRadius: isSelected ? 10 : 6,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedScale(
+                scale: isSelected ? 1.08 : 1.0,
+                duration: const Duration(milliseconds: 150),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.asset(
+                    MoodLog.getMoodAssetPath(score),
+                    width: imageSize,
+                    height: imageSize,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) => Text(
+                      MoodLog.getMoodEmoji(score),
+                      style: TextStyle(fontSize: imageSize * 0.65),
+                    ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                color: isSelected
-                    ? moodColor
-                    : (isDark ? Colors.white70 : Colors.black87),
+              const SizedBox(height: 7),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                  color: isSelected
+                      ? moodColor
+                      : (isDark ? Colors.white70 : Colors.black87),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -421,7 +426,7 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
         ),
         const SizedBox(height: 6),
         Text(
-          "Select up to 3 emotions that stand out most (${_selectedEmotions.length}/3 selected).",
+          "Choose up to three, or continue without choosing.",
           style: TextStyle(
               fontSize: 14,
               color: isDark
@@ -429,57 +434,53 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
                   : AppColors.textSecondaryLight),
         ),
         const SizedBox(height: 18),
-        Expanded(
-          child: SingleChildScrollView(
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 10,
-              children: _commonEmotions.map((emotion) {
-                final isSelected = _selectedEmotions.contains(emotion);
+        Wrap(
+          spacing: 8,
+          runSpacing: 10,
+          children: _commonEmotions.map((emotion) {
+            final isSelected = _selectedEmotions.contains(emotion);
 
-                return FilterChip(
-                  label: Text(emotion),
-                  selected: isSelected,
-                  onSelected: (selected) {
-                    setState(() {
-                      if (selected) {
-                        if (_selectedEmotions.length < 3) {
-                          _selectedEmotions.add(emotion);
-                        }
-                      } else {
-                        _selectedEmotions.remove(emotion);
-                      }
-                    });
-                  },
-                  selectedColor: AppColors.honeyGold
-                      .withValues(alpha: isDark ? 0.4 : 0.25),
-                  backgroundColor: isDark ? AppColors.darkCard : Colors.white,
-                  labelStyle: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                    color: isSelected
-                        ? AppColors.honeyAmber
-                        : (isDark
-                            ? AppColors.textPrimaryDark
-                            : AppColors.textPrimaryLight),
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    side: BorderSide(
-                      color: isSelected
-                          ? AppColors.honeyGold
-                          : (isDark
-                              ? AppColors.darkCardBorder
-                              : Colors.black.withValues(alpha: 0.08)),
-                      width: isSelected ? 1.5 : 1,
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
+            return FilterChip(
+              label: Text(emotion),
+              selected: isSelected,
+              onSelected: (selected) {
+                setState(() {
+                  if (selected) {
+                    if (_selectedEmotions.length < 3) {
+                      _selectedEmotions.add(emotion);
+                    }
+                  } else {
+                    _selectedEmotions.remove(emotion);
+                  }
+                });
+              },
+              selectedColor:
+                  AppColors.honeyGold.withValues(alpha: isDark ? 0.4 : 0.25),
+              backgroundColor: isDark ? AppColors.darkCard : Colors.white,
+              labelStyle: TextStyle(
+                fontSize: 13.5,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected
+                    ? AppColors.honeyAmber
+                    : (isDark
+                        ? AppColors.textPrimaryDark
+                        : AppColors.textPrimaryLight),
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(
+                  color: isSelected
+                      ? AppColors.honeyGold
+                      : (isDark
+                          ? AppColors.darkCardBorder
+                          : Colors.black.withValues(alpha: 0.08)),
+                  width: isSelected ? 1.5 : 1,
+                ),
+              ),
+            );
+          }).toList(),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 20),
         SizedBox(
           width: double.infinity,
           height: 56,
@@ -487,11 +488,11 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
             onPressed: () => setState(() => _currentStep = 2),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.honeyGold,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.onHoney,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20)),
             ),
-            child: const Text("Next: Add Reflection Note",
+            child: const Text("Continue",
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
           ),
         ),
@@ -517,7 +518,7 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
         ),
         const SizedBox(height: 6),
         Text(
-          "Feel free to write openly. Everything stays safe on your device.",
+          "Optional. A sentence can help you remember the context later.",
           style: TextStyle(
               fontSize: 14,
               color: isDark
@@ -564,19 +565,19 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
             ),
           ),
         ),
-        const Spacer(),
+        const SizedBox(height: 24),
         SizedBox(
           width: double.infinity,
           height: 56,
           child: ElevatedButton(
             onPressed: _saveMoodLog,
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.sageGreen,
-              foregroundColor: Colors.white,
+              backgroundColor: AppColors.honeyGold,
+              foregroundColor: AppColors.onHoney,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20)),
             ),
-            child: const Text("Save Mood Check-In",
+            child: const Text("Save check-in",
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
           ),
         ),
@@ -600,10 +601,10 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
                 MoodLog.getMoodEmoji(_selectedScore),
                 style: const TextStyle(fontSize: 72)),
           ),
-        ).animate().scale(duration: 400.ms, curve: Curves.easeOutBack),
+        ).animate().scale(duration: 320.ms, curve: Curves.easeOutCubic),
         const SizedBox(height: 24),
         Text(
-          "Mood Checked In!",
+          "Check-in saved",
           style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.w800,
@@ -659,7 +660,7 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  "${mascot.name}: Your feelings are valid and acknowledged. I'll tailor today's gentle activities for your mood.",
+                  "${mascot.name} will use this check-in to offer a gentler next step today.",
                   style: TextStyle(
                       fontSize: 13,
                       color: isDark
@@ -683,8 +684,8 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.sageGreen,
-              foregroundColor: Colors.white,
+              backgroundColor: AppColors.honeyGold,
+              foregroundColor: AppColors.onHoney,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(18)),
             ),
@@ -707,11 +708,12 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
 
     // Filter logs for selected date
     final selectedDateLogs = _selectedCalendarDate == null
-        ? []
+        ? <MoodLog>[]
         : logs
             .where(
                 (l) => DateUtils.isSameDay(l.createdAt, _selectedCalendarDate))
-            .toList();
+            .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -804,7 +806,8 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
                 // Find log for this day if any
                 final dayLogs = logs
                     .where((l) => DateUtils.isSameDay(l.createdAt, currentDate))
-                    .toList();
+                    .toList()
+                  ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
                 final hasLog = dayLogs.isNotEmpty;
 
                 return GestureDetector(
@@ -846,18 +849,8 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
                         ),
                         if (hasLog)
                           Padding(
-                            padding: const EdgeInsets.only(top: 2),
-                            child: Image.asset(
-                              MoodLog.getMoodAssetPath(dayLogs.first.moodScore),
-                              width: 22,
-                              height: 22,
-                              fit: BoxFit.contain,
-                              errorBuilder: (context, error, stackTrace) =>
-                                  Text(
-                                MoodLog.getMoodEmoji(dayLogs.first.moodScore),
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                            ),
+                            padding: const EdgeInsets.only(top: 3),
+                            child: _MoodDotStack(logs: dayLogs),
                           ),
                       ],
                     ),
@@ -921,18 +914,21 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
                             ),
                             child: Row(
                               children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(10),
-                                  child: Image.asset(
-                                    MoodLog.getMoodAssetPath(l.moodScore),
+                                Semantics(
+                                  label: '${l.moodLabel} mood color',
+                                  child: Container(
                                     width: 36,
                                     height: 36,
-                                    fit: BoxFit.contain,
-                                    errorBuilder:
-                                        (context, error, stackTrace) => Text(
-                                            MoodLog.getMoodEmoji(l.moodScore),
-                                            style:
-                                                const TextStyle(fontSize: 22)),
+                                    decoration: BoxDecoration(
+                                      color: MoodLog.getMoodColor(l.moodScore),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.white.withValues(
+                                          alpha: isDark ? 0.28 : 0.9,
+                                        ),
+                                        width: 2,
+                                      ),
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(width: 10),
@@ -988,6 +984,7 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
         borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
       ),
       builder: (ctx) {
+        final palette = ctx.kaibigan;
         return Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
@@ -997,7 +994,7 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: isDark ? Colors.white24 : Colors.black12,
+                  color: palette.border,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -1026,7 +1023,7 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
               const SizedBox(height: 4),
               Text(
                 DateFormat('EEEE, MMMM d, yyyy • h:mm a').format(log.createdAt),
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                style: TextStyle(fontSize: 12, color: palette.textSecondary),
               ),
               if (log.note != null && log.note!.isNotEmpty) ...[
                 const SizedBox(height: 14),
@@ -1034,7 +1031,7 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
                   width: double.infinity,
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: isDark ? Colors.black26 : const Color(0xFFF6F4ED),
+                    color: palette.surfaceSubtle,
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Text(
@@ -1043,8 +1040,7 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
                     style: TextStyle(
                         fontSize: 14,
                         fontStyle: FontStyle.italic,
-                        color:
-                            isDark ? Colors.white70 : const Color(0xFF2C2C2C)),
+                        color: palette.textPrimary),
                   ),
                 ),
               ],
@@ -1073,13 +1069,31 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () async {
+                        final language = context.read<UserProvider>().language;
                         final confirmed = await CozyConfirmSheet.show(
                           context,
-                          title: 'Palayain ang Mood Log?',
-                          message:
-                              'Sigurado ka bang nais mong alisin ang tala ng damdamin na ito?',
-                          confirmLabel: 'Let Go',
-                          cancelLabel: 'Keep Log',
+                          title: LanguageHelper.pick(
+                            language,
+                            english: 'Delete this mood check-in?',
+                            filipino: 'Burahin ang tala ng damdamin?',
+                          ),
+                          message: LanguageHelper.pick(
+                            language,
+                            english:
+                                'This mood check-in will be permanently removed.',
+                            filipino:
+                                'Permanenteng buburahin ang tala ng damdamin.',
+                          ),
+                          confirmLabel: LanguageHelper.pick(
+                            language,
+                            english: 'Delete',
+                            filipino: 'Burahin',
+                          ),
+                          cancelLabel: LanguageHelper.pick(
+                            language,
+                            english: 'Keep check-in',
+                            filipino: 'Panatilihin',
+                          ),
                           icon: Icons.sentiment_neutral_rounded,
                         );
                         if (confirmed && context.mounted) {
@@ -1126,10 +1140,11 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
   void _showEditMoodNoteDialog(
       BuildContext context, MoodLog log, MoodProvider provider, bool isDark) {
     final noteController = TextEditingController(text: log.note ?? '');
+    final palette = context.kaibigan;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: isDark ? AppColors.darkCard : Colors.white,
+        backgroundColor: palette.surfaceElevated,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: const Text('Edit Reflection Note',
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
@@ -1144,7 +1159,7 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
           decoration: InputDecoration(
             hintText: 'Add or edit your note...',
             filled: true,
-            fillColor: isDark ? Colors.black26 : const Color(0xFFF6F4ED),
+            fillColor: palette.surfaceSubtle,
             border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide.none),
@@ -1153,14 +1168,14 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel',
-                style:
-                    TextStyle(color: Colors.grey, fontWeight: FontWeight.w600)),
+            child: Text('Cancel',
+                style: TextStyle(
+                    color: palette.textSecondary, fontWeight: FontWeight.w600)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.sageGreen,
-              foregroundColor: Colors.white,
+              backgroundColor: AppColors.honeyGold,
+              foregroundColor: AppColors.onHoney,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16)),
             ),

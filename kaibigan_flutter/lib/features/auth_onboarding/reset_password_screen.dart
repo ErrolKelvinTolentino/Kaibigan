@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/widgets/kaibigan_logo.dart';
 import '../settings/user_provider.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
@@ -55,8 +56,28 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Icon(Icons.lock_reset_rounded,
-                      size: 56, color: AppColors.sageGreen),
+                  const Center(child: KaibiganLogo(size: 76)),
+                  const SizedBox(height: 12),
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.lock_reset_rounded,
+                        size: 18,
+                        color: AppColors.honeyAmber,
+                      ),
+                      SizedBox(width: 7),
+                      Text(
+                        'SECURE ACCOUNT RECOVERY',
+                        style: TextStyle(
+                          color: AppColors.honeyAmber,
+                          fontSize: 10.5,
+                          letterSpacing: 0.8,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 20),
                   Text('Choose a new password',
                       textAlign: TextAlign.center,

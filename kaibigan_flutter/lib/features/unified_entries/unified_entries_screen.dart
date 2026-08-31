@@ -1,60 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
-import '../../core/widgets/cozy_confirm_sheet.dart';
+import '../../core/widgets/kaibigan_state_view.dart';
 import '../journaling/journal_provider.dart';
-import '../journaling/journal_model.dart';
-import '../journaling/journal_editor_screen.dart';
 import '../gratitude_garden/gratitude_provider.dart';
 import '../gratitude_garden/gratitude_model.dart';
 import '../mood_tracking/mood_provider.dart';
 import '../mood_tracking/mood_model.dart';
 import '../routines/routines_provider.dart';
 import '../routines/routine_model.dart';
-import '../companion/companion_model.dart';
-
-enum EntryCategory {
-  all,
-  journal,
-  gratitude,
-  mood,
-  sleep,
-  highlight,
-  focus,
-  reflection,
-}
-
-class UnifiedFeedItem {
-  final String id;
-  final String title;
-  final String content;
-  final String? subtitle;
-  final String? aiInsight;
-  final EntryCategory category;
-  final String categoryTag;
-  final Color categoryColor;
-  final String iconAssetOrEmoji;
-  final DateTime timestamp;
-  final dynamic rawData;
-
-  UnifiedFeedItem({
-    required this.id,
-    required this.title,
-    required this.content,
-    this.subtitle,
-    this.aiInsight,
-    required this.category,
-    required this.categoryTag,
-    required this.categoryColor,
-    required this.iconAssetOrEmoji,
-    required this.timestamp,
-    this.rawData,
-  });
-}
+import '../settings/user_provider.dart';
+import 'unified_entry_detail_screen.dart';
+import 'unified_feed_item.dart';
 
 class UnifiedEntriesScreen extends StatefulWidget {
   const UnifiedEntriesScreen({super.key});
@@ -79,6 +38,7 @@ class _UnifiedEntriesScreenState extends State<UnifiedEntriesScreen> {
     final gratitudeProvider = Provider.of<GratitudeProvider>(context);
     final moodProvider = Provider.of<MoodProvider>(context);
     final routinesProvider = Provider.of<RoutinesProvider>(context);
+    final language = context.read<UserProvider>().language;
 
     final List<UnifiedFeedItem> items = [];
 
@@ -88,7 +48,7 @@ class _UnifiedEntriesScreenState extends State<UnifiedEntriesScreen> {
           j.tags.contains('Daily Reflection') || j.tags.contains('Reflection');
       items.add(UnifiedFeedItem(
         id: 'journal_${j.id}',
-        title: j.title.isEmpty ? 'Journal Entry' : j.title,
+        title: j.displayTitle(language),
         content: j.content,
         subtitle: j.mood.isNotEmpty ? 'Mood: ${j.mood}' : null,
         aiInsight: j.aiResponse,
@@ -301,26 +261,17 @@ class _UnifiedEntriesScreenState extends State<UnifiedEntriesScreen> {
             Expanded(
               child: items.isEmpty
                   ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.eco_outlined,
-                              size: 64,
-                              color:
-                                  AppColors.sageGreen.withValues(alpha: 0.5)),
-                          const SizedBox(height: 16),
-                          Text(
-                            'No entries found',
-                            style:
-                                AppTypography.heading3(context, isDark: isDark),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Start writing or recording your daily activities!',
-                            style: AppTypography.bodySmall(context,
-                                isDark: isDark),
-                          ),
-                        ],
+                      child: KaibiganStateView(
+                        icon: _searchQuery.isNotEmpty
+                            ? Icons.search_off_rounded
+                            : Icons.eco_outlined,
+                        title: _searchQuery.isNotEmpty
+                            ? 'Nothing matched that search'
+                            : 'Your story begins quietly',
+                        message: _searchQuery.isNotEmpty
+                            ? 'Try a simpler word or choose a different entry type.'
+                            : 'Saved reflections, moods, and meaningful moments will gather here over time.',
+                        tone: KaibiganStateTone.botanical,
                       ),
                     )
                   : ListView.builder(
@@ -380,8 +331,9 @@ class _UnifiedEntriesScreenState extends State<UnifiedEntriesScreen> {
         DateFormat('EEE, MMM d, yyyy • h:mm a').format(item.timestamp);
     final isPng = item.iconAssetOrEmoji.startsWith('assets/');
 
-    return GestureDetector(
-      onTap: () => _showDetailModal(context, item, isDark),
+    return InkWell(
+      onTap: () => _openEntryDetail(context, item),
+      borderRadius: BorderRadius.circular(22),
       child: Container(
         margin: const EdgeInsets.only(bottom: 14),
         padding: const EdgeInsets.all(18),
@@ -421,23 +373,27 @@ class _UnifiedEntriesScreenState extends State<UnifiedEntriesScreen> {
                   Text(item.iconAssetOrEmoji,
                       style: const TextStyle(fontSize: 34)),
                 const SizedBox(width: 12),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: item.categoryColor.withValues(alpha: 0.16),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    item.categoryTag,
-                    style: TextStyle(
-                      color: item.categoryColor,
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w700,
+                Flexible(
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: item.categoryColor.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      item.categoryTag,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: item.categoryColor,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ),
-                const Spacer(),
+                const SizedBox(width: 10),
                 Text(
                   DateFormat('MMM d').format(item.timestamp),
                   style: TextStyle(
@@ -534,326 +490,15 @@ class _UnifiedEntriesScreenState extends State<UnifiedEntriesScreen> {
     );
   }
 
-  void _showDetailModal(
-      BuildContext context, UnifiedFeedItem item, bool isDark) {
-    final isPng = item.iconAssetOrEmoji.startsWith('assets/');
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.darkCard : Colors.white,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 44,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white24 : Colors.black12,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            Row(
-              children: [
-                if (isPng)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(18),
-                    child: Image.asset(
-                      item.iconAssetOrEmoji,
-                      width: 80,
-                      height: 80,
-                      fit: BoxFit.contain,
-                    ),
-                  )
-                else
-                  Text(item.iconAssetOrEmoji,
-                      style: const TextStyle(fontSize: 48)),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: item.categoryColor.withValues(alpha: 0.16),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          item.categoryTag,
-                          style: TextStyle(
-                              color: item.categoryColor,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        item.title,
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
-                          color: isDark
-                              ? AppColors.textPrimaryDark
-                              : AppColors.textPrimaryLight,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 16),
-            Text(
-              DateFormat('EEEE, MMMM d, yyyy • h:mm a').format(item.timestamp),
-              style: TextStyle(
-                  fontSize: 12,
-                  color: isDark
-                      ? AppColors.textSecondaryDark
-                      : AppColors.textSecondaryLight),
-            ),
-            const Divider(height: 24),
-
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 280),
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    MarkdownBody(
-                      data: item.content,
-                      selectable: true,
-                      styleSheet: MarkdownStyleSheet(
-                        p: TextStyle(
-                          fontSize: 15,
-                          height: 1.5,
-                          color: isDark
-                              ? AppColors.textPrimaryDark
-                              : AppColors.textPrimaryLight,
-                        ),
-                        em: GoogleFonts.lora(fontStyle: FontStyle.italic),
-                        strong: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                    ),
-                    if (item.aiInsight != null &&
-                        item.aiInsight!.isNotEmpty) ...[
-                      const SizedBox(height: 18),
-                      Builder(builder: (context) {
-                        final entryMascot = item.rawData is JournalEntry
-                            ? MascotInfo.getById(
-                                (item.rawData as JournalEntry).companionId)
-                            : null;
-                        final mascotName = entryMascot?.name ?? 'Companion';
-                        final mascotColor =
-                            entryMascot?.primaryColor ?? AppColors.honeyAmber;
-
-                        return Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: mascotColor.withValues(
-                                alpha: isDark ? 0.16 : 0.12),
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(
-                                color: mascotColor.withValues(alpha: 0.25)),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Icon(
-                                    entryMascot != null
-                                        ? entryMascot.materialIcon
-                                        : Icons.auto_awesome_rounded,
-                                    size: 16,
-                                    color: mascotColor,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    '$mascotName\'s Reflection',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
-                                      color: mascotColor,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              MarkdownBody(
-                                data: item.aiInsight!,
-                                selectable: true,
-                                styleSheet: MarkdownStyleSheet(
-                                  p: TextStyle(
-                                    fontSize: 13.5,
-                                    height: 1.4,
-                                    color: isDark
-                                        ? AppColors.textPrimaryDark
-                                        : AppColors.textPrimaryLight,
-                                  ),
-                                  em: GoogleFonts.lora(
-                                    fontStyle: FontStyle.italic,
-                                    fontSize: 13.5,
-                                    color: isDark
-                                        ? AppColors.honeyGold
-                                        : AppColors.honeyAmber,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            // Action Buttons (Edit / Delete / Close)
-            Row(
-              children: [
-                if (item.rawData is JournalEntry) ...[
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.of(ctx).pop();
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => JournalEditorScreen(
-                                entry: item.rawData as JournalEntry),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.edit_outlined, size: 16),
-                      label: const Text('Edit',
-                          style: TextStyle(fontWeight: FontWeight.w700)),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.honeyAmber,
-                        side: const BorderSide(color: AppColors.honeyAmber),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16)),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      final confirmed = await CozyConfirmSheet.show(
-                        context,
-                        title: 'Palayain ang Tala?',
-                        message:
-                            'Sigurado ka bang nais mong alisin ang "${item.title}"? Valid at mahalaga ang bawat tala mo.',
-                        confirmLabel: 'Let Go',
-                        cancelLabel: 'Keep Entry',
-                        icon: Icons.delete_outline_rounded,
-                      );
-                      if (confirmed && context.mounted) {
-                        Navigator.of(ctx).pop();
-                        _deleteFeedItem(context, item);
-                      }
-                    },
-                    icon: const Icon(Icons.delete_outline,
-                        size: 16, color: Colors.redAccent),
-                    label: const Text('Let Go',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: Colors.redAccent)),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.redAccent,
-                      side: const BorderSide(color: Colors.redAccent),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16)),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.sageGreen,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16)),
-                    ),
-                    child: const Text('Close',
-                        style: TextStyle(fontWeight: FontWeight.w700)),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+  Future<void> _openEntryDetail(
+    BuildContext context,
+    UnifiedFeedItem item,
+  ) async {
+    final deleted = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => UnifiedEntryDetailScreen(item: item),
       ),
     );
-  }
-
-  Future<void> _deleteFeedItem(
-      BuildContext context, UnifiedFeedItem item) async {
-    var deleted = false;
-    String? error;
-    if (item.category == EntryCategory.journal ||
-        item.category == EntryCategory.reflection) {
-      if (item.rawData is JournalEntry) {
-        final jp = Provider.of<JournalProvider>(context, listen: false);
-        deleted =
-            await jp.deleteJournalEntry((item.rawData as JournalEntry).id);
-        error = jp.errorMessage;
-      }
-    } else if (item.category == EntryCategory.gratitude) {
-      if (item.rawData is GratitudeEntry) {
-        final gp = Provider.of<GratitudeProvider>(context, listen: false);
-        deleted =
-            await gp.deleteGratitudeEntry((item.rawData as GratitudeEntry).id);
-        error = gp.errorMessage;
-      }
-    } else if (item.category == EntryCategory.mood) {
-      if (item.rawData is MoodLog) {
-        final mp = Provider.of<MoodProvider>(context, listen: false);
-        deleted = await mp.deleteMoodLog((item.rawData as MoodLog).id);
-        error = mp.errorMessage;
-      }
-    } else if (item.rawData is RoutineLog) {
-      final rp = Provider.of<RoutinesProvider>(context, listen: false);
-      deleted = await rp.deleteLog((item.rawData as RoutineLog).id);
-      error = rp.errorMessage;
-    }
-
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          deleted
-              ? 'Entry gently removed.'
-              : error ?? 'The entry was not removed.',
-        ),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-      ),
-    );
+    if (deleted == true && mounted) setState(() {});
   }
 }

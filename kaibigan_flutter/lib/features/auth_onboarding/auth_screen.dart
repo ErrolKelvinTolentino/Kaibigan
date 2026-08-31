@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:provider/provider.dart';
+
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/env_config.dart';
+import '../../core/utils/language_helper.dart';
+import '../../core/widgets/kaibigan_logo.dart';
+import '../../core/widgets/kaibigan_state_view.dart';
 import '../companion/companion_model.dart';
 import '../settings/user_provider.dart';
 
@@ -14,22 +19,28 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
-  int _activeTabIndex = 0; // 0 for Login, 1 for Register
-
-  final TextEditingController _loginEmailController = TextEditingController();
-  final TextEditingController _loginPasswordController =
-      TextEditingController();
-
-  final TextEditingController _regNameController = TextEditingController();
-  final TextEditingController _regEmailController = TextEditingController();
-  final TextEditingController _regPasswordController = TextEditingController();
-
+  int _activeTabIndex = 0;
+  final _loginEmailController = TextEditingController();
+  final _loginPasswordController = TextEditingController();
+  final _regNameController = TextEditingController();
+  final _regEmailController = TextEditingController();
+  final _regPasswordController = TextEditingController();
   bool _obscureLoginPassword = true;
   bool _obscureRegPassword = true;
   bool _isLoading = false;
+  String? _loadingLabel;
   String? _errorMessage;
   String? _confirmationMessage;
   String? _pendingConfirmationEmail;
+
+  bool get _isRegistering => _activeTabIndex == 1;
+
+  String _copy(String language, String english, String filipino) =>
+      LanguageHelper.pick(
+        language,
+        english: english,
+        filipino: filipino,
+      );
 
   @override
   void dispose() {
@@ -44,7 +55,6 @@ class _AuthScreenState extends State<AuthScreen> {
   Future<void> _handleLogin() async {
     final email = _loginEmailController.text.trim();
     final password = _loginPasswordController.text;
-
     if (email.isEmpty || !email.contains('@')) {
       setState(() => _errorMessage = 'Please enter a valid email address.');
       return;
@@ -53,30 +63,30 @@ class _AuthScreenState extends State<AuthScreen> {
       setState(() => _errorMessage = 'Password must be at least 6 characters.');
       return;
     }
-
     setState(() {
       _isLoading = true;
+      _loadingLabel = _copy(
+        context.read<UserProvider>().language,
+        'Signing in…',
+        'Nagse-sign in…',
+      );
       _errorMessage = null;
       _confirmationMessage = null;
     });
-
-    final userProvider = Provider.of<UserProvider>(context, listen: false);
-    final success = await userProvider.login(email: email, password: password);
-
-    if (mounted) {
-      setState(() => _isLoading = false);
-      if (!success) {
-        setState(
-            () => _errorMessage = userProvider.authError ?? 'Login failed.');
-      }
-    }
+    final provider = context.read<UserProvider>();
+    final success = await provider.login(email: email, password: password);
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      _loadingLabel = null;
+      if (!success) _errorMessage = provider.authError ?? 'Login failed.';
+    });
   }
 
   Future<void> _handleRegister() async {
     final name = _regNameController.text.trim();
     final email = _regEmailController.text.trim();
     final password = _regPasswordController.text;
-
     if (name.isEmpty) {
       setState(() => _errorMessage = 'Please enter your display name.');
       return;
@@ -89,36 +99,38 @@ class _AuthScreenState extends State<AuthScreen> {
       setState(() => _errorMessage = 'Password must be at least 6 characters.');
       return;
     }
-
     setState(() {
       _isLoading = true;
+      _loadingLabel = _copy(
+        context.read<UserProvider>().language,
+        'Creating account…',
+        'Gumagawa ng account…',
+      );
       _errorMessage = null;
       _confirmationMessage = null;
     });
-
-    final userProvider = Provider.of<UserProvider>(context, listen: false);
-    final success = await userProvider.register(
+    final provider = context.read<UserProvider>();
+    final success = await provider.register(
       email: email,
       password: password,
       displayName: name,
     );
-
-    if (mounted) {
-      setState(() => _isLoading = false);
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      _loadingLabel = null;
       if (!success) {
-        final message = userProvider.authError ?? 'Registration failed.';
+        final message = provider.authError ?? 'Registration failed.';
         if (message.startsWith('Account created!')) {
-          setState(() {
-            _errorMessage = null;
-            _pendingConfirmationEmail = email;
-            _confirmationMessage =
-                'Account created. Check your inbox or spam folder, then open the confirmation link while Kaibigan is running on localhost:3000.';
-          });
+          _errorMessage = null;
+          _pendingConfirmationEmail = email;
+          _confirmationMessage =
+              'Account created. Check your inbox or spam folder, then open the confirmation link while Kaibigan is running on localhost:3000.';
         } else {
-          setState(() => _errorMessage = message);
+          _errorMessage = message;
         }
       }
-    }
+    });
   }
 
   Future<void> _handleResendConfirmation() async {
@@ -126,6 +138,11 @@ class _AuthScreenState extends State<AuthScreen> {
     if (email == null || _isLoading) return;
     setState(() {
       _isLoading = true;
+      _loadingLabel = _copy(
+        context.read<UserProvider>().language,
+        'Sending email…',
+        'Nagpapadala ng email…',
+      );
       _errorMessage = null;
       _confirmationMessage = null;
     });
@@ -134,6 +151,7 @@ class _AuthScreenState extends State<AuthScreen> {
     if (!mounted) return;
     setState(() {
       _isLoading = false;
+      _loadingLabel = null;
       if (sent) {
         _confirmationMessage =
             'A new confirmation email was sent. Use the newest link and check your spam folder.';
@@ -146,6 +164,11 @@ class _AuthScreenState extends State<AuthScreen> {
   Future<void> _handleGoogleLogin() async {
     setState(() {
       _isLoading = true;
+      _loadingLabel = _copy(
+        context.read<UserProvider>().language,
+        'Connecting…',
+        'Kumokonekta…',
+      );
       _errorMessage = null;
     });
     final provider = context.read<UserProvider>();
@@ -154,6 +177,7 @@ class _AuthScreenState extends State<AuthScreen> {
     if (!started) {
       setState(() {
         _isLoading = false;
+        _loadingLabel = null;
         _errorMessage = provider.authError ?? 'Google sign-in failed.';
       });
     }
@@ -168,6 +192,11 @@ class _AuthScreenState extends State<AuthScreen> {
     }
     setState(() {
       _isLoading = true;
+      _loadingLabel = _copy(
+        context.read<UserProvider>().language,
+        'Sending reset link…',
+        'Nagpapadala ng reset link…',
+      );
       _errorMessage = null;
     });
     final provider = context.read<UserProvider>();
@@ -175,486 +204,878 @@ class _AuthScreenState extends State<AuthScreen> {
     if (!mounted) return;
     setState(() {
       _isLoading = false;
+      _loadingLabel = null;
       if (!sent) _errorMessage = provider.authError;
     });
     if (sent) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-              'Password reset email sent. Check your inbox and spam folder.'),
+            'Password reset email sent. Check your inbox and spam folder.',
+          ),
         ),
       );
     }
   }
 
+  void _selectTab(int index) {
+    if (_isLoading || _activeTabIndex == index) return;
+    HapticFeedback.selectionClick();
+    setState(() {
+      _activeTabIndex = index;
+      _errorMessage = null;
+      _confirmationMessage = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final userProvider = Provider.of<UserProvider>(context);
-    final mascot = MascotInfo.getById(userProvider.selectedCompanion);
-
+    final user = context.watch<UserProvider>();
+    final mascot = MascotInfo.getById(user.selectedCompanion);
+    final language = user.language;
     return Scaffold(
       backgroundColor: isDark ? AppColors.darkBackground : AppColors.warmCream,
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 440),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // App Logo & Mascot Header
-                  Container(
-                    width: 84,
-                    height: 84,
-                    decoration: BoxDecoration(
-                      color: AppColors.sageGreen.withValues(alpha: 0.15),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: AppColors.sageGreen.withValues(alpha: 0.3),
-                        width: 2,
-                      ),
-                    ),
-                    child: Center(
-                      child: Icon(mascot.materialIcon,
-                          color: AppColors.sageGreen, size: 42),
-                    ),
-                  )
-                      .animate()
-                      .scale(duration: 500.ms, curve: Curves.easeOutBack),
-                  const SizedBox(height: 16),
-
-                  Text(
-                    'Kaibigan',
-                    style: TextStyle(
-                      fontSize: 30,
-                      fontWeight: FontWeight.w900,
-                      color: isDark
-                          ? AppColors.textPrimaryDark
-                          : AppColors.textPrimaryLight,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Your AI-Assisted Mental Wellness Companion',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: isDark
-                          ? AppColors.textSecondaryDark
-                          : AppColors.textSecondaryLight,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 32),
-
-                  // Custom Segmented Toggle (Login / Register)
-                  Container(
-                    height: 52,
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: isDark ? AppColors.darkCard : Colors.white,
-                      borderRadius: BorderRadius.circular(28),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black
-                              .withValues(alpha: isDark ? 0.2 : 0.05),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => setState(() {
-                              _activeTabIndex = 0;
-                              _errorMessage = null;
-                              _confirmationMessage = null;
-                            }),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              decoration: BoxDecoration(
-                                color: _activeTabIndex == 0
-                                    ? AppColors.sageGreen
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(24),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  'Log In',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700,
-                                    color: _activeTabIndex == 0
-                                        ? Colors.white
-                                        : (isDark
-                                            ? AppColors.textSecondaryDark
-                                            : AppColors.textSecondaryLight),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => setState(() {
-                              _activeTabIndex = 1;
-                              _errorMessage = null;
-                              _confirmationMessage = null;
-                            }),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              decoration: BoxDecoration(
-                                color: _activeTabIndex == 1
-                                    ? AppColors.sageGreen
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(24),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  'Register',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700,
-                                    color: _activeTabIndex == 1
-                                        ? Colors.white
-                                        : (isDark
-                                            ? AppColors.textSecondaryDark
-                                            : AppColors.textSecondaryLight),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  if (_confirmationMessage != null) ...[
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: AppColors.sageGreen.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: AppColors.sageGreen.withValues(alpha: 0.35),
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Icon(Icons.mark_email_read_outlined,
-                                  color: AppColors.sageGreen, size: 20),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  _confirmationMessage!,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    color: AppColors.sageGreen,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          if (_pendingConfirmationEmail != null) ...[
-                            const SizedBox(height: 8),
-                            TextButton(
-                              onPressed: _isLoading
-                                  ? null
-                                  : _handleResendConfirmation,
-                              child: const Text('Resend confirmation email'),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ).animate().fadeIn(),
-                    const SizedBox(height: 16),
-                  ],
-
-                  // Error Alert Banner
-                  if (_errorMessage != null) ...[
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.redAccent.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                            color: Colors.redAccent.withValues(alpha: 0.3)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.error_outline,
-                              color: Colors.redAccent, size: 20),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              _errorMessage!,
-                              style: const TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.redAccent,
-                                  fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ).animate().fadeIn(),
-                    const SizedBox(height: 16),
-                  ],
-
-                  // Form Container (Animated Switcher between Login & Register)
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 250),
-                    child: _activeTabIndex == 0
-                        ? _buildLoginForm(isDark)
-                        : _buildRegisterForm(isDark),
-                  ),
-                  if (EnvConfig.googleAuthEnabled) ...[
-                    const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        const Expanded(child: Divider()),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: Text(
-                            'or',
-                            style: TextStyle(
-                              color: isDark ? Colors.white54 : Colors.black45,
-                            ),
-                          ),
-                        ),
-                        const Expanded(child: Divider()),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: OutlinedButton.icon(
-                        onPressed: _isLoading ? null : _handleGoogleLogin,
-                        icon: const Text(
-                          'G',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
-                            color: Color(0xFF4285F4),
-                          ),
-                        ),
-                        label: const Text('Continue with Google'),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                ],
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: ExcludeSemantics(
+              child: CustomPaint(
+                painter: _AuthBackdropPainter(isDark: isDark),
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCustomTextField({
-    required TextEditingController controller,
-    required String hintText,
-    required IconData prefixIcon,
-    bool isDark = false,
-    bool obscureText = false,
-    Widget? suffixIcon,
-    TextInputType keyboardType = TextInputType.text,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkCard : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
+          SafeArea(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth >= 840;
+                final side = isWide ? 40.0 : 20.0;
+                return SingleChildScrollView(
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: EdgeInsets.fromLTRB(
+                    side,
+                    isWide ? 30 : 18,
+                    side,
+                    30,
+                  ),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1040),
+                      child: isWide
+                          ? Row(
+                              children: [
+                                Expanded(
+                                  child: _buildBrandPanel(
+                                    isDark,
+                                    mascot,
+                                    language,
+                                    true,
+                                  ),
+                                ),
+                                const SizedBox(width: 42),
+                                SizedBox(
+                                  width: 430,
+                                  child: _buildAuthCard(isDark, language),
+                                ),
+                              ],
+                            )
+                          : Column(
+                              children: [
+                                _buildBrandPanel(
+                                  isDark,
+                                  mascot,
+                                  language,
+                                  false,
+                                ),
+                                const SizedBox(height: 22),
+                                ConstrainedBox(
+                                  constraints:
+                                      const BoxConstraints(maxWidth: 460),
+                                  child: _buildAuthCard(isDark, language),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),
-      child: TextField(
-        controller: controller,
-        obscureText: obscureText,
-        keyboardType: keyboardType,
-        style: TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.w600,
-          color:
-              isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
-        ),
-        decoration: InputDecoration(
-          hintText: hintText,
-          hintStyle: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: isDark ? Colors.white38 : Colors.black38,
-          ),
-          prefixIcon: Icon(prefixIcon, color: AppColors.sageGreen, size: 22),
-          suffixIcon: suffixIcon,
-          filled: false,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide:
-                const BorderSide(color: AppColors.sageGreen, width: 1.5),
-          ),
-        ),
-      ),
     );
   }
 
-  Widget _buildLoginForm(bool isDark) {
+  Widget _buildBrandPanel(
+    bool isDark,
+    MascotInfo mascot,
+    String language,
+    bool expanded,
+  ) {
+    final primary =
+        isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight;
+    final secondary =
+        isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
+    if (!expanded) {
+      return Semantics(
+        header: true,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            KaibiganWordmark(
+              fontSize: 34,
+              foregroundColor: primary,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _copy(
+                language,
+                'Your private space for honest moments.',
+                'Iyong pribadong espasyo para sa tapat na sandali.',
+              ),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: secondary,
+              ),
+            ),
+          ],
+        ),
+      ).animate().fadeIn(duration: 320.ms).slideY(begin: -0.05);
+    }
+    return Container(
+      height: 650,
+      padding: const EdgeInsets.fromLTRB(42, 44, 42, 38),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? [const Color(0xFF2C291F), const Color(0xFF202823)]
+              : [const Color(0xFFFFF4D8), const Color(0xFFF7EEE1)],
+        ),
+        borderRadius: BorderRadius.circular(34),
+        border: Border.all(
+          color: isDark ? AppColors.darkHoneyBorder : AppColors.honeyBorder,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.24 : 0.08),
+            blurRadius: 38,
+            offset: const Offset(0, 18),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          KaibiganWordmark(
+            fontSize: 34,
+            foregroundColor: primary,
+          ),
+          const Spacer(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: BoxDecoration(
+              color: AppColors.honeyAmber.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(99),
+            ),
+            child: Text(
+              _copy(
+                language,
+                'Your private wellness space',
+                'Iyong pribadong wellness space',
+              ),
+              style: TextStyle(
+                color: isDark ? AppColors.warmHoney : AppColors.honeyAmber,
+                fontSize: 10.5,
+                letterSpacing: 0.2,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Text(
+            _copy(
+              language,
+              'Come as you are.\nWrite what is real.',
+              'Dumating bilang ikaw.\nIsulat ang totoo.',
+            ),
+            style: TextStyle(
+              color: primary,
+              fontSize: 39,
+              height: 1.12,
+              letterSpacing: -1.3,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 18),
+          Text(
+            _copy(
+              language,
+              '${mascot.name} is here for thoughtful journaling, gentle reflection, and the moments you need somewhere safe to land.',
+              'Narito si ${mascot.name} para sa maingat na pagsusulat, banayad na pagninilay, at mga sandaling kailangan mo ng ligtas na pahingahan.',
+            ),
+            style: TextStyle(
+              color: secondary,
+              fontSize: 15,
+              height: 1.65,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const Spacer(),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _TrustPill(
+                icon: Icons.lock_outline_rounded,
+                label: _copy(
+                  language,
+                  'Private by design',
+                  'Pribado by design',
+                ),
+                isDark: isDark,
+              ),
+              _TrustPill(
+                icon: Icons.spa_outlined,
+                label: _copy(
+                  language,
+                  'Gentle, never judgmental',
+                  'Banayad, walang panghuhusga',
+                ),
+                isDark: isDark,
+              ),
+            ],
+          ),
+        ],
+      ),
+    ).animate().fadeIn(duration: 380.ms).slideX(begin: -0.035);
+  }
+
+  Widget _buildAuthCard(bool isDark, String language) {
+    final primary =
+        isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight;
+    final secondary =
+        isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 25, 24, 23),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkCard : Colors.white,
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(
+          color: isDark ? AppColors.darkCardBorder : AppColors.honeyBorder,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.08),
+            blurRadius: 30,
+            offset: const Offset(0, 14),
+          ),
+        ],
+      ),
+      child: AutofillGroup(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _isRegistering
+                  ? _copy(language, 'REGISTER', 'MAG-REGISTER')
+                  : _copy(language, 'LOGIN', 'MAG-LOGIN'),
+              style: const TextStyle(
+                color: AppColors.honeyAmber,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.2,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              _isRegistering
+                  ? _copy(
+                      language,
+                      'Create your account',
+                      'Gumawa ng account',
+                    )
+                  : _copy(
+                      language,
+                      'Welcome back',
+                      'Maligayang pagbabalik',
+                    ),
+              style: TextStyle(
+                fontSize: 26,
+                height: 1.15,
+                letterSpacing: -0.65,
+                fontWeight: FontWeight.w900,
+                color: primary,
+              ),
+            ),
+            const SizedBox(height: 7),
+            Text(
+              _isRegistering
+                  ? _copy(
+                      language,
+                      'A few details, then this space is yours.',
+                      'Ilang detalye lang, at iyo na ang espasyong ito.',
+                    )
+                  : _copy(
+                      language,
+                      'Your thoughts are right where you left them.',
+                      'Naghihintay ang iyong mga tala kung saan mo iniwan.',
+                    ),
+              style: TextStyle(
+                fontSize: 13.5,
+                height: 1.45,
+                fontWeight: FontWeight.w600,
+                color: secondary,
+              ),
+            ),
+            const SizedBox(height: 24),
+            AnimatedSize(
+              duration: const Duration(milliseconds: 220),
+              child: Column(
+                children: [
+                  if (_confirmationMessage != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 15),
+                      child: _buildMessage(
+                        _confirmationMessage!,
+                        Icons.mark_email_read_outlined,
+                        AppColors.sageGreen,
+                        action: _pendingConfirmationEmail == null
+                            ? null
+                            : TextButton(
+                                onPressed: _isLoading
+                                    ? null
+                                    : _handleResendConfirmation,
+                                child: Text(
+                                  _copy(
+                                    language,
+                                    'Resend email',
+                                    'Ipadala ulit',
+                                  ),
+                                ),
+                              ),
+                      ),
+                    ),
+                  if (_errorMessage != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 15),
+                      child: _buildMessage(
+                        _errorMessage!,
+                        Icons.info_outline_rounded,
+                        AppColors.moodAwful,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 260),
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0.035, 0),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: child,
+                ),
+              ),
+              child: _isRegistering
+                  ? _buildRegisterForm(isDark, language)
+                  : _buildLoginForm(isDark, language),
+            ),
+            if (EnvConfig.googleAuthEnabled) ...[
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  const Expanded(child: Divider()),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(
+                      _copy(language, 'or', 'o'),
+                      style: TextStyle(fontSize: 12, color: secondary),
+                    ),
+                  ),
+                  const Expanded(child: Divider()),
+                ],
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _isLoading ? null : _handleGoogleLogin,
+                  icon: const Text(
+                    'G',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF4285F4),
+                    ),
+                  ),
+                  label: Text(
+                    _copy(
+                      language,
+                      'Continue with Google',
+                      'Magpatuloy gamit ang Google',
+                    ),
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 14),
+            _buildAccountSwitch(language, secondary),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.lock_outline_rounded,
+                  size: 13,
+                  color: secondary.withValues(alpha: 0.75),
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    _copy(
+                      language,
+                      'Your entries stay tied to your private account.',
+                      'Nananatiling pribado sa account mo ang iyong mga tala.',
+                    ),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 10.8,
+                      height: 1.35,
+                      fontWeight: FontWeight.w600,
+                      color: secondary.withValues(alpha: 0.85),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ).animate().fadeIn(delay: 70.ms, duration: 350.ms).slideY(begin: 0.025);
+  }
+
+  Widget _buildAccountSwitch(String language, Color secondary) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Flexible(
+          child: Text(
+            _isRegistering
+                ? _copy(
+                    language,
+                    'Already have an account?',
+                    'May account ka na?',
+                  )
+                : _copy(
+                    language,
+                    'New to Kaibigan?',
+                    'Bago sa Kaibigan?',
+                  ),
+            style: TextStyle(
+              color: secondary,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        const SizedBox(width: 3),
+        TextButton(
+          key: ValueKey(
+            _isRegistering ? 'switch-to-login' : 'switch-to-register',
+          ),
+          onPressed:
+              _isLoading ? null : () => _selectTab(_isRegistering ? 0 : 1),
+          child: Text(
+            _isRegistering
+                ? _copy(language, 'Login', 'Mag-login')
+                : _copy(language, 'Register', 'Mag-register'),
+            style: const TextStyle(fontWeight: FontWeight.w900),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMessage(
+    String message,
+    IconData icon,
+    Color color, {
+    Widget? action,
+  }) {
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(13, 12, 10, 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.09),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: color, size: 19),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Text(
+                message,
+                style: TextStyle(
+                  fontSize: 12.2,
+                  height: 1.45,
+                  color: color,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            if (action != null) action,
+          ],
+        ),
+      ),
+    ).animate().fadeIn(duration: 180.ms);
+  }
+
+  Widget _buildField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    required IconData icon,
+    required bool isDark,
+    bool obscureText = false,
+    Widget? suffixIcon,
+    TextInputType keyboardType = TextInputType.text,
+    TextInputAction textInputAction = TextInputAction.next,
+    Iterable<String>? autofillHints,
+    ValueChanged<String>? onSubmitted,
+  }) {
+    final secondary =
+        isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 3, bottom: 7),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w800,
+              color: secondary,
+            ),
+          ),
+        ),
+        TextField(
+          controller: controller,
+          obscureText: obscureText,
+          keyboardType: keyboardType,
+          textInputAction: textInputAction,
+          autofillHints: autofillHints,
+          onSubmitted: onSubmitted,
+          autocorrect: keyboardType != TextInputType.emailAddress,
+          enableSuggestions: !obscureText,
+          style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700),
+          decoration: InputDecoration(
+            hintText: hint,
+            prefixIcon: Icon(icon, size: 20),
+            suffixIcon: suffixIcon,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLoginForm(bool isDark, String language) {
     return KeyedSubtree(
       key: const ValueKey('LoginForm'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildCustomTextField(
+          _buildField(
             controller: _loginEmailController,
-            hintText: 'Email Address',
-            prefixIcon: Icons.email_outlined,
+            label: _copy(language, 'Email', 'Email'),
+            hint: 'you@example.com',
+            icon: Icons.alternate_email_rounded,
             keyboardType: TextInputType.emailAddress,
+            autofillHints: const [AutofillHints.email],
             isDark: isDark,
           ),
-          const SizedBox(height: 14),
-          _buildCustomTextField(
+          const SizedBox(height: 15),
+          _buildField(
             controller: _loginPasswordController,
-            hintText: 'Password',
-            prefixIcon: Icons.lock_outline,
+            label: _copy(language, 'Password', 'Password'),
+            hint: _copy(
+              language,
+              'Enter your password',
+              'Ilagay ang iyong password',
+            ),
+            icon: Icons.lock_outline_rounded,
             obscureText: _obscureLoginPassword,
+            textInputAction: TextInputAction.done,
+            autofillHints: const [AutofillHints.password],
+            onSubmitted: (_) {
+              if (!_isLoading) _handleLogin();
+            },
             isDark: isDark,
-            suffixIcon: IconButton(
-              icon: Icon(
-                _obscureLoginPassword
-                    ? Icons.visibility_off_outlined
-                    : Icons.visibility_outlined,
-                color: isDark ? Colors.white54 : Colors.black54,
+            suffixIcon: _passwordVisibilityButton(
+              language,
+              _obscureLoginPassword,
+              () => setState(
+                () => _obscureLoginPassword = !_obscureLoginPassword,
               ),
-              onPressed: () => setState(
-                  () => _obscureLoginPassword = !_obscureLoginPassword),
             ),
           ),
           Align(
             alignment: Alignment.centerRight,
             child: TextButton(
               onPressed: _isLoading ? null : _handlePasswordReset,
-              child: const Text('Forgot password?'),
+              child: Text(
+                _copy(
+                  language,
+                  'Forgot password?',
+                  'Nakalimutan ang password?',
+                ),
+                style: const TextStyle(fontSize: 12.5),
+              ),
             ),
           ),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: ElevatedButton(
-              onPressed: _isLoading ? null : _handleLogin,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.sageGreen,
-                foregroundColor: Colors.white,
-                elevation: 2,
-                shadowColor: AppColors.sageGreen.withValues(alpha: 0.4),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
-              ),
-              child: _isLoading
-                  ? const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                          color: Colors.white, strokeWidth: 2))
-                  : const Text('Log In to Kaibigan',
-                      style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 7),
+          _buildPrimaryButton(
+            _copy(
+              language,
+              'Login',
+              'Mag-login',
             ),
+            _handleLogin,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildRegisterForm(bool isDark) {
+  Widget _buildRegisterForm(bool isDark, String language) {
     return KeyedSubtree(
       key: const ValueKey('RegisterForm'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildCustomTextField(
+          _buildField(
             controller: _regNameController,
-            hintText: 'Display Name (e.g. Errol)',
-            prefixIcon: Icons.person_outline,
+            label: _copy(
+              language,
+              'What should we call you?',
+              'Ano ang gusto mong itawag namin sa iyo?',
+            ),
+            hint: _copy(language, 'Your name', 'Iyong pangalan'),
+            icon: Icons.person_outline_rounded,
+            autofillHints: const [AutofillHints.name],
             isDark: isDark,
           ),
-          const SizedBox(height: 14),
-          _buildCustomTextField(
+          const SizedBox(height: 15),
+          _buildField(
             controller: _regEmailController,
-            hintText: 'Email Address',
-            prefixIcon: Icons.email_outlined,
+            label: _copy(language, 'Email', 'Email'),
+            hint: 'you@example.com',
+            icon: Icons.alternate_email_rounded,
             keyboardType: TextInputType.emailAddress,
+            autofillHints: const [AutofillHints.email],
             isDark: isDark,
           ),
-          const SizedBox(height: 14),
-          _buildCustomTextField(
+          const SizedBox(height: 15),
+          _buildField(
             controller: _regPasswordController,
-            hintText: 'Password (min 6 characters)',
-            prefixIcon: Icons.lock_outline,
+            label: _copy(
+              language,
+              'Create a password',
+              'Gumawa ng password',
+            ),
+            hint: _copy(
+              language,
+              'At least 6 characters',
+              'Hindi bababa sa 6 na character',
+            ),
+            icon: Icons.lock_outline_rounded,
             obscureText: _obscureRegPassword,
+            textInputAction: TextInputAction.done,
+            autofillHints: const [AutofillHints.newPassword],
+            onSubmitted: (_) {
+              if (!_isLoading) _handleRegister();
+            },
             isDark: isDark,
-            suffixIcon: IconButton(
-              icon: Icon(
-                _obscureRegPassword
-                    ? Icons.visibility_off_outlined
-                    : Icons.visibility_outlined,
-                color: isDark ? Colors.white54 : Colors.black54,
+            suffixIcon: _passwordVisibilityButton(
+              language,
+              _obscureRegPassword,
+              () => setState(
+                () => _obscureRegPassword = !_obscureRegPassword,
               ),
-              onPressed: () =>
-                  setState(() => _obscureRegPassword = !_obscureRegPassword),
             ),
           ),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: ElevatedButton(
-              onPressed: _isLoading ? null : _handleRegister,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.sageGreen,
-                foregroundColor: Colors.white,
-                elevation: 2,
-                shadowColor: AppColors.sageGreen.withValues(alpha: 0.4),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
-              ),
-              child: _isLoading
-                  ? const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                          color: Colors.white, strokeWidth: 2))
-                  : const Text('Create Kaibigan Account',
-                      style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 22),
+          _buildPrimaryButton(
+            _copy(
+              language,
+              'Register',
+              'Mag-register',
+            ),
+            _handleRegister,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _passwordVisibilityButton(
+    String language,
+    bool obscure,
+    VoidCallback onPressed,
+  ) {
+    return IconButton(
+      tooltip: obscure
+          ? _copy(language, 'Show password', 'Ipakita ang password')
+          : _copy(language, 'Hide password', 'Itago ang password'),
+      icon: Icon(
+        obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+        size: 20,
+      ),
+      onPressed: onPressed,
+    );
+  }
+
+  Widget _buildPrimaryButton(String label, VoidCallback onPressed) {
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton(
+        onPressed: _isLoading ? null : onPressed,
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.honeyAmber,
+          foregroundColor: AppColors.onHoney,
+          disabledBackgroundColor: AppColors.honeyAmber.withValues(alpha: 0.35),
+          minimumSize: const Size.fromHeight(54),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+        ),
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 180),
+          child: _isLoading
+              ? Row(
+                  key: ValueKey('auth-loading'),
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const KaibiganLoadingMark(
+                      color: AppColors.onHoney,
+                      compact: true,
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        _loadingLabel ?? 'Please wait…',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              : Row(
+                  key: ValueKey(label),
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        label,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.arrow_forward_rounded, size: 18),
+                  ],
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TrustPill extends StatelessWidget {
+  const _TrustPill({
+    required this.icon,
+    required this.label,
+    required this.isDark,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isDark ? AppColors.textSecondaryDark : AppColors.sageGreen;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.045)
+            : Colors.white.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: color.withValues(alpha: 0.16)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 7),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w800,
+              color: color,
             ),
           ),
         ],
       ),
     );
+  }
+}
+
+class _AuthBackdropPainter extends CustomPainter {
+  const _AuthBackdropPainter({required this.isDark});
+
+  final bool isDark;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final honey = Paint()
+      ..color = AppColors.pollenGlow.withValues(alpha: isDark ? 0.035 : 0.18);
+    final sage = Paint()
+      ..color = AppColors.sageGreen.withValues(alpha: isDark ? 0.035 : 0.055);
+    canvas.drawCircle(
+        Offset(size.width * 0.07, size.height * 0.14), 150, honey);
+    canvas.drawCircle(
+      Offset(size.width * 0.93, size.height * 0.88),
+      190,
+      sage,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _AuthBackdropPainter oldDelegate) {
+    return oldDelegate.isDark != isDark;
   }
 }

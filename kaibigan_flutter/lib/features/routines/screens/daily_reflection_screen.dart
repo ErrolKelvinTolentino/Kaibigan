@@ -9,6 +9,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_typography.dart';
+import '../../../core/theme/journal_appearance.dart';
+import '../../../core/utils/language_helper.dart';
+import '../../../core/widgets/journal_paper_surface.dart';
 import '../../settings/user_provider.dart';
 import '../../companion/companion_model.dart';
 import '../../journaling/journal_provider.dart';
@@ -139,7 +142,12 @@ class _DailyReflectionScreenState extends State<DailyReflectionScreen> {
     }
     setState(() => _isSaving = true);
 
-    final lang = userProvider.language;
+    final lang = LanguageHelper.detectContentLanguage(
+      '$well $challenge $learned',
+      fallback: userProvider.language == 'taglish'
+          ? 'english'
+          : userProvider.language,
+    );
     if (lang == 'filipino') {
       _generatedAiInsight =
           "Salamat sa paglalaan ng oras upang pagnilayan ang iyong araw. Ipinakita mo ang katatagan sa kabila ng mga pagsubok, at ang iyong pasasalamat ay nagdudulot ng kapayapaan sa iyong puso. Ipagpatuloy ang pag-aalaga sa iyong sarili.";
@@ -232,8 +240,7 @@ class _DailyReflectionScreenState extends State<DailyReflectionScreen> {
   Widget _buildTemplateInputView(BuildContext context, bool isDark,
       UserProvider userProvider, MascotInfo mascot) {
     final template = _selectedTemplate;
-    final paperColor =
-        isDark ? const Color(0xFF252B27) : const Color(0xFFFFFEFA);
+    final appearanceAccent = userProvider.journalAccent.color;
 
     return ListView(
       physics: const BouncingScrollPhysics(),
@@ -254,7 +261,7 @@ class _DailyReflectionScreenState extends State<DailyReflectionScreen> {
                 height: 42,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: template.accent.withValues(alpha: 0.14),
+                  color: appearanceAccent.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(13),
                 ),
                 child:
@@ -294,7 +301,7 @@ class _DailyReflectionScreenState extends State<DailyReflectionScreen> {
                 icon: const Icon(Icons.auto_awesome_rounded, size: 16),
                 label: const Text('Templates'),
                 style: TextButton.styleFrom(
-                  foregroundColor: template.accent,
+                  foregroundColor: appearanceAccent,
                   visualDensity: VisualDensity.compact,
                 ),
               ),
@@ -302,130 +309,81 @@ class _DailyReflectionScreenState extends State<DailyReflectionScreen> {
           ),
         ).animate().fadeIn(duration: 280.ms).slideY(begin: -0.08),
         const SizedBox(height: 14),
-        Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Container(
-              padding: const EdgeInsets.fromLTRB(18, 24, 18, 20),
-              decoration: BoxDecoration(
-                color: paperColor,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(
+        JournalPaperSurface(
+          style: userProvider.journalPaperStyle,
+          accentColor: appearanceAccent,
+          child: Column(
+            children: [
+              Text(
+                template.emoji,
+                style: const TextStyle(fontSize: 36),
+              ),
+              const SizedBox(height: 7),
+              Text(
+                template.title,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.lora(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
                   color: isDark
-                      ? AppColors.darkCardBorder
-                      : const Color(0xFFE8DFD0),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.07),
-                    blurRadius: 24,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    template.emoji,
-                    style: const TextStyle(fontSize: 36),
-                  ),
-                  const SizedBox(height: 7),
-                  Text(
-                    template.title,
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.lora(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      color: isDark
-                          ? AppColors.textPrimaryDark
-                          : AppColors.textPrimaryLight,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    template.subtitle,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      height: 1.4,
-                      color: isDark
-                          ? AppColors.textSecondaryDark
-                          : AppColors.textSecondaryLight,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextButton.icon(
-                    onPressed: () => _showTemplateEditor(context, isDark),
-                    icon: const Icon(Icons.edit_note_rounded, size: 18),
-                    label: const Text('Customize these prompts'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: template.accent,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Divider(
-                    color:
-                        template.accent.withValues(alpha: isDark ? 0.25 : 0.18),
-                  ),
-                  const SizedBox(height: 2),
-                  _buildPromptSection(
-                    isDark: isDark,
-                    number: 1,
-                    accent: template.accent,
-                    title: template.prompts[0],
-                    hint: template.hints[0],
-                    controller: _wellController,
-                  ),
-                  _buildPromptSection(
-                    isDark: isDark,
-                    number: 2,
-                    accent: template.accent,
-                    title: template.prompts[1],
-                    hint: template.hints[1],
-                    controller: _challengeController,
-                  ),
-                  _buildPromptSection(
-                    isDark: isDark,
-                    number: 3,
-                    accent: template.accent,
-                    title: template.prompts[2],
-                    hint: template.hints[2],
-                    controller: _learnedController,
-                    showDivider: false,
-                  ),
-                ],
-              ),
-            ),
-            Positioned(
-              top: -7,
-              left: 38,
-              right: 38,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: List.generate(
-                  5,
-                  (index) => Container(
-                    width: 9,
-                    height: 18,
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? const Color(0xFF59625C)
-                          : const Color(0xFFD7C9B4),
-                      borderRadius: BorderRadius.circular(99),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.10),
-                          blurRadius: 2,
-                          offset: const Offset(0, 1),
-                        ),
-                      ],
-                    ),
-                  ),
+                      ? AppColors.textPrimaryDark
+                      : AppColors.textPrimaryLight,
                 ),
               ),
-            ),
-          ],
+              const SizedBox(height: 5),
+              Text(
+                template.subtitle,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  height: 1.4,
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextButton.icon(
+                onPressed: () => _showTemplateEditor(context, isDark),
+                icon: const Icon(Icons.edit_note_rounded, size: 18),
+                label: const Text('Customize these prompts'),
+                style: TextButton.styleFrom(
+                  foregroundColor: appearanceAccent,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Divider(
+                color: appearanceAccent.withValues(alpha: isDark ? 0.25 : 0.18),
+              ),
+              const SizedBox(height: 2),
+              _buildPromptSection(
+                isDark: isDark,
+                number: 1,
+                accent: appearanceAccent,
+                title: template.prompts[0],
+                hint: template.hints[0],
+                controller: _wellController,
+              ),
+              _buildPromptSection(
+                isDark: isDark,
+                number: 2,
+                accent: appearanceAccent,
+                title: template.prompts[1],
+                hint: template.hints[1],
+                controller: _challengeController,
+              ),
+              _buildPromptSection(
+                isDark: isDark,
+                number: 3,
+                accent: appearanceAccent,
+                title: template.prompts[2],
+                hint: template.hints[2],
+                controller: _learnedController,
+                showDivider: false,
+              ),
+            ],
+          ),
         ).animate().fadeIn(delay: 80.ms, duration: 320.ms).slideY(begin: 0.04),
         const SizedBox(height: 18),
         SizedBox(
@@ -436,8 +394,8 @@ class _DailyReflectionScreenState extends State<DailyReflectionScreen> {
                 ? null
                 : () => _finishReflection(userProvider, mascot),
             style: ElevatedButton.styleFrom(
-              backgroundColor: template.accent,
-              foregroundColor: Colors.white,
+              backgroundColor: appearanceAccent,
+              foregroundColor: AppColors.readableOn(appearanceAccent),
               elevation: 0,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(18)),
@@ -516,37 +474,30 @@ class _DailyReflectionScreenState extends State<DailyReflectionScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          CustomPaint(
-            painter: _RuledPaperPainter(
-              lineColor: isDark
-                  ? Colors.white.withValues(alpha: 0.055)
-                  : const Color(0xFFDDD6CA).withValues(alpha: 0.56),
+          TextField(
+            controller: controller,
+            minLines: 3,
+            maxLines: 5,
+            textCapitalization: TextCapitalization.sentences,
+            style: GoogleFonts.lora(
+              fontSize: 14,
+              height: 1.7,
+              color: isDark
+                  ? AppColors.textPrimaryDark
+                  : AppColors.textPrimaryLight,
             ),
-            child: TextField(
-              controller: controller,
-              minLines: 3,
-              maxLines: 5,
-              textCapitalization: TextCapitalization.sentences,
-              style: GoogleFonts.lora(
-                fontSize: 14,
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: GoogleFonts.lora(
+                fontSize: 13,
                 height: 1.7,
+                fontStyle: FontStyle.italic,
                 color: isDark
-                    ? AppColors.textPrimaryDark
-                    : AppColors.textPrimaryLight,
+                    ? AppColors.textSecondaryDark.withValues(alpha: 0.52)
+                    : AppColors.textSecondaryLight.withValues(alpha: 0.46),
               ),
-              decoration: InputDecoration(
-                hintText: hint,
-                hintStyle: GoogleFonts.lora(
-                  fontSize: 13,
-                  height: 1.7,
-                  fontStyle: FontStyle.italic,
-                  color: isDark
-                      ? AppColors.textSecondaryDark.withValues(alpha: 0.52)
-                      : AppColors.textSecondaryLight.withValues(alpha: 0.46),
-                ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 5),
-                border: InputBorder.none,
-              ),
+              contentPadding: const EdgeInsets.symmetric(vertical: 5),
+              border: InputBorder.none,
             ),
           ),
           if (showDivider)
@@ -908,7 +859,7 @@ class _DailyReflectionScreenState extends State<DailyReflectionScreen> {
             size: 48,
             color: mascot.primaryColor,
           ),
-        ).animate().scale(duration: 400.ms, curve: Curves.easeOutBack),
+        ).animate().scale(duration: 320.ms, curve: Curves.easeOutCubic),
         const SizedBox(height: 20),
         Text(
           "${mascot.name}'s Reflection Insight",
@@ -1162,25 +1113,4 @@ class _ReflectionTemplate {
         'prompts': prompts,
         'hints': hints,
       };
-}
-
-class _RuledPaperPainter extends CustomPainter {
-  final Color lineColor;
-
-  const _RuledPaperPainter({required this.lineColor});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = lineColor
-      ..strokeWidth = 1;
-    const lineHeight = 23.8;
-    for (double y = lineHeight; y < size.height; y += lineHeight) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _RuledPaperPainter oldDelegate) =>
-      oldDelegate.lineColor != lineColor;
 }

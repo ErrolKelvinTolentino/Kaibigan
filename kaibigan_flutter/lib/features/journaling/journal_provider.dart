@@ -26,6 +26,10 @@ class JournalProvider extends ChangeNotifier {
     }).toList();
   }
 
+  /// The complete signed-in history, unaffected by the list screen's current
+  /// search and category filters. Aggregate wellness views should use this.
+  List<JournalEntry> get allEntries => List.unmodifiable(_entries);
+
   List<JournalEntry> get favoriteEntries =>
       _entries.where((e) => e.isFavorite).toList();
 
@@ -124,9 +128,10 @@ class JournalProvider extends ChangeNotifier {
     String? aiResponse,
     required String companionId,
     required String mood,
-    String reflectionMode = 'companion',
+    String reflectionMode = 'auto',
     List<String> tags = const [],
     int seedStage = 1,
+    List<JournalConversationTurn> conversationTurns = const [],
   }) async {
     final cleanTitle = title.trim();
     final cleanContent = content.trim();
@@ -141,7 +146,7 @@ class JournalProvider extends ChangeNotifier {
 
     final newEntry = JournalEntry(
       id: UuidHelper.generateV4(),
-      title: cleanTitle.isEmpty ? 'Untitled Entry' : cleanTitle,
+      title: cleanTitle.isEmpty ? JournalEntry.warmUntitledTitle : cleanTitle,
       content: cleanContent,
       aiResponse: aiResponse ?? aiReply,
       companionId: companionId,
@@ -151,6 +156,7 @@ class JournalProvider extends ChangeNotifier {
       isFavorite: false,
       reflectionSeedStage: seedStage,
       createdAt: DateTime.now(),
+      conversationTurns: conversationTurns,
     );
 
     var saved = false;

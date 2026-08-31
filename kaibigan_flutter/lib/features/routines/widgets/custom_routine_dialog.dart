@@ -17,13 +17,48 @@ class _CustomRoutineDialogState extends State<CustomRoutineDialog> {
   final TimeOfDay _reminderTime = const TimeOfDay(hour: 12, minute: 0);
 
   final List<RoutineStep> _availableSteps = [
-    RoutineStep(id: 'cs-sleep', title: 'Sleep Feeling Check', subtitle: 'Log morning sleep restoration', icon: Icons.wb_twilight, type: StepType.sleepTracker),
-    RoutineStep(id: 'cs-focus', title: 'Morning Focus Journal', subtitle: 'Set intention for the day', icon: Icons.lightbulb_outline, type: StepType.journalFocus),
-    RoutineStep(id: 'cs-grounding', title: '5-4-3-2-1 Grounding', subtitle: 'Sensory reset session', icon: Icons.spa_outlined, type: StepType.grounding),
-    RoutineStep(id: 'cs-breath', title: 'Mindfulness Breathing', subtitle: 'Guided 1-minute box breath', icon: Icons.air, type: StepType.meditation),
-    RoutineStep(id: 'cs-highlight', title: 'Highlight Journal', subtitle: 'Record top moment of the day', icon: Icons.auto_stories_outlined, type: StepType.journalHighlight),
-    RoutineStep(id: 'cs-mood', title: 'Mood Check-In', subtitle: 'Track emotional state & factors', icon: Icons.sentiment_satisfied_alt_outlined, type: StepType.moodTracker),
-    RoutineStep(id: 'cs-gratitude', title: 'Gratitude Garden', subtitle: 'Plant a gratitude flower', icon: Icons.local_florist_outlined, type: StepType.gratitudeGarden),
+    RoutineStep(
+        id: 'cs-sleep',
+        title: 'Sleep Feeling Check',
+        subtitle: 'Log morning sleep restoration',
+        icon: Icons.wb_twilight,
+        type: StepType.sleepTracker),
+    RoutineStep(
+        id: 'cs-focus',
+        title: 'Morning Focus Journal',
+        subtitle: 'Set intention for the day',
+        icon: Icons.lightbulb_outline,
+        type: StepType.journalFocus),
+    RoutineStep(
+        id: 'cs-grounding',
+        title: 'Quick 3-2-1 Grounding',
+        subtitle: 'About 30 seconds of sensory anchoring',
+        icon: Icons.spa_outlined,
+        type: StepType.grounding),
+    RoutineStep(
+        id: 'cs-breath',
+        title: '30-second Breathing Reset',
+        subtitle: 'Three guided calming breaths',
+        icon: Icons.air,
+        type: StepType.meditation),
+    RoutineStep(
+        id: 'cs-highlight',
+        title: 'Highlight Journal',
+        subtitle: 'Record top moment of the day',
+        icon: Icons.auto_stories_outlined,
+        type: StepType.journalHighlight),
+    RoutineStep(
+        id: 'cs-mood',
+        title: 'Mood Check-In',
+        subtitle: 'Track emotional state & factors',
+        icon: Icons.sentiment_satisfied_alt_outlined,
+        type: StepType.moodTracker),
+    RoutineStep(
+        id: 'cs-gratitude',
+        title: 'Gratitude Garden',
+        subtitle: 'Plant a gratitude flower',
+        icon: Icons.local_florist_outlined,
+        type: StepType.gratitudeGarden),
   ];
 
   final List<RoutineStep> _selectedSteps = [];
@@ -38,18 +73,24 @@ class _CustomRoutineDialogState extends State<CustomRoutineDialog> {
   void _saveRoutine() {
     if (_titleController.text.trim().isEmpty) return;
 
-    final routinesProvider = Provider.of<RoutinesProvider>(context, listen: false);
+    final routinesProvider =
+        Provider.of<RoutinesProvider>(context, listen: false);
     final id = 'custom_${DateTime.now().millisecondsSinceEpoch}';
 
     final newRoutine = RoutineConfig(
       id: id,
       title: _titleController.text.trim(),
-      subtitle: _subtitleController.text.trim().isEmpty ? 'Personalized Routine' : _subtitleController.text.trim(),
+      subtitle: _subtitleController.text.trim().isEmpty
+          ? 'Personalized Routine'
+          : _subtitleController.text.trim(),
       type: RoutineType.custom,
       reminderTime: _reminderTime,
       primaryColor: AppColors.sageGreen,
       steps: _selectedSteps.isEmpty
-          ? [_availableSteps[1], _availableSteps[5]] // Default steps if none selected
+          ? [
+              _availableSteps[1],
+              _availableSteps[5]
+            ] // Default steps if none selected
           : List.from(_selectedSteps),
     );
 
@@ -85,7 +126,9 @@ class _CustomRoutineDialogState extends State<CustomRoutineDialog> {
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
-                    color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                    color: isDark
+                        ? AppColors.textPrimaryDark
+                        : AppColors.textPrimaryLight,
                   ),
                 ),
                 IconButton(
@@ -101,8 +144,11 @@ class _CustomRoutineDialogState extends State<CustomRoutineDialog> {
                 labelText: 'Routine Title',
                 hintText: 'e.g. Afternoon Energy Reset',
                 filled: true,
-                fillColor: isDark ? AppColors.darkBackground : AppColors.warmCream,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                fillColor:
+                    isDark ? AppColors.darkBackground : AppColors.warmCream,
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none),
               ),
             ),
             const SizedBox(height: 12),
@@ -112,21 +158,32 @@ class _CustomRoutineDialogState extends State<CustomRoutineDialog> {
                 labelText: 'Subtitle / Description',
                 hintText: 'e.g. Quick 5-min mental clarity',
                 filled: true,
-                fillColor: isDark ? AppColors.darkBackground : AppColors.warmCream,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                fillColor:
+                    isDark ? AppColors.darkBackground : AppColors.warmCream,
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none),
               ),
             ),
             const SizedBox(height: 20),
             Text(
               'Select Included Steps:',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight),
+              style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: isDark
+                      ? AppColors.textPrimaryDark
+                      : AppColors.textPrimaryLight),
             ),
             const SizedBox(height: 10),
             ..._availableSteps.map((step) {
               final isSelected = _selectedSteps.any((s) => s.type == step.type);
               return CheckboxListTile(
-                title: Text(step.title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                subtitle: Text(step.subtitle, style: const TextStyle(fontSize: 12)),
+                title: Text(step.title,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 14)),
+                subtitle:
+                    Text(step.subtitle, style: const TextStyle(fontSize: 12)),
                 secondary: Icon(step.icon, color: AppColors.sageGreen),
                 value: isSelected,
                 activeColor: AppColors.sageGreen,
@@ -150,9 +207,12 @@ class _CustomRoutineDialogState extends State<CustomRoutineDialog> {
                   backgroundColor: AppColors.sageGreen,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24)),
                 ),
-                child: const Text('Save Custom Routine', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                child: const Text('Save Custom Routine',
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
               ),
             ),
           ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/utils/api_logger.dart';
 import '../../core/utils/uuid_helper.dart';
+import 'garden_layout.dart';
 import 'gratitude_model.dart';
 
 class GratitudeProvider extends ChangeNotifier {
@@ -16,9 +17,17 @@ class GratitudeProvider extends ChangeNotifier {
   int get flowerCount => _entries.length;
 
   // Gamification Level & Progression
-  int get gardenLevel => (_entries.length ~/ 5) + 1;
-  int get flowersInCurrentLevel => _entries.length % 5;
-  double get levelProgress => flowersInCurrentLevel / 5.0;
+  int get gardenLevel => GardenLayout.automaticPlantingGarden(_entries) + 1;
+  int get flowersInCurrentLevel =>
+      GardenLayout.flowerCountInGarden(_entries, gardenLevel - 1);
+  double get levelProgress => flowersInCurrentLevel / GardenLayout.capacity;
+  int get unlockedGardenCount => GardenLayout.unlockedGardenCount(_entries);
+  List<GratitudeEntry> entriesForGarden(int gardenIndex) =>
+      GardenLayout.entriesForGarden(_entries, gardenIndex);
+  int flowersInGarden(int gardenIndex) =>
+      GardenLayout.flowerCountInGarden(_entries, gardenIndex);
+  bool isGardenFull(int gardenIndex) =>
+      GardenLayout.isFull(_entries, gardenIndex);
   int get waterDrops =>
       _entries.fold(0, (sum, e) => sum + (e.waterCount * 3)) + 10;
 
@@ -90,8 +99,12 @@ class GratitudeProvider extends ChangeNotifier {
     }
   }
 
-  Future<GratitudeEntry?> addGratitudeEntry(String content,
-      {String flowerType = 'sunflower', bool shareToCommunity = false}) async {
+  Future<GratitudeEntry?> addGratitudeEntry(
+    String content, {
+    String flowerType = 'sunflower',
+    bool shareToCommunity = false,
+    int? gardenIndex,
+  }) async {
     final cleanContent = content.trim();
     if (cleanContent.isEmpty) {
       _errorMessage = 'Write one thing you are grateful for before planting.';
@@ -102,13 +115,22 @@ class GratitudeProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
 
-    final flowerTypesList = [
-      'sunflower',
-      'sampaguita',
-      'tulip',
-      'orchid',
-      'rose'
-    ];
+    final targetGarden =
+        gardenIndex ?? GardenLayout.automaticPlantingGarden(_entries);
+    final unlocked = GardenLayout.unlockedGardenCount(_entries);
+    if (targetGarden < 0 || targetGarden >= unlocked) {
+      _errorMessage = 'Fill the current garden before opening this one.';
+      notifyListeners();
+      return null;
+    }
+    final plotIndex = GardenLayout.firstAvailablePlot(_entries, targetGarden);
+    if (plotIndex == -1) {
+      _errorMessage = 'This garden is full. Open the newly unlocked garden.';
+      notifyListeners();
+      return null;
+    }
+
+    final flowerTypesList = GratitudeEntry.availableFlowerTypes;
     final chosenType = flowerType == 'random'
         ? flowerTypesList[_entries.length % flowerTypesList.length]
         : flowerType;
@@ -117,8 +139,9 @@ class GratitudeProvider extends ChangeNotifier {
       id: UuidHelper.generateV4(),
       content: cleanContent,
       flowerType: chosenType,
-      growthStage: 3,
       waterCount: 1,
+      gardenIndex: targetGarden,
+      plotIndex: plotIndex,
       createdAt: DateTime.now(),
     );
 

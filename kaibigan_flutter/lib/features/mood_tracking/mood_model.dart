@@ -128,7 +128,7 @@ class MoodLog {
         return 'Good';
       case 5:
       default:
-        return 'Awesome';
+        return 'Great';
     }
   }
 

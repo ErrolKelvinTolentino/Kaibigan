@@ -23,7 +23,7 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
   int _promptIndex = 0;
   bool _isSubmitted = false;
   bool _isSaving = false;
-  String _generatedAiInsight = '';
+  bool _showPrompt = false;
 
   final List<String> _guidingPrompts = [
     "What is the single most important thing you want to accomplish today?",
@@ -44,23 +44,10 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
     });
   }
 
-  void _submitFocus(UserProvider userProvider, MascotInfo mascot) async {
+  void _submitFocus() async {
     final text = _focusController.text.trim();
     if (text.isEmpty || _isSaving) return;
     setState(() => _isSaving = true);
-
-    // Generate localized AI guidance based on user language
-    final lang = userProvider.language;
-    if (lang == 'filipino') {
-      _generatedAiInsight =
-          "Napakagandang layunin nito para sa araw na ito! Tandaan, hindi kailangang magmadali. Mag-focus sa paisa-isang hakbang, at huwag kalimutang huminga kapag medyo mabigat. Kasama mo ako sa bawat sandali. Padayon!";
-    } else if (lang == 'taglish') {
-      _generatedAiInsight =
-          "Ganda ng focus mo today! Advice ko lang: break it down into small, bite-sized tasks para hindi ka ma-overwhelm. Take mindful breathers in between. Wishing you the best of luck today, kaya mo yan! 🐝✨";
-    } else {
-      _generatedAiInsight =
-          "What a clear and meaningful intention for today. Remember to approach it one gentle step at a time without rushing. Protect your energy and remember that your peace matters most. Wishing you the very best today!";
-    }
 
     final routinesProvider =
         Provider.of<RoutinesProvider>(context, listen: false);
@@ -117,18 +104,18 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
         centerTitle: true,
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
           child: _isSubmitted
               ? _buildAiInsightView(context, isDark, mascot)
-              : _buildGuidedInputView(context, isDark, userProvider, mascot),
+              : _buildGuidedInputView(context, isDark),
         ),
       ),
     );
   }
 
-  Widget _buildGuidedInputView(BuildContext context, bool isDark,
-      UserProvider userProvider, MascotInfo mascot) {
+  Widget _buildGuidedInputView(BuildContext context, bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -137,54 +124,17 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
             borderRadius: BorderRadius.circular(24),
             child: Image.asset(
               FeatureIconHelper.todaysFocus,
-              width: 120,
-              height: 120,
+              width: 88,
+              height: 88,
               fit: BoxFit.contain,
               errorBuilder: (context, error, stackTrace) =>
                   const Text('🎯', style: TextStyle(fontSize: 56)),
             ),
           ),
-        ).animate().scale(duration: 400.ms, curve: Curves.easeOutBack),
-
-        const SizedBox(height: 20),
-
-        // Guiding prompt pill with reshuffle button
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: AppColors.honeyGold.withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(18),
-            border:
-                Border.all(color: AppColors.honeyGold.withValues(alpha: 0.3)),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  _guidingPrompts[_promptIndex],
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w600,
-                    color: isDark
-                        ? AppColors.textPrimaryDark
-                        : AppColors.textPrimaryLight,
-                  ),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.shuffle_rounded,
-                    color: AppColors.honeyAmber, size: 20),
-                tooltip: 'Shuffle guiding question',
-                onPressed: _shufflePrompt,
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 20),
-
+        ).animate().scale(duration: 320.ms, curve: Curves.easeOutCubic),
+        const SizedBox(height: 14),
         Text(
-          "What will you focus on?",
+          "What deserves your attention today?",
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w800,
@@ -192,9 +142,18 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
                 isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
           ),
         ),
-
-        const SizedBox(height: 12),
-
+        const SizedBox(height: 5),
+        Text(
+          'One sentence is enough. This is an intention, not a task list.',
+          style: TextStyle(
+            fontSize: 13,
+            height: 1.4,
+            color: isDark
+                ? AppColors.textSecondaryDark
+                : AppColors.textSecondaryLight,
+          ),
+        ),
+        const SizedBox(height: 16),
         Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
@@ -216,7 +175,8 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
           ),
           child: TextField(
             controller: _focusController,
-            maxLines: 4,
+            minLines: 2,
+            maxLines: 3,
             style: TextStyle(
               fontSize: 16,
               color: isDark
@@ -224,7 +184,7 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
                   : AppColors.textPrimaryLight,
             ),
             decoration: InputDecoration(
-              hintText: "Write your priority or intention for today...",
+              hintText: "Today, I want to give my attention to…",
               hintStyle: TextStyle(
                 color: isDark
                     ? AppColors.textSecondaryDark.withValues(alpha: 0.5)
@@ -234,15 +194,46 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
             ),
           ),
         ),
-
-        const Spacer(),
-
+        const SizedBox(height: 8),
+        if (_showPrompt)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(15, 12, 8, 12),
+            decoration: BoxDecoration(
+              color: AppColors.honeyGold.withValues(alpha: 0.11),
+              borderRadius: BorderRadius.circular(17),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _guidingPrompts[_promptIndex],
+                    style: const TextStyle(fontSize: 12.5, height: 1.4),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Another prompt',
+                  onPressed: _shufflePrompt,
+                  icon: const Icon(Icons.refresh_rounded, size: 19),
+                ),
+              ],
+            ),
+          )
+        else
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => setState(() => _showPrompt = true),
+              icon: const Icon(Icons.lightbulb_outline_rounded, size: 18),
+              label: const Text('Need a gentle prompt?'),
+            ),
+          ),
+        const SizedBox(height: 20),
         SizedBox(
           width: double.infinity,
           height: 56,
           child: ElevatedButton(
-            onPressed:
-                _isSaving ? null : () => _submitFocus(userProvider, mascot),
+            onPressed: _isSaving ? null : _submitFocus,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.sageGreen,
               foregroundColor: Colors.white,
@@ -260,7 +251,7 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
                     ),
                   )
                 : const Text(
-                    "Set Focus & Get Insight",
+                    "Keep this focus",
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                   ),
           ),
@@ -274,7 +265,7 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        const SizedBox(height: 16),
+        const SizedBox(height: 26),
         Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
@@ -286,10 +277,10 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
             size: 48,
             color: mascot.primaryColor,
           ),
-        ).animate().scale(duration: 400.ms, curve: Curves.easeOutBack),
+        ).animate().scale(duration: 320.ms, curve: Curves.easeOutCubic),
         const SizedBox(height: 20),
         Text(
-          "${mascot.name}'s Insight & Wish",
+          "Your focus is set",
           style: TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.w800,
@@ -317,36 +308,18 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
           ),
         ),
         const SizedBox(height: 20),
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.darkCard : Colors.white,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: isDark
-                  ? AppColors.darkCardBorder
-                  : Colors.black.withValues(alpha: 0.08),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
+        Text(
+          'One thing is enough. ${mascot.name} will keep this intention close without turning it into another list.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 14,
+            height: 1.5,
+            color: isDark
+                ? AppColors.textSecondaryDark
+                : AppColors.textSecondaryLight,
           ),
-          child: Text(
-            _generatedAiInsight,
-            style: TextStyle(
-              fontSize: 15,
-              height: 1.5,
-              color: isDark
-                  ? AppColors.textPrimaryDark
-                  : AppColors.textPrimaryLight,
-            ),
-          ),
-        ).animate().fadeIn(delay: 200.ms),
-        const Spacer(),
+        ).animate().fadeIn(delay: 160.ms),
+        const SizedBox(height: 36),
         SizedBox(
           width: double.infinity,
           height: 52,
@@ -364,7 +337,7 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(18)),
             ),
-            child: const Text("I'm Ready!",
+            child: const Text("Return to my day",
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
           ),
         ),

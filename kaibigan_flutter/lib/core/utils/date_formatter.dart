@@ -4,16 +4,26 @@ class DateFormatter {
   // Example: Hulyo 15 - 9:41 PM
   static String formatFullDate(DateTime date, {String language = 'taglish'}) {
     final monthsFilipino = [
-      'Enero', 'Pebbrero', 'Marso', 'Abril', 'Mayo', 'Hunyo',
-      'Hulyo', 'Agosto', 'Setyembre', 'Oktubre', 'Nobyembre', 'Disyembre'
+      'Enero',
+      'Pebrero',
+      'Marso',
+      'Abril',
+      'Mayo',
+      'Hunyo',
+      'Hulyo',
+      'Agosto',
+      'Setyembre',
+      'Oktubre',
+      'Nobyembre',
+      'Disyembre'
     ];
-    
+
     if (language == 'filipino' || language == 'taglish') {
       final month = monthsFilipino[date.month - 1];
       final timeStr = DateFormat('h:mm a').format(date);
       return '$month ${date.day} - $timeStr';
     }
-    
+
     return DateFormat('MMMM d - h:mm a').format(date);
   }
 

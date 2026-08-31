@@ -3,9 +3,14 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/services/supabase_service.dart';
+import '../../core/theme/garden_appearance.dart';
+import '../../core/theme/journal_appearance.dart';
+import '../../core/utils/language_helper.dart';
 import '../companion/companion_model.dart';
 import 'user_provider.dart';
 import 'profile_screen.dart';
+import 'ai_memory_screen.dart';
+import 'journal_appearance_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -14,6 +19,12 @@ class SettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final userProvider = Provider.of<UserProvider>(context);
+    final language = userProvider.language;
+    String copy(String english, String filipino) => LanguageHelper.pick(
+          language,
+          english: english,
+          filipino: filipino,
+        );
     final mascot = MascotInfo.getById(userProvider.selectedCompanion);
 
     return Scaffold(
@@ -29,7 +40,7 @@ class SettingsScreen extends StatelessWidget {
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
-          'Settings',
+          copy('Settings', 'Mga setting'),
           style: AppTypography.heading3(context, isDark: isDark),
         ),
         centerTitle: true,
@@ -94,7 +105,8 @@ class SettingsScreen extends StatelessWidget {
                             const SizedBox(height: 3),
                             Text(
                               userProvider.email.isEmpty
-                                  ? 'Offline Profile'
+                                  ? copy(
+                                      'Offline profile', 'Offline na profile')
                                   : userProvider.email,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -106,9 +118,9 @@ class SettingsScreen extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(height: 7),
-                            const Text(
-                              'Manage profile',
-                              style: TextStyle(
+                            Text(
+                              copy('Manage profile', 'Ayusin ang profile'),
+                              style: const TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.sageGreen,
@@ -138,7 +150,7 @@ class SettingsScreen extends StatelessWidget {
 
             // Section 1: Preferences
             Text(
-              'Preferences',
+              copy('Preferences', 'Mga kagustuhan'),
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w800,
@@ -166,7 +178,7 @@ class SettingsScreen extends StatelessWidget {
                     leading: Text(mascot.avatarIcon,
                         style: const TextStyle(fontSize: 24)),
                     iconColor: mascot.primaryColor,
-                    title: 'Companion Mascot',
+                    title: copy('Companion', 'Kasama'),
                     subtitle: mascot.tag,
                     value: mascot.name,
                     onTap: () => _showCompanionPicker(context, userProvider),
@@ -175,11 +187,39 @@ class SettingsScreen extends StatelessWidget {
                   _settingsTile(
                     context: context,
                     isDark: isDark,
+                    leading: Icon(
+                      switch (userProvider.gardenAppearance) {
+                        GardenAppearance.syncWithTime => Icons.schedule_rounded,
+                        GardenAppearance.day => Icons.wb_sunny_rounded,
+                        GardenAppearance.night => Icons.nightlight_round,
+                      },
+                      color: AppColors.sageGreen,
+                      size: 22,
+                    ),
+                    iconColor: AppColors.sageGreen,
+                    title: copy('Garden lighting', 'Ilaw ng garden'),
+                    subtitle: copy(
+                      'Choose when the garden changes',
+                      'Piliin kung kailan magbabago ang garden',
+                    ),
+                    value: _gardenAppearanceLabel(
+                      userProvider.gardenAppearance,
+                      copy,
+                    ),
+                    onTap: () => _showGardenAppearancePicker(
+                      context,
+                      userProvider,
+                    ),
+                  ),
+                  const Divider(height: 1, indent: 72),
+                  _settingsTile(
+                    context: context,
+                    isDark: isDark,
                     leading: const Icon(Icons.translate_rounded,
                         color: AppColors.sageGreen, size: 22),
                     iconColor: AppColors.sageGreen,
-                    title: 'Language / Wika',
-                    subtitle: 'App language',
+                    title: copy('Language', 'Wika'),
+                    subtitle: copy('App language', 'Wika ng app'),
                     value: _languageLabel(userProvider.language),
                     onTap: () => _showLanguagePicker(context, userProvider),
                   ),
@@ -188,24 +228,57 @@ class SettingsScreen extends StatelessWidget {
                     context: context,
                     isDark: isDark,
                     leading: Icon(
-                      userProvider.isDarkMode
-                          ? Icons.dark_mode_rounded
-                          : Icons.light_mode_rounded,
+                      switch (userProvider.themeMode) {
+                        ThemeMode.system => Icons.brightness_auto_rounded,
+                        ThemeMode.light => Icons.light_mode_rounded,
+                        ThemeMode.dark => Icons.dark_mode_rounded,
+                      },
                       color: AppColors.honeyGold,
                       size: 22,
                     ),
                     iconColor: AppColors.honeyGold,
-                    title: 'Dark Mode',
-                    subtitle: userProvider.isDarkMode
-                        ? 'Gentle on your eyes at night'
-                        : 'Use a cozy evening palette',
-                    trailing: Switch(
-                      value: userProvider.isDarkMode,
-                      activeThumbColor: AppColors.honeyGold,
-                      onChanged: userProvider.toggleDarkMode,
+                    title: copy('Theme', 'Tema'),
+                    subtitle: switch (userProvider.themeMode) {
+                      ThemeMode.system => copy(
+                          'Match your device appearance',
+                          'Sundan ang tema ng device',
+                        ),
+                      ThemeMode.light => copy(
+                          'Keep the warm daytime palette',
+                          'Gamitin ang maliwanag na tema',
+                        ),
+                      ThemeMode.dark => copy(
+                          'Gentle on your eyes at night',
+                          'Mas magaan sa mata sa gabi',
+                        ),
+                    },
+                    value: _themeModeLabel(userProvider.themeMode, copy),
+                    onTap: () => _showThemePicker(
+                      context,
+                      userProvider,
                     ),
-                    onTap: () =>
-                        userProvider.toggleDarkMode(!userProvider.isDarkMode),
+                  ),
+                  const Divider(height: 1, indent: 72),
+                  _settingsTile(
+                    context: context,
+                    isDark: isDark,
+                    leading: Icon(
+                      Icons.auto_stories_rounded,
+                      color: userProvider.journalAccent.color,
+                      size: 22,
+                    ),
+                    iconColor: userProvider.journalAccent.color,
+                    title: copy('Journal appearance', 'Itsura ng talaarawan'),
+                    subtitle: copy(
+                      'Paper style and accent color',
+                      'Estilo ng papel at kulay',
+                    ),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const JournalAppearanceScreen(),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -213,9 +286,52 @@ class SettingsScreen extends StatelessWidget {
 
             const SizedBox(height: 24),
 
+            Text(
+              copy('AI & privacy', 'AI at privacy'),
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                color: AppColors.honeyAmber,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.darkCard : Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: isDark
+                      ? AppColors.darkCardBorder
+                      : Colors.black.withValues(alpha: 0.05),
+                ),
+              ),
+              child: _settingsTile(
+                context: context,
+                isDark: isDark,
+                leading: const Icon(Icons.psychology_alt_rounded,
+                    color: AppColors.honeyAmber, size: 22),
+                iconColor: AppColors.honeyAmber,
+                title: copy('AI memory & privacy', 'AI memory at privacy'),
+                subtitle: copy(
+                  'Review or pause what Kaibigan remembers',
+                  'Suriin o i-pause ang naaalala ng Kaibigan',
+                ),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => AiMemoryScreen(language: language),
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
             // Section 2: Account & Supabase Status
             Text(
-              'Account & Sync',
+              copy('Account & sync', 'Account at pag-sync'),
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w800,
@@ -266,16 +382,28 @@ class SettingsScreen extends StatelessWidget {
                           children: [
                             Text(
                               SupabaseService.isInitialized
-                                  ? 'Cloud sync is on'
-                                  : 'Sync Unavailable',
+                                  ? copy(
+                                      'Cloud sync is on',
+                                      'Naka-on ang cloud sync',
+                                    )
+                                  : copy(
+                                      'Sync unavailable',
+                                      'Hindi available ang pag-sync',
+                                    ),
                               style: const TextStyle(
                                   fontWeight: FontWeight.w800, fontSize: 14),
                             ),
                             const SizedBox(height: 2),
                             Text(
                               SupabaseService.isInitialized
-                                  ? 'Signed-in entries sync securely with Supabase'
-                                  : 'New entries cannot be saved until sync is restored',
+                                  ? copy(
+                                      'Signed-in entries sync securely with Supabase',
+                                      'Ligtas na sini-sync sa Supabase ang iyong mga tala',
+                                    )
+                                  : copy(
+                                      'New entries cannot be saved until sync is restored',
+                                      'Hindi mase-save ang bagong tala hanggang bumalik ang sync',
+                                    ),
                               style: TextStyle(
                                   fontSize: 12,
                                   color: isDark
@@ -297,7 +425,7 @@ class SettingsScreen extends StatelessWidget {
                         ),
                         child: Text(
                           SupabaseService.isInitialized
-                              ? 'Connected'
+                              ? copy('Connected', 'Konektado')
                               : 'Offline',
                           style: TextStyle(
                             fontSize: 11,
@@ -317,8 +445,8 @@ class SettingsScreen extends StatelessWidget {
                     child: OutlinedButton.icon(
                       icon: const Icon(Icons.logout_rounded,
                           color: Colors.redAccent, size: 18),
-                      label: const Text('Log Out',
-                          style: TextStyle(
+                      label: Text(copy('Log out', 'Mag-log out'),
+                          style: const TextStyle(
                               color: Colors.redAccent,
                               fontWeight: FontWeight.w700)),
                       style: OutlinedButton.styleFrom(
@@ -437,9 +565,278 @@ class SettingsScreen extends StatelessWidget {
     }
   }
 
+  String _themeModeLabel(
+    ThemeMode mode,
+    String Function(String english, String filipino) copy,
+  ) =>
+      switch (mode) {
+        ThemeMode.system => copy('System', 'System'),
+        ThemeMode.light => copy('Light', 'Maliwanag'),
+        ThemeMode.dark => copy('Dark', 'Madilim'),
+      };
+
+  String _gardenAppearanceLabel(
+    GardenAppearance appearance,
+    String Function(String english, String filipino) copy,
+  ) =>
+      switch (appearance) {
+        GardenAppearance.syncWithTime =>
+          copy('Sync with time', 'Sabay sa oras'),
+        GardenAppearance.day => copy('Day', 'Araw'),
+        GardenAppearance.night => copy('Night', 'Gabi'),
+      };
+
+  Future<void> _showThemePicker(
+    BuildContext context,
+    UserProvider provider,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    String copy(String english, String filipino) => LanguageHelper.pick(
+          provider.language,
+          english: english,
+          filipino: filipino,
+        );
+    final options = [
+      (
+        ThemeMode.system,
+        copy('Use device setting', 'Sundan ang device'),
+        copy('Changes with your phone or computer',
+            'Nagbabago kasabay ng iyong device'),
+        Icons.brightness_auto_rounded,
+      ),
+      (
+        ThemeMode.light,
+        copy('Light', 'Maliwanag'),
+        copy('Warm cream and honey colors', 'Warm cream at honey na kulay'),
+        Icons.light_mode_rounded,
+      ),
+      (
+        ThemeMode.dark,
+        copy('Dark', 'Madilim'),
+        copy('A calm forest-night palette', 'Mahinahong tema para sa gabi'),
+        Icons.dark_mode_rounded,
+      ),
+    ];
+
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: isDark ? AppColors.darkCard : AppColors.warmCream,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                copy('Choose an appearance', 'Piliin ang tema'),
+                style:
+                    const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                copy(
+                  'The whole app updates immediately.',
+                  'Agad na magbabago ang buong app.',
+                ),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ...options.map(
+                (option) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Material(
+                    color: provider.themeMode == option.$1
+                        ? AppColors.honeyAmber.withValues(alpha: 0.12)
+                        : (isDark ? AppColors.darkBackground : Colors.white),
+                    borderRadius: BorderRadius.circular(18),
+                    child: ListTile(
+                      key: ValueKey('theme-mode-${option.$1.name}'),
+                      minTileHeight: 66,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      leading: Container(
+                        width: 42,
+                        height: 42,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: AppColors.honeyAmber.withValues(alpha: 0.11),
+                          borderRadius: BorderRadius.circular(13),
+                        ),
+                        child: Icon(
+                          option.$4,
+                          color: AppColors.honeyAmber,
+                          size: 21,
+                        ),
+                      ),
+                      title: Text(
+                        option.$2,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      subtitle: Text(option.$3),
+                      trailing: provider.themeMode == option.$1
+                          ? const Icon(
+                              Icons.check_circle_rounded,
+                              color: AppColors.honeyAmber,
+                            )
+                          : null,
+                      onTap: () {
+                        Navigator.pop(sheetContext);
+                        provider.setThemeMode(option.$1);
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showGardenAppearancePicker(
+    BuildContext context,
+    UserProvider provider,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    String copy(String english, String filipino) => LanguageHelper.pick(
+          provider.language,
+          english: english,
+          filipino: filipino,
+        );
+    final options = [
+      (
+        GardenAppearance.syncWithTime,
+        copy('Sync with time', 'Sabay sa oras'),
+        copy(
+          'Day from 6 AM to 6 PM, then night',
+          'Araw mula 6 AM hanggang 6 PM, tapos gabi',
+        ),
+        Icons.schedule_rounded,
+      ),
+      (
+        GardenAppearance.day,
+        copy('Always day', 'Palaging araw'),
+        copy('Keep the garden bright', 'Panatilihing maliwanag ang garden'),
+        Icons.wb_sunny_rounded,
+      ),
+      (
+        GardenAppearance.night,
+        copy('Always night', 'Palaging gabi'),
+        copy('Keep the garden under moonlight',
+            'Panatilihin sa liwanag ng buwan'),
+        Icons.nightlight_round,
+      ),
+    ];
+
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: isDark ? AppColors.darkCard : AppColors.warmCream,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                copy('Garden lighting', 'Ilaw ng garden'),
+                style:
+                    const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                copy(
+                  'Choose the atmosphere for your gratitude garden.',
+                  'Piliin ang atmosphere ng gratitude garden mo.',
+                ),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ...options.map(
+                (option) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Material(
+                    color: provider.gardenAppearance == option.$1
+                        ? AppColors.sageGreen.withValues(alpha: 0.14)
+                        : (isDark ? AppColors.darkBackground : Colors.white),
+                    borderRadius: BorderRadius.circular(18),
+                    child: ListTile(
+                      key: ValueKey('garden-appearance-${option.$1.name}'),
+                      minTileHeight: 66,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      leading: Container(
+                        width: 42,
+                        height: 42,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: AppColors.sageGreen.withValues(alpha: 0.11),
+                          borderRadius: BorderRadius.circular(13),
+                        ),
+                        child: Icon(
+                          option.$4,
+                          color: AppColors.sageGreen,
+                          size: 21,
+                        ),
+                      ),
+                      title: Text(
+                        option.$2,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      subtitle: Text(option.$3),
+                      trailing: provider.gardenAppearance == option.$1
+                          ? const Icon(
+                              Icons.check_circle_rounded,
+                              color: AppColors.sageGreen,
+                            )
+                          : null,
+                      onTap: () {
+                        Navigator.pop(sheetContext);
+                        provider.setGardenAppearance(option.$1);
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _showCompanionPicker(
       BuildContext context, UserProvider provider) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    String copy(String english, String filipino) => LanguageHelper.pick(
+          provider.language,
+          english: english,
+          filipino: filipino,
+        );
     return showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -454,11 +851,15 @@ class SettingsScreen extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Choose your companion',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+              Text(copy('Choose your companion', 'Piliin ang iyong kasama'),
+                  style: const TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.w800)),
               const SizedBox(height: 4),
               Text(
-                'Pick the friend whose energy feels right for you.',
+                copy(
+                  'Choose the companion whose style feels right for you.',
+                  'Piliin ang kasamang akma sa iyo.',
+                ),
                 style: TextStyle(
                   fontSize: 13,
                   color: isDark
@@ -515,6 +916,11 @@ class SettingsScreen extends StatelessWidget {
   Future<void> _showLanguagePicker(
       BuildContext context, UserProvider provider) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    String copy(String english, String filipino) => LanguageHelper.pick(
+          provider.language,
+          english: english,
+          filipino: filipino,
+        );
     const languages = [
       ('taglish', 'Taglish', 'Filipino-English', '🇵🇭'),
       ('filipino', 'Filipino', 'Buong Filipino', '🇵🇭'),
@@ -535,11 +941,15 @@ class SettingsScreen extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Choose your language',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+              Text(copy('Choose your language', 'Piliin ang iyong wika'),
+                  style: const TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.w800)),
               const SizedBox(height: 4),
               Text(
-                'You can change this anytime.',
+                copy(
+                  'The whole interface updates immediately.',
+                  'Agad na magbabago ang buong interface.',
+                ),
                 style: TextStyle(
                   fontSize: 13,
                   color: isDark
@@ -586,25 +996,33 @@ class SettingsScreen extends StatelessWidget {
 
   Future<void> _confirmLogout(
       BuildContext context, UserProvider provider) async {
+    String copy(String english, String filipino) => LanguageHelper.pick(
+          provider.language,
+          english: english,
+          filipino: filipino,
+        );
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
-        title: const Text('Log out of Kaibigan?'),
-        content: const Text(
-          'Your synced entries will stay safe. You can sign back in anytime.',
+        title: Text(copy('Log out of Kaibigan?', 'Mag-log out sa Kaibigan?')),
+        content: Text(
+          copy(
+            'Your synced entries will stay safe. You can sign back in anytime.',
+            'Mananatiling ligtas ang mga naka-sync na tala. Maaari kang bumalik anumang oras.',
+          ),
           textAlign: TextAlign.center,
         ),
         actionsAlignment: MainAxisAlignment.spaceBetween,
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Stay signed in'),
+            child: Text(copy('Stay signed in', 'Manatiling naka-sign in')),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Log out'),
+            child: Text(copy('Log out', 'Mag-log out')),
           ),
         ],
       ),

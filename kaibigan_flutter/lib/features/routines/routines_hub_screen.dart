@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
+import '../../core/widgets/mobile_layout.dart';
+import '../../core/widgets/sync_status_banner.dart';
 import '../mood_tracking/mood_model.dart';
 import '../mood_tracking/mood_tracker_screen.dart';
 import '../gratitude_garden/garden_screen.dart';
@@ -23,10 +25,33 @@ import 'screens/mindfulness_meditation_screen.dart';
 class RoutinesHubScreen extends StatelessWidget {
   const RoutinesHubScreen({super.key});
 
-  void _launchRoutine(BuildContext context, RoutineConfig routine) {
+  void _launchRoutine(
+    BuildContext context,
+    RoutineConfig routine, {
+    bool resume = false,
+  }) {
+    if (!routine.isEnabled || routine.activeStepsCount == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            !routine.isEnabled
+                ? 'Enable this routine before starting it.'
+                : 'Add or enable at least one activity first.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => ProgressiveRoutineRunner(routineType: routine.type)),
+      MaterialPageRoute(
+        builder: (_) => ProgressiveRoutineRunner(
+          routineType: routine.type,
+          config: routine,
+          resumeSession: resume,
+        ),
+      ),
     );
   }
 
@@ -36,7 +61,18 @@ class RoutinesHubScreen extends StatelessWidget {
     final routinesProvider = Provider.of<RoutinesProvider>(context);
 
     final phase = routinesProvider.currentPhase;
-    final recommended = routinesProvider.recommendedRoutine;
+    final activeSession = routinesProvider.activeSession;
+    final resumableRoutine = activeSession == null
+        ? null
+        : routinesProvider.getRoutineById(activeSession.routineId);
+    final recommended = resumableRoutine ?? routinesProvider.recommendedRoutine;
+    final isResuming = resumableRoutine != null;
+    final resumeStepIndex = isResuming && recommended != null
+        ? activeSession!.nextStepIndex.clamp(0, recommended.activeStepsCount)
+        : 0;
+    final resumeAtCompletion = isResuming &&
+        recommended != null &&
+        resumeStepIndex >= recommended.activeStepsCount;
     final allRoutines = routinesProvider.allRoutines;
 
     String phaseText;
@@ -45,32 +81,88 @@ class RoutinesHubScreen extends StatelessWidget {
 
     switch (phase) {
       case RoutineType.morning:
-        phaseText = 'Morning Phase';
+        phaseText = 'Morning';
         phaseIcon = Icons.wb_sunny_outlined;
         phaseColor = AppColors.sageGreen;
         break;
       case RoutineType.midday:
-        phaseText = 'Mid-Day Phase';
+        phaseText = 'Mid-day';
         phaseIcon = Icons.spa_outlined;
-        phaseColor = AppColors.softRose;
+        phaseColor = AppColors.honeyAmber;
         break;
       case RoutineType.night:
       case RoutineType.custom:
-        phaseText = 'Night Phase';
+        phaseText = 'Evening';
         phaseIcon = Icons.nights_stay_outlined;
         phaseColor = AppColors.beePrimary;
         break;
     }
 
     final List<Map<String, dynamic>> standaloneFeatures = [
-      {'title': "Today's Focus", 'subtitle': 'Set daily intention', 'asset': FeatureIconHelper.todaysFocus, 'icon': Icons.lightbulb_outline, 'color': AppColors.sageGreen, 'screen': const TodaysFocusScreen()},
-      {'title': 'Mood Check-In', 'subtitle': 'Track energy bees', 'asset': FeatureIconHelper.moodTracker, 'icon': Icons.sentiment_satisfied_alt_outlined, 'color': AppColors.honeyGold, 'screen': const MoodTrackerScreen()},
-      {'title': 'Plant Gratitude', 'subtitle': 'Bloom garden flower', 'asset': FeatureIconHelper.gratitudeGarden, 'icon': Icons.local_florist_outlined, 'color': AppColors.sageGreen, 'screen': const GardenScreen()},
-      {'title': 'Sleep Log', 'subtitle': 'Log rest & sleep hours', 'asset': FeatureIconHelper.sleepLog, 'icon': Icons.wb_twilight, 'color': AppColors.skyBlue, 'screen': const SleepLogFlowScreen()},
-      {'title': "Today's Highlight", 'subtitle': 'Capture 60-char moment', 'asset': FeatureIconHelper.todaysHighlight, 'icon': Icons.auto_stories_outlined, 'color': AppColors.softYellow, 'screen': const TodaysHighlightScreen()},
-      {'title': 'Daily Reflection', 'subtitle': 'Evening reflection review', 'asset': FeatureIconHelper.dailyReflection, 'icon': Icons.spa_outlined, 'color': AppColors.softRose, 'screen': const DailyReflectionScreen()},
-      {'title': 'Sensory Grounding', 'subtitle': '5-4-3-2-1 reset', 'asset': FeatureIconHelper.dailyReflection, 'icon': Icons.spa_outlined, 'color': AppColors.softRose, 'screen': const GroundingSessionScreen()},
-      {'title': 'Box Breathing', 'subtitle': 'Mindfulness timer', 'asset': FeatureIconHelper.midDayRoutine, 'icon': Icons.air, 'color': AppColors.softRose, 'screen': const MindfulnessMeditationScreen()},
+      {
+        'title': "Today's Focus",
+        'subtitle': 'Set daily intention',
+        'asset': FeatureIconHelper.todaysFocus,
+        'icon': Icons.lightbulb_outline,
+        'color': AppColors.honeyAmber,
+        'screen': const TodaysFocusScreen()
+      },
+      {
+        'title': 'Mood Check-In',
+        'subtitle': 'Track energy bees',
+        'asset': FeatureIconHelper.moodTracker,
+        'icon': Icons.sentiment_satisfied_alt_outlined,
+        'color': AppColors.honeyAmber,
+        'screen': const MoodTrackerScreen()
+      },
+      {
+        'title': 'Plant Gratitude',
+        'subtitle': 'Bloom garden flower',
+        'asset': FeatureIconHelper.gratitudeGarden,
+        'icon': Icons.local_florist_outlined,
+        'color': AppColors.honeyAmber,
+        'screen': const GardenScreen()
+      },
+      {
+        'title': 'Sleep Log',
+        'subtitle': 'Log rest & sleep hours',
+        'asset': FeatureIconHelper.sleepLog,
+        'icon': Icons.wb_twilight,
+        'color': AppColors.honeyAmber,
+        'screen': const SleepLogFlowScreen()
+      },
+      {
+        'title': "Today's Highlight",
+        'subtitle': 'Capture 60-char moment',
+        'asset': FeatureIconHelper.todaysHighlight,
+        'icon': Icons.auto_stories_outlined,
+        'color': AppColors.honeyAmber,
+        'screen': const TodaysHighlightScreen()
+      },
+      {
+        'title': 'Daily Reflection',
+        'subtitle': 'Evening reflection review',
+        'asset': FeatureIconHelper.dailyReflection,
+        'icon': Icons.spa_outlined,
+        'color': AppColors.honeyAmber,
+        'screen': const DailyReflectionScreen()
+      },
+      {
+        'title': '5–4–3–2–1 Grounding',
+        'subtitle': 'Sensory reset',
+        'asset': 'assets/feature icons/Grounding.png',
+        'icon': Icons.spa_outlined,
+        'color': AppColors.honeyAmber,
+        'screen': const GroundingSessionScreen()
+      },
+      {
+        'title': 'Breathing Exercise',
+        'subtitle': 'Guided rhythms',
+        'asset': 'assets/feature icons/Breathing.png',
+        'icon': Icons.air_rounded,
+        'color': AppColors.honeyAmber,
+        'screen': const MindfulnessMeditationScreen()
+      },
     ];
 
     return Scaffold(
@@ -79,69 +171,79 @@ class RoutinesHubScreen extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight),
+          icon: Icon(Icons.arrow_back_ios_new_rounded,
+              color: isDark
+                  ? AppColors.textPrimaryDark
+                  : AppColors.textPrimaryLight),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
-          'Daily Routines Hub',
+          'Routines',
           style: AppTypography.heading3(context, isDark: isDark),
         ),
-        centerTitle: true,
+        centerTitle: false,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+          padding: MobileLayout.pageInsets(context, top: 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Top Header Row
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final compact = constraints.maxWidth < 360;
+                  final heading = Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Icon(phaseIcon, size: 16, color: phaseColor),
-                          const SizedBox(width: 6),
-                          Text(
-                            phaseText,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: phaseColor,
-                            ),
+                      Row(children: [
+                        Icon(phaseIcon, size: 16, color: phaseColor),
+                        const SizedBox(width: 6),
+                        Text(
+                          phaseText,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: phaseColor,
                           ),
-                        ],
-                      ),
+                        ),
+                      ]),
                       const SizedBox(height: 2),
                       Text(
-                        'Daily Routines',
-                        style: AppTypography.heroHeader(context, isDark: isDark),
+                        'Your daily rhythm',
+                        style:
+                            AppTypography.heroHeader(context, isDark: isDark),
                       ),
                     ],
-                  ),
-                  Row(
+                  );
+                  final controls = Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Streak Counter Badge
+                      // Today's honest completion summary.
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
                           color: (isDark ? AppColors.darkCard : Colors.white),
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: isDark ? AppColors.darkCardBorder : Colors.black.withValues(alpha: 0.06)),
+                          border: Border.all(
+                              color: isDark
+                                  ? AppColors.darkCardBorder
+                                  : Colors.black.withValues(alpha: 0.06)),
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.local_fire_department, size: 16, color: Colors.orangeAccent),
+                            const Icon(Icons.check_circle_outline_rounded,
+                                size: 16, color: AppColors.sageGreen),
                             const SizedBox(width: 4),
                             Text(
-                              '${routinesProvider.streakDays}d Streak',
+                              '${routinesProvider.completedTodayCount} done',
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
-                                color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                color: isDark
+                                    ? AppColors.textPrimaryDark
+                                    : AppColors.textPrimaryLight,
                               ),
                             ),
                           ],
@@ -153,23 +255,56 @@ class RoutinesHubScreen extends StatelessWidget {
                         onPressed: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (_) => const RoutineManagementScreen()),
+                            MaterialPageRoute(
+                                builder: (_) =>
+                                    const RoutineManagementScreen()),
                           );
                         },
-                        icon: Icon(Icons.settings_outlined, color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight),
+                        icon: Icon(Icons.settings_outlined,
+                            color: isDark
+                                ? AppColors.textPrimaryDark
+                                : AppColors.textPrimaryLight),
                         tooltip: 'Manage Routines',
                       ),
                     ],
-                  ),
-                ],
+                  );
+                  if (compact) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        heading,
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: controls,
+                        ),
+                      ],
+                    );
+                  }
+                  return Row(
+                    children: [Expanded(child: heading), controls],
+                  );
+                },
               ),
               const SizedBox(height: 20),
+
+              if (routinesProvider.errorMessage != null) ...[
+                SyncStatusBanner(
+                  message: routinesProvider.errorMessage!,
+                  onRetry: routinesProvider.fetchRoutineLogs,
+                  margin: EdgeInsets.zero,
+                ),
+                const SizedBox(height: 14),
+              ],
 
               // Active / Recommended Routine Hero Card
               if (recommended != null) ...[
                 Container(
+                  key: const ValueKey('recommended-routine-card'),
                   width: double.infinity,
-                  padding: const EdgeInsets.all(24),
+                  padding: EdgeInsets.all(
+                    MediaQuery.sizeOf(context).width <= 360 ? 18 : 22,
+                  ),
                   decoration: BoxDecoration(
                     color: isDark ? AppColors.darkCard : Colors.white,
                     borderRadius: BorderRadius.circular(28),
@@ -188,17 +323,24 @@ class RoutinesHubScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 10,
+                        runSpacing: 7,
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(
-                              color: recommended.primaryColor.withValues(alpha: 0.15),
+                              color: recommended.primaryColor
+                                  .withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
-                              'RECOMMENDED NOW',
+                              isResuming
+                                  ? 'CONTINUE WHERE YOU LEFT OFF'
+                                  : 'FOR RIGHT NOW',
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w800,
@@ -208,8 +350,13 @@ class RoutinesHubScreen extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            '~${recommended.totalMinutes} mins',
-                            style: AppTypography.bodySmall(context, isDark: isDark),
+                            isResuming
+                                ? resumeAtCompletion
+                                    ? 'Ready to finish'
+                                    : 'Step ${resumeStepIndex + 1} of ${recommended.activeStepsCount}'
+                                : '~${recommended.totalMinutes} mins',
+                            style: AppTypography.bodySmall(context,
+                                isDark: isDark),
                           ),
                         ],
                       ),
@@ -219,23 +366,32 @@ class RoutinesHubScreen extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w800,
-                          color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                          color: isDark
+                              ? AppColors.textPrimaryDark
+                              : AppColors.textPrimaryLight,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         recommended.subtitle,
-                        style: AppTypography.bodyMedium(context, isDark: isDark),
+                        style:
+                            AppTypography.bodyMedium(context, isDark: isDark),
                       ),
                       const SizedBox(height: 18),
 
-                      // Steps List Preview
-                      ...recommended.steps.where((s) => s.isEnabled).map((step) {
+                      // A short preview keeps the card useful without turning
+                      // the menu into another long routine screen.
+                      ...recommended.steps
+                          .where((s) => s.isEnabled)
+                          .skip(resumeStepIndex)
+                          .take(3)
+                          .map((step) {
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 8),
                           child: Row(
                             children: [
-                              Icon(step.icon, size: 16, color: recommended.primaryColor),
+                              Icon(step.icon,
+                                  size: 16, color: recommended.primaryColor),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
@@ -243,18 +399,32 @@ class RoutinesHubScreen extends StatelessWidget {
                                   style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
-                                    color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                    color: isDark
+                                        ? AppColors.textPrimaryDark
+                                        : AppColors.textPrimaryLight,
                                   ),
                                 ),
                               ),
                               Text(
                                 '${step.estimatedMinutes}m',
-                                style: AppTypography.bodySmall(context, isDark: isDark),
+                                style: AppTypography.bodySmall(context,
+                                    isDark: isDark),
                               ),
                             ],
                           ),
                         );
                       }),
+                      if (recommended.activeStepsCount - resumeStepIndex > 3)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            '+${recommended.activeStepsCount - resumeStepIndex - 3} more activities',
+                            style: AppTypography.bodySmall(
+                              context,
+                              isDark: isDark,
+                            ),
+                          ),
+                        ),
                       const SizedBox(height: 20),
 
                       // Start Routine CTA Button & Manage Button
@@ -262,19 +432,35 @@ class RoutinesHubScreen extends StatelessWidget {
                         children: [
                           Expanded(
                             child: ElevatedButton.icon(
-                              onPressed: () => _launchRoutine(context, recommended),
-                              icon: const Icon(Icons.play_arrow_rounded, size: 22),
+                              key: ValueKey(isResuming
+                                  ? 'resume-recommended-routine'
+                                  : 'start-recommended-routine'),
+                              onPressed: () => _launchRoutine(
+                                context,
+                                recommended,
+                                resume: isResuming,
+                              ),
+                              icon: const Icon(Icons.play_arrow_rounded,
+                                  size: 22),
                               label: Text(
-                                routinesProvider.isRoutineCompletedToday(recommended.type)
-                                    ? 'Repeat Routine'
-                                    : 'Start ${recommended.title.split(' ').first} Routine',
-                                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                                isResuming
+                                    ? 'Continue Routine'
+                                    : routinesProvider
+                                            .isRoutineCompletedTodayById(
+                                                recommended.id)
+                                        ? 'Repeat Routine'
+                                        : 'Start ${recommended.title.split(' ').first} Routine',
+                                style: const TextStyle(
+                                    fontSize: 15, fontWeight: FontWeight.w700),
                               ),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: recommended.primaryColor,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                foregroundColor: AppColors.readableOn(
+                                    recommended.primaryColor),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20)),
                                 elevation: 0,
                               ),
                             ),
@@ -283,20 +469,30 @@ class RoutinesHubScreen extends StatelessWidget {
                           OutlinedButton(
                             onPressed: () {
                               int tabIdx = 0;
-                              if (recommended.type == RoutineType.midday) tabIdx = 1;
-                              if (recommended.type == RoutineType.night) tabIdx = 2;
-                              if (recommended.type == RoutineType.custom) tabIdx = 3;
+                              if (recommended.type == RoutineType.midday) {
+                                tabIdx = 1;
+                              }
+                              if (recommended.type == RoutineType.night) {
+                                tabIdx = 2;
+                              }
+                              if (recommended.type == RoutineType.custom) {
+                                tabIdx = 3;
+                              }
                               Navigator.push(
                                 context,
-                                MaterialPageRoute(builder: (_) => RoutineManagementScreen(initialIndex: tabIdx)),
+                                MaterialPageRoute(
+                                    builder: (_) => RoutineManagementScreen(
+                                        initialIndex: tabIdx)),
                               );
                             },
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.all(14),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20)),
                               side: BorderSide(color: recommended.primaryColor),
                             ),
-                            child: Icon(Icons.tune, color: recommended.primaryColor, size: 20),
+                            child: Icon(Icons.tune,
+                                color: recommended.primaryColor, size: 20),
                           ),
                         ],
                       ),
@@ -306,10 +502,35 @@ class RoutinesHubScreen extends StatelessWidget {
                 const SizedBox(height: 28),
               ],
 
-              // Section Header: Individual Routine Feature Pages
-              Text('Individual Feature Practices', style: AppTypography.titleMedium(context, isDark: isDark)),
+              // Section Header: quick standalone practices.
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Quick practices',
+                      style: AppTypography.titleMedium(
+                        context,
+                        isDark: isDark,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    key: const ValueKey('see-all-routine-activities'),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => _AllRoutineActivitiesScreen(
+                          activities: standaloneFeatures,
+                        ),
+                      ),
+                    ),
+                    child: const Text('See all'),
+                  ),
+                ],
+              ),
               const SizedBox(height: 4),
-              Text('Practice any specific routine feature standalone:', style: AppTypography.bodySmall(context, isDark: isDark)),
+              Text('Choose one activity without starting a full routine.',
+                  style: AppTypography.bodySmall(context, isDark: isDark)),
               const SizedBox(height: 12),
 
               SizedBox(
@@ -324,7 +545,8 @@ class RoutinesHubScreen extends StatelessWidget {
                       onTap: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (_) => item['screen'] as Widget),
+                          MaterialPageRoute(
+                              builder: (_) => item['screen'] as Widget),
                         );
                       },
                       child: Container(
@@ -337,21 +559,51 @@ class RoutinesHubScreen extends StatelessWidget {
                           children: [
                             ClipRRect(
                               borderRadius: BorderRadius.circular(20),
-                              child: Image.asset(
-                                item['asset'] as String,
-                                width: 114,
-                                height: 114,
-                                fit: BoxFit.contain,
-                                errorBuilder: (context, error, stackTrace) => Container(
-                                  width: 114,
-                                  height: 114,
-                                  decoration: BoxDecoration(
-                                    color: (item['color'] as Color).withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Icon(item['icon'] as IconData, color: item['color'] as Color, size: 48),
-                                ),
-                              ),
+                              child: item['asset'] == null
+                                  ? Container(
+                                      key: ValueKey(
+                                        'routine-art-placeholder-${item['title']}',
+                                      ),
+                                      width: 114,
+                                      height: 114,
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                          colors: [
+                                            (item['color'] as Color)
+                                                .withValues(alpha: 0.24),
+                                            AppColors.honeyLight,
+                                          ],
+                                        ),
+                                      ),
+                                      child: Icon(
+                                        item['icon'] as IconData,
+                                        color: item['color'] as Color,
+                                        size: 44,
+                                      ),
+                                    )
+                                  : Image.asset(
+                                      item['asset'] as String,
+                                      width: 114,
+                                      height: 114,
+                                      fit: BoxFit.contain,
+                                      errorBuilder:
+                                          (context, error, stackTrace) =>
+                                              Container(
+                                        width: 114,
+                                        height: 114,
+                                        decoration: BoxDecoration(
+                                          color: (item['color'] as Color)
+                                              .withValues(alpha: 0.15),
+                                          borderRadius:
+                                              BorderRadius.circular(20),
+                                        ),
+                                        child: Icon(item['icon'] as IconData,
+                                            color: item['color'] as Color,
+                                            size: 48),
+                                      ),
+                                    ),
                             ),
                             const SizedBox(height: 8),
                             Text(
@@ -362,7 +614,9 @@ class RoutinesHubScreen extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w800,
-                                color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                color: isDark
+                                    ? AppColors.textPrimaryDark
+                                    : AppColors.textPrimaryLight,
                                 letterSpacing: -0.2,
                               ),
                             ),
@@ -375,7 +629,9 @@ class RoutinesHubScreen extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w500,
-                                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                color: isDark
+                                    ? AppColors.textSecondaryDark
+                                    : AppColors.textSecondaryLight,
                               ),
                             ),
                           ],
@@ -388,11 +644,9 @@ class RoutinesHubScreen extends StatelessWidget {
               const SizedBox(height: 28),
 
               // Section Header: All Full Routines
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Full Routines', style: AppTypography.titleMedium(context, isDark: isDark)),
-                  GestureDetector(
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final addCustom = InkWell(
                     onTap: () {
                       showModalBottomSheet(
                         context: context,
@@ -401,116 +655,340 @@ class RoutinesHubScreen extends StatelessWidget {
                         builder: (_) => const CustomRoutineDialog(),
                       );
                     },
-                    child: Row(
-                      children: [
-                        const Icon(Icons.add, size: 16, color: AppColors.sageGreen),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Add Custom',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.sageGreen,
+                    borderRadius: BorderRadius.circular(14),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 10,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.add,
+                              size: 16, color: AppColors.sageGreen),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Add Custom',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.sageGreen,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  );
+                  final title = Text(
+                    'Full Routines',
+                    style: AppTypography.titleMedium(context, isDark: isDark),
+                  );
+                  if (constraints.maxWidth < 430) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        title,
+                        Align(
+                            alignment: Alignment.centerRight, child: addCustom),
+                      ],
+                    );
+                  }
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [title, addCustom],
+                  );
+                },
               ),
               const SizedBox(height: 14),
 
               // List of all routines cards
               ...allRoutines.map((routine) {
-                final isCompleted = routinesProvider.isRoutineCompletedToday(routine.type);
+                final isCompleted =
+                    routinesProvider.isRoutineCompletedTodayById(routine.id);
+                final isActive = activeSession?.routineId == routine.id;
+                final canStart =
+                    routine.isEnabled && routine.activeStepsCount > 0;
 
-                return GestureDetector(
-                  onTap: () => _launchRoutine(context, routine),
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: isDark ? AppColors.darkCard : Colors.white,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(
-                        color: isDark ? AppColors.darkCardBorder : Colors.black.withValues(alpha: 0.06),
+                return Opacity(
+                  opacity: canStart ? 1 : 0.58,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      key: ValueKey('routine-card-${routine.id}'),
+                      onTap: () => _launchRoutine(
+                        context,
+                        routine,
+                        resume: isActive,
                       ),
-                    ),
-                    child: Row(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(20),
-                          child: Image.asset(
-                            routine.type == RoutineType.morning
-                                ? FeatureIconHelper.morningRoutine
-                                : (routine.type == RoutineType.midday
-                                    ? FeatureIconHelper.midDayRoutine
-                                    : (routine.type == RoutineType.night
-                                        ? FeatureIconHelper.nightRoutine
-                                        : FeatureIconHelper.routines)),
-                            width: 92,
-                            height: 92,
-                            fit: BoxFit.contain,
-                            errorBuilder: (context, error, stackTrace) => Icon(
-                              routine.type == RoutineType.morning
-                                  ? Icons.wb_sunny_outlined
-                                  : (routine.type == RoutineType.midday ? Icons.spa_outlined : Icons.nights_stay_outlined),
-                              color: routine.primaryColor,
-                              size: 52,
-                            ),
+                      borderRadius: BorderRadius.circular(24),
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: EdgeInsets.all(
+                          MediaQuery.sizeOf(context).width <= 360 ? 14 : 16,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isDark ? AppColors.darkCard : Colors.white,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(
+                            color: isDark
+                                ? AppColors.darkCardBorder
+                                : Colors.black.withValues(alpha: 0.06),
                           ),
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
+                        child: Row(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(20),
+                              child: Image.asset(
+                                routine.type == RoutineType.morning
+                                    ? FeatureIconHelper.morningRoutine
+                                    : (routine.type == RoutineType.midday
+                                        ? FeatureIconHelper.midDayRoutine
+                                        : (routine.type == RoutineType.night
+                                            ? FeatureIconHelper.nightRoutine
+                                            : FeatureIconHelper.routines)),
+                                width: MediaQuery.sizeOf(context).width <= 360
+                                    ? 64
+                                    : 92,
+                                height: MediaQuery.sizeOf(context).width <= 360
+                                    ? 64
+                                    : 92,
+                                fit: BoxFit.contain,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    Icon(
+                                  routine.type == RoutineType.morning
+                                      ? Icons.wb_sunny_outlined
+                                      : (routine.type == RoutineType.midday
+                                          ? Icons.spa_outlined
+                                          : Icons.nights_stay_outlined),
+                                  color: routine.primaryColor,
+                                  size: 52,
+                                ),
+                              ),
+                            ),
+                            SizedBox(
+                              width: MediaQuery.sizeOf(context).width <= 360
+                                  ? 10
+                                  : 16,
+                            ),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    routine.title,
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w700,
-                                      color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
-                                    ),
+                                  Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          routine.title,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w700,
+                                            color: isDark
+                                                ? AppColors.textPrimaryDark
+                                                : AppColors.textPrimaryLight,
+                                          ),
+                                        ),
+                                      ),
+                                      if (isCompleted) ...[
+                                        const SizedBox(width: 6),
+                                        const Icon(Icons.check_circle,
+                                            size: 16,
+                                            color: AppColors.sageGreen),
+                                      ] else if (isActive) ...[
+                                        const SizedBox(width: 6),
+                                        const Icon(
+                                            Icons.play_circle_fill_rounded,
+                                            size: 17,
+                                            color: AppColors.honeyAmber),
+                                      ],
+                                    ],
                                   ),
-                                  if (isCompleted) ...[
-                                    const SizedBox(width: 6),
-                                    const Icon(Icons.check_circle, size: 16, color: AppColors.sageGreen),
-                                  ],
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    !routine.isEnabled
+                                        ? 'Paused in routine settings'
+                                        : routine.activeStepsCount == 0
+                                            ? 'No activities enabled'
+                                            : isActive
+                                                ? 'Continue your saved progress'
+                                                : '${routine.activeStepsCount} activities • ~${routine.totalMinutes} min',
+                                    style: AppTypography.bodySmall(context,
+                                        isDark: isDark),
+                                  ),
                                 ],
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${routine.activeStepsCount} steps • ~${routine.totalMinutes} mins',
-                                style: AppTypography.bodySmall(context, isDark: isDark),
-                              ),
-                            ],
-                          ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.tune_outlined,
+                                  size: 20, color: Colors.grey),
+                              tooltip: 'Manage ${routine.title}',
+                              onPressed: () {
+                                int tabIdx = 0;
+                                if (routine.type == RoutineType.midday) {
+                                  tabIdx = 1;
+                                }
+                                if (routine.type == RoutineType.night) {
+                                  tabIdx = 2;
+                                }
+                                if (routine.type == RoutineType.custom) {
+                                  tabIdx = 3;
+                                }
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (_) => RoutineManagementScreen(
+                                          initialIndex: tabIdx)),
+                                );
+                              },
+                            ),
+                            Icon(
+                              isActive
+                                  ? Icons.play_arrow_rounded
+                                  : Icons.chevron_right_rounded,
+                              color:
+                                  canStart ? routine.primaryColor : Colors.grey,
+                            ),
+                          ],
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.tune_outlined, size: 20, color: Colors.grey),
-                          tooltip: 'Manage ${routine.title}',
-                          onPressed: () {
-                            int tabIdx = 0;
-                            if (routine.type == RoutineType.midday) tabIdx = 1;
-                            if (routine.type == RoutineType.night) tabIdx = 2;
-                            if (routine.type == RoutineType.custom) tabIdx = 3;
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => RoutineManagementScreen(initialIndex: tabIdx)),
-                            );
-                          },
-                        ),
-                        const Icon(Icons.chevron_right, color: Colors.grey),
-                      ],
+                      ),
                     ),
                   ),
                 );
               }),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AllRoutineActivitiesScreen extends StatelessWidget {
+  const _AllRoutineActivitiesScreen({required this.activities});
+
+  final List<Map<String, dynamic>> activities;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Scaffold(
+      backgroundColor: isDark ? AppColors.darkBackground : AppColors.warmCream,
+      appBar: AppBar(
+        title: const Text('All activities'),
+        centerTitle: false,
+      ),
+      body: SafeArea(
+        child: CustomScrollView(
+          key: const ValueKey('all-routine-activities-screen'),
+          slivers: [
+            SliverPadding(
+              padding: MobileLayout.pageInsets(context, top: 10, bottom: 8),
+              sliver: SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Choose what you need',
+                      style: AppTypography.heroHeader(context, isDark: isDark),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Each activity opens on its own. You can stop whenever you need to.',
+                      style: AppTypography.bodyMedium(context, isDark: isDark),
+                    ),
+                    const SizedBox(height: 18),
+                  ],
+                ),
+              ),
+            ),
+            SliverPadding(
+              padding: MobileLayout.pageInsets(context, top: 0, bottom: 28),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 190,
+                  mainAxisExtent: 210,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final item = activities[index];
+                    final color = item['color'] as Color;
+                    final title = item['title'] as String;
+                    return Material(
+                      color: isDark ? AppColors.darkCard : Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        key: ValueKey('routine-activity-$title'),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => item['screen'] as Widget,
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(13),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Center(
+                                  child: Image.asset(
+                                    item['asset'] as String,
+                                    fit: BoxFit.contain,
+                                    filterQuality: FilterQuality.high,
+                                    errorBuilder: (_, __, ___) => Container(
+                                      width: 92,
+                                      height: 92,
+                                      decoration: BoxDecoration(
+                                        color: color.withValues(alpha: 0.14),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        item['icon'] as IconData,
+                                        color: color,
+                                        size: 42,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                  color: isDark
+                                      ? AppColors.textPrimaryDark
+                                      : AppColors.textPrimaryLight,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                item['subtitle'] as String,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTypography.bodySmall(
+                                  context,
+                                  isDark: isDark,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                  childCount: activities.length,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

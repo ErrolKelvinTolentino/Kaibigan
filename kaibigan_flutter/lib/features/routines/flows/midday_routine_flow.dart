@@ -589,7 +589,7 @@ class _MiddayRoutineFlowState extends State<MiddayRoutineFlow>
               shape: BoxShape.circle,
             ),
             child: const Icon(Icons.spa, color: AppColors.softRose, size: 54),
-          ).animate().scale(duration: 500.ms, curve: Curves.easeOutBack),
+          ).animate().scale(duration: 340.ms, curve: Curves.easeOutCubic),
           const SizedBox(height: 24),
           Text(
             'Mid-Day Reset Complete!',

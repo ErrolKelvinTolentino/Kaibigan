@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/services/supabase_service.dart';
+import '../../core/theme/garden_appearance.dart';
+import '../../core/theme/journal_appearance.dart';
 import '../../core/utils/api_logger.dart';
 import '../../core/utils/env_config.dart';
 
@@ -21,11 +23,15 @@ class UserProvider extends ChangeNotifier {
 
   Future<void>? _initialLoad;
   StreamSubscription<AuthState>? _authSubscription;
+  bool _hasLoadedPreferences = false;
 
   String _displayName = 'Friend';
   String _selectedCompanion = "kai"; // 'kai', 'ann', 'bee'
   String _preferredLanguage = "taglish"; // 'taglish', 'filipino', 'english'
-  bool _isDarkMode = false;
+  ThemeMode _themeMode = ThemeMode.light;
+  GardenAppearance _gardenAppearance = GardenAppearance.syncWithTime;
+  JournalPaperStyle _journalPaperStyle = JournalPaperStyle.ruled;
+  JournalAccent _journalAccent = JournalAccent.honey;
   AuthMode _authMode = AuthMode.pending;
   String? _userEmail;
   String? _authError;
@@ -37,7 +43,13 @@ class UserProvider extends ChangeNotifier {
   String get preferredMascotId => _selectedCompanion;
   String get preferredLanguage => _preferredLanguage;
   String get language => _preferredLanguage;
-  bool get isDarkMode => _isDarkMode;
+  ThemeMode get themeMode => _themeMode;
+  bool get isDarkMode => _themeMode == ThemeMode.dark;
+  GardenAppearance get gardenAppearance => _gardenAppearance;
+  Future<void> get ready => _ensureLoaded();
+  bool get hasLoadedPreferences => _hasLoadedPreferences;
+  JournalPaperStyle get journalPaperStyle => _journalPaperStyle;
+  JournalAccent get journalAccent => _journalAccent;
   AuthMode get authMode => _authMode;
   bool get isAuthenticated => _authMode == AuthMode.authenticated;
   String? get userEmail => _userEmail;
@@ -55,7 +67,24 @@ class UserProvider extends ChangeNotifier {
     _displayName = prefs.getString('display_name') ?? 'Friend';
     _selectedCompanion = prefs.getString('selected_companion') ?? "kai";
     _preferredLanguage = prefs.getString('preferred_language') ?? "taglish";
-    _isDarkMode = prefs.getBool('is_dark_mode') ?? false;
+    final savedTheme = prefs.getString('theme_mode');
+    _themeMode = switch (savedTheme) {
+      'system' => ThemeMode.system,
+      'dark' => ThemeMode.dark,
+      'light' => ThemeMode.light,
+      _ => (prefs.getBool('is_dark_mode') ?? false)
+          ? ThemeMode.dark
+          : ThemeMode.light,
+    };
+    _gardenAppearance = GardenAppearance.fromStorage(
+      prefs.getString('garden_appearance'),
+    );
+    _journalPaperStyle = JournalPaperStyleX.fromStorage(
+      prefs.getString('journal_paper_style'),
+    );
+    _journalAccent = JournalAccentX.fromStorage(
+      prefs.getString('journal_accent'),
+    );
     _userEmail = prefs.getString('user_email');
 
     if (SupabaseService.isInitialized) {
@@ -69,6 +98,7 @@ class UserProvider extends ChangeNotifier {
       _authMode = AuthMode.pending;
     }
 
+    _hasLoadedPreferences = true;
     notifyListeners();
   }
 
@@ -447,11 +477,52 @@ class UserProvider extends ChangeNotifier {
     return _syncCurrentProfile();
   }
 
-  Future<void> toggleDarkMode(bool val) async {
-    _isDarkMode = val;
+  Future<void> setThemeMode(ThemeMode mode) async {
+    await _ensureLoaded();
+    if (_themeMode == mode) return;
+    _themeMode = mode;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('is_dark_mode', val);
+    await prefs.setString('theme_mode', mode.name);
+    // Retain the legacy key for older builds that may open the same profile.
+    await prefs.setBool('is_dark_mode', mode == ThemeMode.dark);
+  }
+
+  Future<void> toggleDarkMode(bool val) =>
+      setThemeMode(val ? ThemeMode.dark : ThemeMode.light);
+
+  Future<void> setGardenAppearance(GardenAppearance appearance) async {
+    await _ensureLoaded();
+    if (_gardenAppearance == appearance) return;
+    _gardenAppearance = appearance;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('garden_appearance', appearance.name);
+  }
+
+  Future<void> setJournalPaperStyle(JournalPaperStyle style) async {
+    if (_journalPaperStyle == style) return;
+    _journalPaperStyle = style;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('journal_paper_style', style.name);
+  }
+
+  Future<void> setJournalAccent(JournalAccent accent) async {
+    if (_journalAccent == accent) return;
+    _journalAccent = accent;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('journal_accent', accent.name);
+  }
+
+  Future<void> resetJournalAppearance() async {
+    _journalPaperStyle = JournalPaperStyle.ruled;
+    _journalAccent = JournalAccent.honey;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('journal_paper_style');
+    await prefs.remove('journal_accent');
   }
 
   Future<bool> updateDisplayName(String name) async {

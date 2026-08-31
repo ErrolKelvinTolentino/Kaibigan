@@ -26,6 +26,7 @@ dependencies:
 
   # Utilities & Networking
   http: ^1.2.2
+  xml: ^7.0.1
   intl: ^0.20.2
   shared_preferences: ^2.3.2
   flutter_secure_storage: ^9.2.4
@@ -40,10 +41,41 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.6
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/Kaibigan Logo.png"
+  adaptive_icon_background: "#FFD21F"
+  adaptive_icon_foreground: "assets/Kaibigan Logo.png"
+  adaptive_icon_foreground_inset: 18
+  remove_alpha_ios: true
+  background_color_ios: "#FFD21F"
+
+flutter_native_splash:
+  color: "#FFF9ED"
+  color_dark: "#1F211F"
+  image: "assets/Kaibigan Logo.png"
+  image_dark: "assets/Kaibigan Logo.png"
+  android: true
+  ios: true
+  web: false
+  fullscreen: true
+  android_12:
+    color: "#FFF9ED"
+    color_dark: "#1F211F"
+    image: "assets/Kaibigan Logo.png"
+    image_dark: "assets/Kaibigan Logo.png"
+    icon_background_color: "#FFF9ED"
+    icon_background_color_dark: "#1F211F"
 
 flutter:
   uses-material-design: true
   assets:
+    - assets/Kaibigan Logo.png
     - assets/feature icons/
     - assets/mood tracker/
     - assets/sleep log/
+    - assets/gratitude garden assets/

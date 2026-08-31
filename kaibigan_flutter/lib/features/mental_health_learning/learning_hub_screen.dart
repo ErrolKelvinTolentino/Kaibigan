@@ -1,0 +1,912 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:provider/provider.dart';
+
+import '../../core/constants/app_colors.dart';
+import '../../core/theme/kaibigan_tokens.dart';
+import '../../core/utils/language_helper.dart';
+import '../../core/widgets/kaibigan_state_view.dart';
+import '../../core/widgets/kaibigan_surface.dart';
+import '../../core/widgets/mobile_layout.dart';
+import '../settings/user_provider.dart';
+import 'learning_catalog.dart';
+import 'learning_lesson_screen.dart';
+import 'learning_model.dart';
+import 'learning_progress_store.dart';
+import 'learning_toolkit_screen.dart';
+
+class LearningHubScreen extends StatefulWidget {
+  const LearningHubScreen({super.key});
+
+  @override
+  State<LearningHubScreen> createState() => _LearningHubScreenState();
+}
+
+class _LearningHubScreenState extends State<LearningHubScreen> {
+  final _searchController = TextEditingController();
+  final _progressStore = LearningProgressStore();
+  Set<String> _completed = {};
+  LearningCategory? _category;
+  LearningPath? _path;
+  String? _lastLessonId;
+  int _lastIdeaIndex = 0;
+  bool _loadingProgress = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProgress();
+  }
+
+  Future<void> _loadProgress() async {
+    final completed = await _progressStore.loadCompleted();
+    final lastLessonId = await _progressStore.loadLastLessonId();
+    final resumeLesson = _lessonForId(lastLessonId);
+    final lastIdeaIndex = resumeLesson == null
+        ? 0
+        : await _progressStore.loadIdeaIndex(
+            resumeLesson.id,
+            max: resumeLesson.sections.length,
+          );
+    if (!mounted) return;
+    setState(() {
+      _completed = completed;
+      _lastLessonId = lastLessonId;
+      _lastIdeaIndex = lastIdeaIndex;
+      _loadingProgress = false;
+    });
+  }
+
+  LearningLesson? _lessonForId(String? id) {
+    if (id == null) return null;
+    for (final lesson in LearningCatalog.lessons) {
+      if (lesson.id == id) return lesson;
+    }
+    return null;
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _openLesson(LearningLesson lesson) async {
+    await Navigator.of(context).push<void>(
+      PageRouteBuilder<void>(
+        transitionDuration: KaibiganMotion.reveal,
+        reverseTransitionDuration: KaibiganMotion.standard,
+        pageBuilder: (_, __, ___) => LearningLessonScreen(lesson: lesson),
+        transitionsBuilder: (context, animation, _, child) {
+          if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) {
+            return child;
+          }
+          return FadeTransition(
+            opacity: CurvedAnimation(
+              parent: animation,
+              curve: KaibiganMotion.enter,
+            ),
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0.035, 0),
+                end: Offset.zero,
+              ).animate(CurvedAnimation(
+                parent: animation,
+                curve: KaibiganMotion.enter,
+              )),
+              child: child,
+            ),
+          );
+        },
+      ),
+    );
+    await _loadProgress();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final language = context.watch<UserProvider>().language;
+    final palette = context.kaibigan;
+    final query = _searchController.text.trim().toLowerCase();
+    final showSafetyResult = _isSafetySearch(query);
+    final lessons = LearningCatalog.lessons.where((lesson) {
+      final inCategory = _category == null || lesson.category == _category;
+      final inPath = _path == null || _path!.lessonIds.contains(lesson.id);
+      final searchable = [
+        lesson.title.resolve(language),
+        lesson.summary.resolve(language),
+        lesson.category.label(language),
+        lesson.title.english,
+        lesson.title.filipino,
+        lesson.summary.english,
+        lesson.summary.filipino,
+        ...lesson.searchTerms,
+        ...lesson.sections.expand(
+          (section) => [
+            section.heading.english,
+            section.heading.filipino,
+            section.body.english,
+            section.body.filipino,
+          ],
+        ),
+      ].join(' ').toLowerCase();
+      return inCategory &&
+          inPath &&
+          (query.isEmpty || searchable.contains(query));
+    }).toList()
+      ..sort((a, b) {
+        if (_path != null) {
+          return _path!.lessonIds
+              .indexOf(a.id)
+              .compareTo(_path!.lessonIds.indexOf(b.id));
+        }
+        if (_category != null) {
+          return LearningCatalog.lessons
+              .indexOf(a)
+              .compareTo(LearningCatalog.lessons.indexOf(b));
+        }
+        int rank(LearningCategory category) => switch (category) {
+              LearningCategory.foundations => 0,
+              LearningCategory.conditions => 1,
+              LearningCategory.coping => 2,
+              LearningCategory.emotions => 3,
+              LearningCategory.support => 4,
+            };
+        final byCategory = rank(a.category).compareTo(rank(b.category));
+        return byCategory != 0
+            ? byCategory
+            : LearningCatalog.lessons
+                .indexOf(a)
+                .compareTo(LearningCatalog.lessons.indexOf(b));
+      });
+    final progress = LearningCatalog.lessons.isEmpty
+        ? 0.0
+        : _completed.length / LearningCatalog.lessons.length;
+    final resumeLesson = _lessonForId(_lastLessonId);
+
+    return Scaffold(
+      backgroundColor: palette.background,
+      appBar: AppBar(
+        title: Text(
+          LanguageHelper.pick(
+            language,
+            english: 'Learn',
+            filipino: 'Matuto',
+          ),
+        ),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            key: const ValueKey('open-learning-toolkit'),
+            tooltip: LanguageHelper.pick(
+              language,
+              english: 'Saved ideas',
+              filipino: 'Mga naka-save na idea',
+            ),
+            onPressed: () => Navigator.of(context).push<void>(
+              MaterialPageRoute(builder: (_) => const LearningToolkitScreen()),
+            ),
+            icon: const Icon(Icons.bookmarks_outlined),
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
+      body: SafeArea(
+        top: false,
+        child: CustomScrollView(
+          key: const ValueKey('learning-hub-scroll-view'),
+          slivers: [
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(
+                MobileLayout.horizontalPadding(context),
+                12,
+                MobileLayout.horizontalPadding(context),
+                16,
+              ),
+              sliver: SliverList.list(
+                children: [
+                  Container(
+                    key: const ValueKey('learning-intro-card'),
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          palette.accentSubtle,
+                          Theme.of(context).brightness == Brightness.dark
+                              ? palette.surfaceElevated
+                              : AppColors.pollenGlow.withValues(alpha: 0.72),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(
+                        color: palette.accent.withValues(alpha: 0.28),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: palette.shadow,
+                          blurRadius: 22,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 54,
+                          height: 54,
+                          decoration: BoxDecoration(
+                            color: palette.surface.withValues(alpha: 0.72),
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Icon(
+                                Icons.local_library_outlined,
+                                color: palette.accent,
+                                size: 29,
+                              ),
+                              Positioned(
+                                top: 7,
+                                right: 7,
+                                child: Icon(
+                                  Icons.hexagon_rounded,
+                                  size: 10,
+                                  color: palette.accentStrong,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 15),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                LanguageHelper.pick(
+                                  language,
+                                  english: 'Mental health, made understandable',
+                                  filipino: 'Unawain ang sarili, nang banayad',
+                                ),
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 5),
+                              Text(
+                                LanguageHelper.pick(
+                                  language,
+                                  english:
+                                      'Practical, trusted lessons—one clear idea at a time.',
+                                  filipino:
+                                      'Maikli at praktikal na lessons na mababasa sa sarili mong pace.',
+                                ),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(color: palette.textSecondary),
+                              ),
+                              const SizedBox(height: 14),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(20),
+                                      child: LinearProgressIndicator(
+                                        minHeight: 7,
+                                        value:
+                                            _loadingProgress ? null : progress,
+                                        backgroundColor: palette.surface
+                                            .withValues(alpha: 0.8),
+                                        color: palette.accentStrong,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 11),
+                                  Text(
+                                    '${_completed.length}/${LearningCatalog.lessons.length}',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelMedium
+                                        ?.copyWith(
+                                          color: palette.textSecondary,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (resumeLesson != null) ...[
+                    const SizedBox(height: 12),
+                    _ContinueLearningCard(
+                      lesson: resumeLesson,
+                      language: language,
+                      ideaIndex: _lastIdeaIndex,
+                      completed: _completed.contains(resumeLesson.id),
+                      onTap: () => _openLesson(resumeLesson),
+                    ),
+                  ],
+                  if (query.isEmpty) ...[
+                    const SizedBox(height: 22),
+                    Semantics(
+                      headingLevel: 2,
+                      child: Text(
+                        LanguageHelper.pick(
+                          language,
+                          english: 'What would help right now?',
+                          filipino: 'Ano ang makakatulong ngayon?',
+                        ),
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      LanguageHelper.pick(
+                        language,
+                        english: 'Choose a gentle path or browse everything.',
+                        filipino:
+                            'Pumili ng banayad na path o tingnan ang lahat.',
+                      ),
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: palette.textMuted),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      key: const ValueKey('learning-paths-list'),
+                      height: 168,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
+                        itemCount: LearningCatalog.paths.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 10),
+                        itemBuilder: (context, index) {
+                          final path = LearningCatalog.paths[index];
+                          return _LearningPathCard(
+                            path: path,
+                            language: language,
+                            selected: _path?.id == path.id,
+                            completedCount: path.lessonIds
+                                .where(_completed.contains)
+                                .length,
+                            onTap: () => setState(() {
+                              _path = _path?.id == path.id ? null : path;
+                              _category = null;
+                            }),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                  TextField(
+                    key: const ValueKey('learning-search-field'),
+                    controller: _searchController,
+                    textInputAction: TextInputAction.search,
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      hintText: LanguageHelper.pick(
+                        language,
+                        english: 'Search a topic',
+                        filipino: 'Maghanap ng paksa',
+                      ),
+                      prefixIcon: const Icon(Icons.search_rounded),
+                      suffixIcon: query.isEmpty
+                          ? null
+                          : IconButton(
+                              tooltip: LanguageHelper.pick(
+                                language,
+                                english: 'Clear search',
+                                filipino: 'Burahin ang search',
+                              ),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() {});
+                              },
+                              icon: const Icon(Icons.close_rounded),
+                            ),
+                    ),
+                  ),
+                  if (showSafetyResult) ...[
+                    const SizedBox(height: 12),
+                    _SearchSafetyCard(
+                      language: language,
+                      onTap: () => _openLesson(
+                        LearningCatalog.byId('suicide-safety'),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _categoryChip(
+                          language: language,
+                          label: LanguageHelper.pick(
+                            language,
+                            english: 'All topics',
+                            filipino: 'Lahat',
+                          ),
+                          category: null,
+                        ),
+                        ...LearningCategory.values.map(
+                          (category) => Padding(
+                            padding: const EdgeInsets.only(left: 8),
+                            child: _categoryChip(
+                              language: language,
+                              label: category.label(language),
+                              category: category,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  Semantics(
+                    headingLevel: 2,
+                    child: Text(
+                      _path?.title.resolve(language) ??
+                          LanguageHelper.pick(
+                            language,
+                            english: 'All lessons',
+                            filipino: 'Lahat ng lesson',
+                          ),
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    LanguageHelper.pick(
+                      language,
+                      english: '${lessons.length} available offline',
+                      filipino: '${lessons.length} available kahit offline',
+                    ),
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: palette.textMuted),
+                  ),
+                ],
+              ),
+            ),
+            if (lessons.isEmpty)
+              SliverToBoxAdapter(
+                child: KaibiganStateView(
+                  compact: true,
+                  icon: Icons.search_off_rounded,
+                  title: LanguageHelper.pick(
+                    language,
+                    english: 'No lessons found',
+                    filipino: 'Walang nahanap na lesson',
+                  ),
+                  message: LanguageHelper.pick(
+                    language,
+                    english: 'Try another word or choose all topics.',
+                    filipino: 'Subukan ang ibang salita o piliin ang lahat.',
+                  ),
+                  actionLabel: LanguageHelper.pick(
+                    language,
+                    english: 'Reset search',
+                    filipino: 'I-reset',
+                  ),
+                  onAction: () {
+                    _searchController.clear();
+                    setState(() => _category = null);
+                  },
+                ),
+              )
+            else
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(
+                  MobileLayout.horizontalPadding(context),
+                  0,
+                  MobileLayout.horizontalPadding(context),
+                  28,
+                ),
+                sliver: SliverList.separated(
+                  itemCount: lessons.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final card = _LessonCard(
+                      lesson: lessons[index],
+                      language: language,
+                      completed: _completed.contains(lessons[index].id),
+                      onTap: () => _openLesson(lessons[index]),
+                    );
+                    if (MediaQuery.maybeOf(context)?.disableAnimations ??
+                        false) {
+                      return card;
+                    }
+                    return card
+                        .animate(
+                          key: ValueKey('lesson-reveal-${lessons[index].id}'),
+                          delay: Duration(
+                            milliseconds: 35 * (index > 6 ? 6 : index),
+                          ),
+                        )
+                        .fadeIn(duration: KaibiganMotion.reveal)
+                        .slideY(
+                          begin: 0.035,
+                          end: 0,
+                          duration: KaibiganMotion.reveal,
+                          curve: KaibiganMotion.enter,
+                        );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _categoryChip({
+    required String language,
+    required String label,
+    required LearningCategory? category,
+  }) {
+    final selected = _category == category;
+    final palette = context.kaibigan;
+    return ChoiceChip(
+      selected: selected,
+      label: Text(label),
+      avatar: category == null ? null : Icon(category.icon, size: 18),
+      onSelected: (_) => setState(() {
+        _category = category;
+        _path = null;
+      }),
+      selectedColor: palette.accentSubtle,
+      checkmarkColor: palette.accentStrong,
+      side: BorderSide(
+        color:
+            selected ? palette.accent.withValues(alpha: 0.52) : palette.border,
+      ),
+    );
+  }
+
+  bool _isSafetySearch(String query) {
+    if (query.isEmpty) return false;
+    const safetyTerms = [
+      'suicide',
+      'suicidal',
+      'self harm',
+      'self-harm',
+      'want to die',
+      'unsafe',
+      'ayoko na',
+      'magpakamatay',
+      'saktan ang sarili',
+    ];
+    return safetyTerms.any(query.contains);
+  }
+}
+
+class _LearningPathCard extends StatelessWidget {
+  const _LearningPathCard({
+    required this.path,
+    required this.language,
+    required this.selected,
+    required this.completedCount,
+    required this.onTap,
+  });
+
+  final LearningPath path;
+  final String language;
+  final bool selected;
+  final int completedCount;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.kaibigan;
+    return SizedBox(
+      width: 214,
+      child: KaibiganSurface(
+        key: ValueKey('learning-path-${path.id}'),
+        tone: selected
+            ? KaibiganSurfaceTone.accent
+            : KaibiganSurfaceTone.elevated,
+        onTap: onTap,
+        padding: const EdgeInsets.all(15),
+        semanticLabel: path.title.resolve(language),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: palette.accentSubtle,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(path.icon, size: 20, color: palette.accent),
+                ),
+                const Spacer(),
+                Text(
+                  '$completedCount/${path.lessonIds.length}',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: palette.accentStrong,
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              path.title.resolve(language),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const Spacer(),
+            Text(
+              path.description.resolve(language),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: palette.textSecondary, height: 1.3),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SearchSafetyCard extends StatelessWidget {
+  const _SearchSafetyCard({required this.language, required this.onTap});
+
+  final String language;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.kaibigan;
+    return KaibiganSurface(
+      key: const ValueKey('learning-safety-search-result'),
+      onTap: onTap,
+      padding: const EdgeInsets.all(15),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: palette.danger.withValues(alpha: 0.11),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child:
+                Icon(Icons.health_and_safety_outlined, color: palette.danger),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  LanguageHelper.pick(
+                    language,
+                    english: 'Immediate support is available',
+                    filipino: 'May immediate support na available',
+                  ),
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  LanguageHelper.pick(
+                    language,
+                    english:
+                        'Open safety steps and Philippine crisis contacts. Call 911 if danger is immediate.',
+                    filipino:
+                        'Buksan ang safety steps at Philippine crisis contacts. Tumawag sa 911 kung immediate ang danger.',
+                  ),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: palette.textSecondary,
+                        height: 1.4,
+                      ),
+                ),
+              ],
+            ),
+          ),
+          Icon(Icons.arrow_forward_rounded, color: palette.danger),
+        ],
+      ),
+    );
+  }
+}
+
+class _ContinueLearningCard extends StatelessWidget {
+  const _ContinueLearningCard({
+    required this.lesson,
+    required this.language,
+    required this.ideaIndex,
+    required this.completed,
+    required this.onTap,
+  });
+
+  final LearningLesson lesson;
+  final String language;
+  final int ideaIndex;
+  final bool completed;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.kaibigan;
+    final total = lesson.sections.length;
+    return KaibiganSurface(
+      key: const ValueKey('continue-learning-card'),
+      tone: KaibiganSurfaceTone.accent,
+      onTap: onTap,
+      padding: const EdgeInsets.all(15),
+      semanticLabel:
+          '${completed ? 'Review' : 'Continue'} ${lesson.title.resolve(language)}',
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: palette.accent,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(
+              completed ? Icons.replay_rounded : Icons.play_arrow_rounded,
+              color: palette.onAccent,
+            ),
+          ),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  LanguageHelper.pick(
+                    language,
+                    english: completed
+                        ? 'Review your last lesson'
+                        : 'Continue learning',
+                    filipino: completed
+                        ? 'Balikan ang huling lesson'
+                        : 'Ipagpatuloy ang pag-aaral',
+                  ),
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: palette.accentStrong,
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  lesson.title.resolve(language),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  LanguageHelper.pick(
+                    language,
+                    english: 'Idea ${ideaIndex + 1} of $total',
+                    filipino: 'Idea ${ideaIndex + 1} sa $total',
+                  ),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: palette.textSecondary,
+                      ),
+                ),
+              ],
+            ),
+          ),
+          Icon(Icons.arrow_forward_rounded, color: palette.accent),
+        ],
+      ),
+    );
+  }
+}
+
+class _LessonCard extends StatelessWidget {
+  const _LessonCard({
+    required this.lesson,
+    required this.language,
+    required this.completed,
+    required this.onTap,
+  });
+
+  final LearningLesson lesson;
+  final String language;
+  final bool completed;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.kaibigan;
+    return KaibiganSurface(
+      key: ValueKey('learning-lesson-${lesson.id}'),
+      onTap: onTap,
+      semanticLabel: lesson.title.resolve(language),
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Container(
+            width: 56,
+            height: 64,
+            decoration: BoxDecoration(
+              color: palette.accentSubtle,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Icon(lesson.icon, color: palette.accent, size: 28),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        lesson.title.resolve(language),
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                    ),
+                    if (completed)
+                      Icon(
+                        Icons.check_circle_rounded,
+                        color: palette.accent,
+                        size: 20,
+                        semanticLabel: LanguageHelper.pick(
+                          language,
+                          english: 'Completed',
+                          filipino: 'Tapos na',
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  lesson.summary.resolve(language),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: palette.textSecondary),
+                ),
+                const SizedBox(height: 9),
+                Text(
+                  LanguageHelper.pick(
+                    language,
+                    english:
+                        '${lesson.readMinutes} min · ${lesson.category.label(language)}',
+                    filipino:
+                        '${lesson.readMinutes} min · ${lesson.category.label(language)}',
+                  ),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: palette.accent,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 7),
+          Icon(Icons.chevron_right_rounded, color: palette.textMuted),
+        ],
+      ),
+    );
+  }
+}

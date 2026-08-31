@@ -949,7 +949,7 @@ class _NightRoutineFlowState extends State<NightRoutineFlow> {
             ),
             child: const Icon(Icons.nights_stay,
                 color: AppColors.beePrimary, size: 54),
-          ).animate().scale(duration: 500.ms, curve: Curves.easeOutBack),
+          ).animate().scale(duration: 340.ms, curve: Curves.easeOutCubic),
           const SizedBox(height: 24),
           Text(
             'Night Routine Completed!',

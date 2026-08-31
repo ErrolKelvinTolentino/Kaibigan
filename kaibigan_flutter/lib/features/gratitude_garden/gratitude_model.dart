@@ -6,16 +6,18 @@ class GratitudeEntry {
   final String content;
   final String
       flowerType; // 'sunflower', 'sampaguita', 'tulip', 'orchid', 'rose'
-  final int growthStage; // 1: Seedling, 2: Bud, 3: Full Bloom
   final int waterCount;
+  final int gardenIndex;
+  final int plotIndex;
   final DateTime createdAt;
 
   GratitudeEntry({
     required this.id,
     required this.content,
     this.flowerType = 'sunflower',
-    this.growthStage = 3,
     this.waterCount = 1,
+    this.gardenIndex = 0,
+    this.plotIndex = 0,
     required this.createdAt,
   });
 
@@ -23,16 +25,18 @@ class GratitudeEntry {
     String? id,
     String? content,
     String? flowerType,
-    int? growthStage,
     int? waterCount,
+    int? gardenIndex,
+    int? plotIndex,
     DateTime? createdAt,
   }) {
     return GratitudeEntry(
       id: id ?? this.id,
       content: content ?? this.content,
       flowerType: flowerType ?? this.flowerType,
-      growthStage: growthStage ?? this.growthStage,
       waterCount: waterCount ?? this.waterCount,
+      gardenIndex: gardenIndex ?? this.gardenIndex,
+      plotIndex: plotIndex ?? this.plotIndex,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -43,8 +47,9 @@ class GratitudeEntry {
       'id': validId,
       'content': content,
       'flower_type': flowerType,
-      'growth_stage': growthStage,
       'water_count': waterCount,
+      'garden_index': gardenIndex,
+      'plot_index': plotIndex,
       'created_at': createdAt.toIso8601String(),
     };
     if (userId != null && userId.isNotEmpty) {
@@ -58,8 +63,9 @@ class GratitudeEntry {
       id: map['id'] ?? '',
       content: map['content'] ?? '',
       flowerType: map['flower_type'] ?? 'sunflower',
-      growthStage: map['growth_stage'] ?? 3,
       waterCount: map['water_count'] ?? 1,
+      gardenIndex: map['garden_index'] ?? 0,
+      plotIndex: map['plot_index'] ?? 0,
       createdAt: map['created_at'] != null
           ? DateTime.parse(map['created_at']).toLocal()
           : DateTime.now(),
@@ -68,6 +74,22 @@ class GratitudeEntry {
 
   static String getFlowerName(String flowerType) {
     switch (flowerType) {
+      case 'anemone':
+        return 'Anemone';
+      case 'bluebell':
+        return 'Bluebell';
+      case 'chrysanthemum':
+        return 'Chrysanthemum';
+      case 'geranium':
+        return 'Geranium';
+      case 'lavender':
+        return 'Lavender';
+      case 'lily':
+        return 'Lily';
+      case 'purple_aster':
+        return 'Purple Aster';
+      case 'ranunculus':
+        return 'Ranunculus';
       case 'sampaguita':
         return 'Sampaguita';
       case 'tulip':
@@ -84,6 +106,22 @@ class GratitudeEntry {
 
   static String getFlowerMeaning(String flowerType) {
     switch (flowerType) {
+      case 'anemone':
+        return 'Hope & Gentle Anticipation';
+      case 'bluebell':
+        return 'Humility & Lasting Care';
+      case 'chrysanthemum':
+        return 'Joy & Loyal Friendship';
+      case 'geranium':
+        return 'Comfort & True Connection';
+      case 'lavender':
+        return 'Calm & Quiet Devotion';
+      case 'lily':
+        return 'Renewal & Tender Hope';
+      case 'purple_aster':
+        return 'Patience & Gentle Wisdom';
+      case 'ranunculus':
+        return 'Warmth & Radiant Appreciation';
       case 'sampaguita':
         return 'Purity, Simplicity & Everyday Love';
       case 'tulip':
@@ -100,6 +138,22 @@ class GratitudeEntry {
 
   static Color getFlowerColor(String flowerType) {
     switch (flowerType) {
+      case 'anemone':
+        return const Color(0xFF6671C9);
+      case 'bluebell':
+        return const Color(0xFF87B6D9);
+      case 'chrysanthemum':
+        return const Color(0xFFE9B85D);
+      case 'geranium':
+        return const Color(0xFFE78891);
+      case 'lavender':
+        return const Color(0xFF9A83C7);
+      case 'lily':
+        return const Color(0xFFF1B6C3);
+      case 'purple_aster':
+        return const Color(0xFF8C75BF);
+      case 'ranunculus':
+        return const Color(0xFFF0A574);
       case 'sampaguita':
         return const Color(0xFFF7F7F7); // Warm Ivory
       case 'tulip':
@@ -145,4 +199,47 @@ class GratitudeEntry {
         return Icons.wb_sunny;
     }
   }
+
+  static const availableFlowerTypes = <String>[
+    'anemone',
+    'bluebell',
+    'chrysanthemum',
+    'geranium',
+    'lavender',
+    'lily',
+    'purple_aster',
+    'ranunculus',
+    'rose',
+    'sunflower',
+  ];
+
+  static String getFlowerAssetPath(String flowerType) {
+    final assetName = switch (flowerType) {
+      'anemone' => 'Anemone.png',
+      'bluebell' => 'Bluebell.png',
+      'chrysanthemum' => 'Chrysanthemum.png',
+      'geranium' => 'Geranium.png',
+      'lavender' => 'Lavender.png',
+      'lily' || 'sampaguita' => 'Lily.png',
+      'purple_aster' || 'orchid' => 'Purple Aster.png',
+      'ranunculus' || 'tulip' => 'Ranunculus.png',
+      'rose' => 'Rose.png',
+      _ => 'Sunflower.png',
+    };
+    return 'assets/gratitude garden assets/$assetName';
+  }
+
+  /// Corrects for the different visual mass of each full-canvas flower asset.
+  static double getFlowerScale(String flowerType) => switch (flowerType) {
+        'sunflower' => 0.84,
+        'chrysanthemum' => 0.88,
+        'geranium' => 0.9,
+        'lavender' => 0.94,
+        'lily' || 'sampaguita' => 0.86,
+        'purple_aster' || 'orchid' => 0.92,
+        'bluebell' => 0.9,
+        'rose' => 0.9,
+        'anemone' => 0.92,
+        _ => 0.96,
+      };
 }

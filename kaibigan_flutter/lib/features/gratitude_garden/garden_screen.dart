@@ -1,1054 +1,901 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:provider/provider.dart';
+
 import '../../core/constants/app_colors.dart';
-import '../../core/constants/app_typography.dart';
 import '../../core/utils/date_formatter.dart';
+import '../../core/utils/language_helper.dart';
 import '../../core/widgets/cozy_confirm_sheet.dart';
 import '../../core/widgets/sync_status_banner.dart';
 import '../settings/user_provider.dart';
-import 'gratitude_provider.dart';
+import 'garden_layout.dart';
 import 'gratitude_model.dart';
+import 'gratitude_planting_page.dart';
+import 'gratitude_provider.dart';
+import 'polished_flower_asset.dart';
+import 'responsive_garden_scene.dart';
 
 class GardenScreen extends StatefulWidget {
   final VoidCallback? onEntrySaved;
+  final VoidCallback? onRoutineSkip;
+  final bool openPlantingOnStart;
 
-  const GardenScreen({super.key, this.onEntrySaved});
+  const GardenScreen({
+    super.key,
+    this.onEntrySaved,
+    this.onRoutineSkip,
+    this.openPlantingOnStart = false,
+  });
 
   @override
   State<GardenScreen> createState() => _GardenScreenState();
 }
 
 class _GardenScreenState extends State<GardenScreen> {
-  final TextEditingController _entryController = TextEditingController();
-  String _selectedFlowerType = 'sunflower';
+  int _selectedGardenIndex = 0;
   bool _isListView = false;
+  bool _didOpenInitialPlanting = false;
+  DateTime _now = DateTime.now();
+  Timer? _clockTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _clockTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
+  }
 
   @override
   void dispose() {
-    _entryController.dispose();
+    _clockTimer?.cancel();
     super.dispose();
+  }
+
+  void _showPreviousGarden() {
+    if (_selectedGardenIndex == 0) return;
+    setState(() => _selectedGardenIndex--);
+  }
+
+  void _showNextGarden(int unlockedCount) {
+    if (_selectedGardenIndex >= unlockedCount - 1) return;
+    setState(() => _selectedGardenIndex++);
+  }
+
+  void _handleHorizontalSwipe(
+    DragEndDetails details,
+    int unlockedCount,
+  ) {
+    final velocity = details.primaryVelocity ?? 0;
+    if (velocity < -180) {
+      _showNextGarden(unlockedCount);
+    } else if (velocity > 180) {
+      _showPreviousGarden();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<GratitudeProvider>();
+    final user = context.watch<UserProvider>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final gardenProvider = Provider.of<GratitudeProvider>(context);
-    final userProvider = Provider.of<UserProvider>(context);
+    final unlockedCount = provider.unlockedGardenCount;
+    if (_selectedGardenIndex >= unlockedCount) {
+      _selectedGardenIndex = unlockedCount - 1;
+    }
+    final gardenEntries = provider.entriesForGarden(_selectedGardenIndex);
+    final isFull = provider.isGardenFull(_selectedGardenIndex);
+    final period = GardenLayout.periodFor(
+      _now,
+      appearance: user.gardenAppearance,
+    );
+    final sceneForeground = period == GardenScenePeriod.day
+        ? const Color(0xFF2D3B2A)
+        : Colors.white;
+    if (widget.openPlantingOnStart &&
+        !_didOpenInitialPlanting &&
+        !provider.isLoading) {
+      _didOpenInitialPlanting = true;
+      final plantingGarden = GardenLayout.automaticPlantingGarden(
+        provider.entries,
+      );
+      _selectedGardenIndex = plantingGarden;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _openPlantingPage(context, plantingGarden);
+      });
+    }
 
     return Scaffold(
+      backgroundColor: isDark ? AppColors.darkBackground : AppColors.warmCream,
+      extendBodyBehindAppBar: !_isListView,
       appBar: AppBar(
+        backgroundColor: _isListView
+            ? (isDark ? AppColors.darkBackground : AppColors.warmCream)
+            : Colors.transparent,
+        elevation: 0,
+        foregroundColor: _isListView
+            ? (isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight)
+            : sceneForeground,
         title: Text(
           'Gratitude Garden',
-          style: AppTypography.titleLarge(context, isDark: isDark),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: _isListView
+                ? (isDark
+                    ? AppColors.textPrimaryDark
+                    : AppColors.textPrimaryLight)
+                : sceneForeground,
+            fontWeight: FontWeight.w800,
+            shadows: _isListView
+                ? null
+                : [
+                    Shadow(
+                      color: period == GardenScenePeriod.day
+                          ? Colors.white70
+                          : Colors.black54,
+                      blurRadius: 8,
+                    ),
+                  ],
+          ),
         ),
         actions: [
           IconButton(
+            key: const ValueKey('garden-view-toggle'),
+            tooltip: _isListView ? 'View garden' : 'View gratitude list',
+            onPressed: () => setState(() => _isListView = !_isListView),
             icon: Icon(
               _isListView
                   ? Icons.yard_outlined
                   : Icons.format_list_bulleted_rounded,
-              color: AppColors.sageGreen,
             ),
-            tooltip: _isListView ? 'View Garden Bed' : 'View Flower List',
-            onPressed: () {
-              setState(() {
-                _isListView = !_isListView;
-              });
-            },
           ),
         ],
       ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            if (gardenProvider.isLoading)
-              const LinearProgressIndicator(minHeight: 2),
-            if (gardenProvider.errorMessage != null)
-              SyncStatusBanner(
-                message: gardenProvider.errorMessage!,
-                onRetry: gardenProvider.fetchGratitudeEntries,
-              ),
-            // Top Level Progress & Stats Header
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isDark ? AppColors.darkCard : Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.04),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    )
-                  ],
+      body: _isListView
+          ? _buildListView(context, provider, user.language, isDark)
+          : Stack(
+              fit: StackFit.expand,
+              children: [
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onHorizontalDragEnd: (details) =>
+                      _handleHorizontalSwipe(details, unlockedCount),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 360),
+                    child: ResponsiveGardenScene(
+                      key: ValueKey(
+                        'garden-scene-$_selectedGardenIndex-${period.name}',
+                      ),
+                      entries: gardenEntries,
+                      now: _now,
+                      appearance: user.gardenAppearance,
+                      onFlowerTap: (entry) => _showFlowerDetailSheet(
+                        context,
+                        entry,
+                        user.language,
+                      ),
+                      onEmptyTap: () => _openPlantingPage(
+                        context,
+                        _selectedGardenIndex,
+                      ),
+                    ),
+                  ),
                 ),
-                child: Column(
-                  children: [
-                    // Level Badge & Progress
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 4, 14, 14),
+                    child: Column(
                       children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color:
-                                    AppColors.sageGreen.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: Text(
-                                '🌱 Level ${gardenProvider.gardenLevel}',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppColors.sageGreen,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '${gardenProvider.flowersInCurrentLevel}/5 to Next Level',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: isDark
-                                    ? AppColors.textSecondaryDark
-                                    : AppColors.textSecondaryLight,
-                              ),
-                            ),
-                          ],
+                        if (provider.errorMessage != null)
+                          SyncStatusBanner(
+                            message: provider.errorMessage!,
+                            onRetry: provider.fetchGratitudeEntries,
+                            margin: const EdgeInsets.only(bottom: 10),
+                            backgroundColor: period == GardenScenePeriod.day
+                                ? Colors.white.withValues(alpha: 0.94)
+                                : const Color(0xFF142F38)
+                                    .withValues(alpha: 0.96),
+                            foregroundColor: period == GardenScenePeriod.day
+                                ? AppColors.textPrimaryLight
+                                : Colors.white,
+                          ),
+                        const Spacer(),
+                        _GardenBottomControls(
+                          gardenIndex: _selectedGardenIndex,
+                          flowerCount: gardenEntries.length,
+                          unlockedCount: unlockedCount,
+                          isFull: isFull,
+                          isLoading: provider.isLoading,
+                          isDay: period == GardenScenePeriod.day,
+                          onPrevious: _showPreviousGarden,
+                          onNext: () => _showNextGarden(unlockedCount),
+                          onPlant: () => _openPlantingPage(
+                            context,
+                            _selectedGardenIndex,
+                          ),
+                          onOpenNext: () => _showNextGarden(unlockedCount),
                         ),
-                        Text(
-                          '${(gardenProvider.levelProgress * 100).toInt()}%',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
+                      ],
+                    ),
+                  ),
+                ),
+                if (provider.isLoading)
+                  const Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: LinearProgressIndicator(minHeight: 2),
+                  ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildListView(
+    BuildContext context,
+    GratitudeProvider provider,
+    String language,
+    bool isDark,
+  ) {
+    final entries = List<GratitudeEntry>.of(provider.entries)
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return SafeArea(
+      child: Column(
+        children: [
+          if (provider.isLoading) const LinearProgressIndicator(minHeight: 2),
+          if (provider.errorMessage != null)
+            SyncStatusBanner(
+              message: provider.errorMessage!,
+              onRetry: provider.fetchGratitudeEntries,
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Your gratitude memories',
+                        style: TextStyle(
+                          color: isDark
+                              ? AppColors.textPrimaryDark
+                              : AppColors.textPrimaryLight,
+                          fontSize: 21,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${provider.flowerCount} flowers across ${provider.unlockedGardenCount} ${provider.unlockedGardenCount == 1 ? 'garden' : 'gardens'}',
+                        style: TextStyle(
+                          color: isDark
+                              ? AppColors.textSecondaryDark
+                              : AppColors.textSecondaryLight,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                FilledButton.icon(
+                  onPressed: provider.isGardenFull(
+                          GardenLayout.automaticPlantingGarden(
+                              provider.entries))
+                      ? null
+                      : () => _openPlantingPage(
+                            context,
+                            GardenLayout.automaticPlantingGarden(
+                              provider.entries,
+                            ),
+                          ),
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('Plant'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.honeyAmber,
+                    foregroundColor: AppColors.onHoney,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: entries.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.local_florist_outlined,
+                            size: 48,
                             color: AppColors.sageGreen,
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    // Progress Bar
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: LinearProgressIndicator(
-                        value: gardenProvider.levelProgress == 0
-                            ? 0.05
-                            : gardenProvider.levelProgress,
-                        minHeight: 8,
-                        backgroundColor:
-                            isDark ? Colors.white12 : const Color(0xFFE5EFE7),
-                        valueColor: const AlwaysStoppedAnimation<Color>(
-                            AppColors.sageGreen),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-
-                    // Stats Badges Row
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _buildStatBadge('🌻',
-                            '${gardenProvider.flowerCount} Flowers', isDark),
-                        _buildStatBadge(
-                            '💧', '${gardenProvider.waterDrops} Drops', isDark),
-                        _buildStatBadge(
-                            '🦋',
-                            gardenProvider.hasButterflies
-                                ? 'Unlocked'
-                                : 'At 3 🌻',
-                            isDark),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            // Main View Area: Either Garden Bed Canvas OR Flower List View
-            Expanded(
-              child: _isListView
-                  ? _buildGardenListView(
-                      context, gardenProvider, isDark, userProvider)
-                  : Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 20),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(32),
-                        gradient: LinearGradient(
-                          colors: isDark
-                              ? [
-                                  const Color(0xFF1B2A20),
-                                  const Color(0xFF111A14)
-                                ]
-                              : [
-                                  const Color(0xFFEBF6EC),
-                                  const Color(0xFFCBEAD0)
-                                ],
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.06),
-                            blurRadius: 16,
-                            offset: const Offset(0, 6),
-                          )
-                        ],
-                      ),
-                      child: Stack(
-                        children: [
-                          // Dynamic Sky Elements
-                          // Golden Sun
-                          Positioned(
-                            top: 18,
-                            right: 20,
-                            child: Container(
-                              width: 52,
-                              height: 52,
-                              decoration: const BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Color(0xFFFFF176),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Color(0xFFFFEE58),
-                                    blurRadius: 22,
-                                    spreadRadius: 6,
-                                  )
-                                ],
-                              ),
-                            )
-                                .animate(
-                                    onPlay: (controller) =>
-                                        controller.repeat(reverse: true))
-                                .scale(
-                                    begin: const Offset(1, 1),
-                                    end: const Offset(1.1, 1.1),
-                                    duration: 3000.ms),
-                          ),
-
-                          // Floating Clouds
-                          Positioned(
-                            top: 25,
-                            left: 24,
-                            child: const Text('☁️',
-                                    style: TextStyle(fontSize: 30))
-                                .animate(
-                                    onPlay: (controller) =>
-                                        controller.repeat(reverse: true))
-                                .moveX(begin: 0, end: 15, duration: 4000.ms),
-                          ),
-
-                          // Rainbow (Unlocked at 10 flowers)
-                          if (gardenProvider.hasRainbow)
-                            Positioned(
-                              top: 10,
-                              left: 60,
-                              child: const Text('🌈',
-                                      style: TextStyle(fontSize: 48))
-                                  .animate(
-                                      onPlay: (controller) =>
-                                          controller.repeat(reverse: true))
-                                  .scale(
-                                      begin: const Offset(1, 1),
-                                      end: const Offset(1.05, 1.05),
-                                      duration: 3500.ms),
-                            ),
-
-                          // Butterflies (Unlocked at 3 flowers)
-                          if (gardenProvider.hasButterflies) ...[
-                            Positioned(
-                              top: 80,
-                              right: 80,
-                              child: const Text('🦋',
-                                      style: TextStyle(fontSize: 22))
-                                  .animate(
-                                      onPlay: (controller) =>
-                                          controller.repeat(reverse: true))
-                                  .moveY(begin: 0, end: -12, duration: 1800.ms),
-                            ),
-                            Positioned(
-                              top: 120,
-                              left: 40,
-                              child: const Text('🦋',
-                                      style: TextStyle(fontSize: 18))
-                                  .animate(
-                                      onPlay: (controller) =>
-                                          controller.repeat(reverse: true))
-                                  .moveY(begin: 0, end: -10, duration: 2200.ms),
-                            ),
-                          ],
-
-                          // Rolling Grass Hill at Bottom
-                          Positioned(
-                            bottom: 0,
-                            left: 0,
-                            right: 0,
-                            height: 110,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? const Color(0xFF1F3A26)
-                                    : const Color(0xFF7BA273),
-                                borderRadius: const BorderRadius.only(
-                                  topLeft: Radius.circular(90),
-                                  topRight: Radius.circular(90),
-                                  bottomLeft: Radius.circular(32),
-                                  bottomRight: Radius.circular(32),
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          // Blooming Flowers Grid in Garden Plot Bed
-                          Positioned.fill(
-                            child: Padding(
-                              padding: const EdgeInsets.only(
-                                  top: 70, bottom: 20, left: 16, right: 16),
-                              child: gardenProvider.entries.isEmpty
-                                  ? Center(
-                                      child: Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          const Text('🌱',
-                                              style: TextStyle(fontSize: 48)),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            'Plant your first gratitude flower!',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600,
-                                              color: isDark
-                                                  ? Colors.white70
-                                                  : const Color(0xFF2C2C2C),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    )
-                                  : GridView.builder(
-                                      gridDelegate:
-                                          const SliverGridDelegateWithFixedCrossAxisCount(
-                                        crossAxisCount: 3,
-                                        crossAxisSpacing: 14,
-                                        mainAxisSpacing: 18,
-                                      ),
-                                      itemCount: gardenProvider.entries.length,
-                                      itemBuilder: (context, index) {
-                                        final entry =
-                                            gardenProvider.entries[index];
-                                        return GestureDetector(
-                                          onTap: () => _showFlowerDetailSheet(
-                                              context,
-                                              entry,
-                                              userProvider.preferredLanguage),
-                                          child: Column(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.end,
-                                            children: [
-                                              // Flower Icon with sway animation
-                                              Icon(
-                                                GratitudeEntry
-                                                    .getFlowerMaterialIcon(
-                                                        entry.flowerType),
-                                                color: GratitudeEntry
-                                                    .getFlowerColor(
-                                                        entry.flowerType),
-                                                size: 42,
-                                              )
-                                                  .animate(
-                                                      onPlay: (controller) =>
-                                                          controller.repeat(
-                                                              reverse: true))
-                                                  .scale(
-                                                      begin: const Offset(1, 1),
-                                                      end: const Offset(
-                                                          1.08, 1.08),
-                                                      duration: 2200.ms),
-                                              // Soil mound base
-                                              Container(
-                                                width: 24,
-                                                height: 8,
-                                                decoration: BoxDecoration(
-                                                  color: isDark
-                                                      ? const Color(0xFF382315)
-                                                      : const Color(0xFF5D4037),
-                                                  borderRadius:
-                                                      BorderRadius.circular(10),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        );
-                                      },
-                                    ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Your first gratitude can grow here.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: isDark
+                                  ? AppColors.textPrimaryDark
+                                  : AppColors.textPrimaryLight,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
                         ],
                       ),
                     ),
-            ),
-            const SizedBox(height: 14),
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+                    itemCount: entries.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final entry = entries[index];
+                      return _GardenMemoryTile(
+                        entry: entry,
+                        isDark: isDark,
+                        language: language,
+                        onTap: () => _showFlowerDetailSheet(
+                          context,
+                          entry,
+                          language,
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
 
-            // Bottom "+ Plant a Gratitude Flower" Button
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              child: SizedBox(
-                width: double.infinity,
-                height: 54,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        const Color(0xFFFF9326), // Quabble Orange Accent
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(28),
-                    ),
-                    elevation: 0,
-                  ),
-                  icon: const Icon(Icons.add_rounded,
-                      color: Colors.white, size: 22),
-                  label: const Text(
-                    'Plant a Gratitude Flower',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                    ),
-                  ),
-                  onPressed: () => _showPlantingCeremonySheet(context),
-                ),
-              ),
-            ),
-          ],
+  Future<void> _openPlantingPage(
+    BuildContext rootContext,
+    int gardenIndex,
+  ) async {
+    final provider = rootContext.read<GratitudeProvider>();
+    if (provider.isGardenFull(gardenIndex)) return;
+    final countBefore = provider.unlockedGardenCount;
+
+    final result = await Navigator.of(rootContext).push<Object?>(
+      MaterialPageRoute<Object?>(
+        fullscreenDialog: true,
+        builder: (_) => GratitudePlantingPage(
+          gardenIndex: gardenIndex,
+          allowRoutineSkip: widget.onRoutineSkip != null,
         ),
       ),
     );
-  }
+    if (result == GratitudePlantingOutcome.skipped) {
+      widget.onRoutineSkip?.call();
+      return;
+    }
+    final planted = result is GratitudeEntry ? result : null;
+    if (!mounted || planted == null) return;
 
-  Widget _buildStatBadge(String emoji, String text, bool isDark) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: isDark ? Colors.black26 : const Color(0xFFF6F4ED),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(emoji, style: const TextStyle(fontSize: 13)),
-          const SizedBox(width: 4),
-          Text(
-            text,
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w700,
-              color:
-                  isDark ? AppColors.textPrimaryDark : const Color(0xFF2C2C2C),
+    final countAfter = provider.unlockedGardenCount;
+    if (countAfter > countBefore) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Garden $countAfter unlocked — a fresh space is ready.',
+          ),
+          behavior: SnackBarBehavior.floating,
+          action: SnackBarAction(
+            label: 'OPEN',
+            onPressed: () => setState(
+              () => _selectedGardenIndex = countAfter - 1,
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  // Interactive Seed Selection & Planting Ceremony Modal Sheet
-  void _showPlantingCeremonySheet(BuildContext context) {
-    _selectedFlowerType = 'sunflower';
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-      ),
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                left: 24,
-                right: 24,
-                top: 24,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: const [
-                      Icon(Icons.local_florist_rounded,
-                          color: AppColors.sageGreen, size: 24),
-                      SizedBox(width: 8),
-                      Text(
-                        'Plant a Gratitude Flower',
-                        style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF2C2C2C)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Pick a flower seed and write what brought warmth to your heart today.',
-                    style: TextStyle(fontSize: 13, color: Colors.black54),
-                  ),
-                  const SizedBox(height: 18),
-
-                  // Step 1: Choose Your Flower Seed
-                  const Text(
-                    'Choose Flower Seed:',
-                    style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF2C2C2C)),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _buildSeedChoice(
-                          'sunflower', '🌻', 'Sunflower', setModalState),
-                      _buildSeedChoice(
-                          'sampaguita', '🌼', 'Sampaguita', setModalState),
-                      _buildSeedChoice('tulip', '🌷', 'Tulip', setModalState),
-                      _buildSeedChoice('orchid', '🪻', 'Orchid', setModalState),
-                      _buildSeedChoice('rose', '🌹', 'Rose', setModalState),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-
-                  // Step 2: Gratitude Text Input
-                  const Text(
-                    'What are you grateful for today?',
-                    style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF2C2C2C)),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _entryController,
-                    maxLines: 3,
-                    style:
-                        const TextStyle(fontSize: 15, color: Color(0xFF2C2C2C)),
-                    decoration: InputDecoration(
-                      hintText:
-                          'Isulat mo lang rito ang nakapagpasaya sa iyo...',
-                      filled: true,
-                      fillColor: const Color(0xFFF6F4ED),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Step 3: Plant Button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.sageGreen,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(26),
-                        ),
-                        elevation: 0,
-                      ),
-                      icon: const Icon(Icons.water_drop_rounded,
-                          color: Colors.white),
-                      label: const Text(
-                        'Plant Seed (+10 💧)',
-                        style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white),
-                      ),
-                      onPressed: () async {
-                        if (_entryController.text.trim().isEmpty) return;
-                        final provider = Provider.of<GratitudeProvider>(context,
-                            listen: false);
-                        await provider.addGratitudeEntry(
-                          _entryController.text.trim(),
-                          flowerType: _selectedFlowerType,
-                        );
-                        if (!context.mounted) return;
-                        if (provider.errorMessage != null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(provider.errorMessage!)),
-                          );
-                          return;
-                        }
-                        _entryController.clear();
-                        Navigator.pop(context);
-
-                        widget.onEntrySaved?.call();
-
-                        // Celebratory Feedback
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              '🎉 A new ${GratitudeEntry.getFlowerName(_selectedFlowerType)} bloomed in your garden! (+10 💧)',
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w700),
-                            ),
-                            backgroundColor: AppColors.sageGreen,
-                            duration: const Duration(seconds: 3),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildSeedChoice(
-      String type, String icon, String name, StateSetter setModalState) {
-    final isSelected = _selectedFlowerType == type;
-    return GestureDetector(
-      onTap: () {
-        setModalState(() {
-          _selectedFlowerType = type;
-        });
-      },
-      child: Column(
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: isSelected
-                  ? AppColors.sageGreen.withValues(alpha: 0.2)
-                  : const Color(0xFFF6F4ED),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: isSelected ? AppColors.sageGreen : Colors.transparent,
-                width: 2.0,
-              ),
-            ),
-            child: Center(
-              child: Icon(
-                GratitudeEntry.getFlowerMaterialIcon(type),
-                color:
-                    isSelected ? AppColors.sageGreen : const Color(0xFF5E5B52),
-                size: 26,
-              ),
-            ),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${GratitudeEntry.getFlowerName(planted.flowerType)} planted in Garden ${gardenIndex + 1}.',
           ),
-          const SizedBox(height: 4),
-          Text(
-            name,
-            style: TextStyle(
-              fontSize: 10.5,
-              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-              color: isSelected ? AppColors.sageGreen : const Color(0xFF2C2C2C),
-            ),
-          ),
-        ],
-      ),
-    );
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+    widget.onEntrySaved?.call();
   }
 
-  // Storybook Flower Memory Card Sheet
   void _showFlowerDetailSheet(
-      BuildContext context, GratitudeEntry entry, String language) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-      ),
-      builder: (context) {
-        final provider = Provider.of<GratitudeProvider>(context);
-
-        return Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                GratitudeEntry.getFlowerMaterialIcon(entry.flowerType),
-                color: GratitudeEntry.getFlowerColor(entry.flowerType),
-                size: 64,
-              ).animate().scale(duration: 300.ms, curve: Curves.easeOut),
-              const SizedBox(height: 8),
-              Text(
-                '${GratitudeEntry.getFlowerName(entry.flowerType)} • ${GratitudeEntry.getFlowerMeaning(entry.flowerType)}',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.sageGreen),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                DateFormatter.formatFullDate(entry.createdAt,
-                    language: language),
-                style: const TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey,
-                    fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF6F4ED),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  '"${entry.content}"',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 15.5,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF2C2C2C),
-                    height: 1.4,
+    BuildContext rootContext,
+    GratitudeEntry entry,
+    String language,
+  ) {
+    showModalBottomSheet<void>(
+      context: rootContext,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        final provider = sheetContext.watch<GratitudeProvider>();
+        final current = provider.entries.firstWhere(
+          (candidate) => candidate.id == entry.id,
+          orElse: () => entry,
+        );
+        final isDark = Theme.of(rootContext).brightness == Brightness.dark;
+        return Container(
+          padding: const EdgeInsets.fromLTRB(22, 12, 22, 24),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.darkCard : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white24 : Colors.black12,
+                    borderRadius: BorderRadius.circular(99),
                   ),
                 ),
-              ),
-              const SizedBox(height: 20),
-
-              // Watering, Edit & Delete Action Buttons
-              Row(
-                children: [
-                  Expanded(
-                    child: SizedBox(
-                      height: 50,
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.sageGreen,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(25),
-                          ),
-                          elevation: 0,
-                        ),
-                        icon: const Icon(Icons.water_drop_rounded,
-                            color: Colors.white, size: 18),
-                        label: Text(
-                          'Water (${entry.waterCount}x 💧)',
-                          style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white),
-                        ),
+                const SizedBox(height: 10),
+                PolishedFlowerAsset(
+                  flowerType: current.flowerType,
+                  width: 82 * GratitudeEntry.getFlowerScale(current.flowerType),
+                  height:
+                      142 * GratitudeEntry.getFlowerScale(current.flowerType),
+                  glowOpacity: 0.18,
+                  glowBlur: 7,
+                  cacheWidth: 246,
+                  cacheHeight: 450,
+                ).animate().fadeIn(duration: 250.ms).scale(
+                      begin: const Offset(0.88, 0.88),
+                      end: const Offset(1, 1),
+                      alignment: Alignment.bottomCenter,
+                    ),
+                const SizedBox(height: 6),
+                Text(
+                  GratitudeEntry.getFlowerName(current.flowerType),
+                  style: TextStyle(
+                    color: isDark
+                        ? AppColors.textPrimaryDark
+                        : AppColors.textPrimaryLight,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '${GratitudeEntry.getFlowerMeaning(current.flowerType)} • Garden ${current.gardenIndex + 1}',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: isDark ? AppColors.softOlive : AppColors.sageGreen,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  DateFormatter.formatFullDate(
+                    current.createdAt,
+                    language: language,
+                  ),
+                  style: TextStyle(
+                    color: isDark
+                        ? AppColors.textSecondaryDark
+                        : AppColors.textSecondaryLight,
+                    fontSize: 11.5,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(17),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.black.withValues(alpha: 0.17)
+                        : const Color(0xFFF5F4EF),
+                    borderRadius: BorderRadius.circular(19),
+                  ),
+                  child: Text(
+                    '“${current.content}”',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: isDark
+                          ? AppColors.textPrimaryDark
+                          : AppColors.textPrimaryLight,
+                      fontSize: 15,
+                      height: 1.42,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
                         onPressed: () async {
-                          final saved = await provider.waterFlower(entry.id);
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          final saved = await provider.waterFlower(current.id);
+                          if (!rootContext.mounted) return;
+                          ScaffoldMessenger.of(rootContext).showSnackBar(
                             SnackBar(
                               content: Text(
                                 saved
-                                    ? '💧 You nourished this gratitude flower! (+3 💧 Drops)'
+                                    ? 'You watered this gratitude flower.'
                                     : provider.errorMessage ??
                                         'The flower could not be watered.',
                               ),
-                              duration: Duration(seconds: 2),
                             ),
                           );
                         },
+                        icon: const Icon(Icons.water_drop_outlined, size: 18),
+                        label: Text('Watered ${current.waterCount}×'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.honeyAmber,
+                          foregroundColor: AppColors.onHoney,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: const Icon(Icons.edit_outlined,
-                        color: AppColors.honeyAmber),
-                    tooltip: 'Edit Gratitude',
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _showEditGratitudeDialog(context, entry, provider);
-                    },
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline,
-                        color: Colors.redAccent),
-                    tooltip: 'Let Go of Flower',
-                    onPressed: () async {
-                      final confirmed = await CozyConfirmSheet.show(
-                        context,
-                        title: 'Palayain ang Bulaklak?',
-                        message:
-                            'Ang pasasalamat na ito ay mananatili pa rin sa iyong puso. Nais mo bang alisin ang bulaklak na ito mula sa iyong hardin?',
-                        confirmLabel: 'Let Go',
-                        cancelLabel: 'Keep Flower',
-                        icon: Icons.local_florist_rounded,
-                      );
-                      if (confirmed && context.mounted) {
-                        final deleted =
-                            await provider.deleteGratitudeEntry(entry.id);
-                        if (!context.mounted) return;
-                        if (deleted) Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              deleted
-                                  ? 'Flower gently removed from your garden.'
-                                  : provider.errorMessage ??
-                                      'The flower could not be removed.',
-                            ),
-                            behavior: SnackBarBehavior.floating,
-                            duration: Duration(seconds: 2),
+                    const SizedBox(width: 8),
+                    IconButton.filledTonal(
+                      tooltip: 'Edit gratitude',
+                      onPressed: () {
+                        Navigator.of(sheetContext).pop();
+                        _showEditDialog(rootContext, current, provider);
+                      },
+                      icon: const Icon(Icons.edit_outlined),
+                    ),
+                    const SizedBox(width: 5),
+                    IconButton.filledTonal(
+                      tooltip: 'Remove flower',
+                      onPressed: () async {
+                        final confirmed = await CozyConfirmSheet.show(
+                          rootContext,
+                          title: LanguageHelper.pick(
+                            language,
+                            english: 'Remove this gratitude flower?',
+                            filipino: 'Alisin ang bulaklak ng pasasalamat?',
                           ),
+                          message: LanguageHelper.pick(
+                            language,
+                            english:
+                                'Its plot will become available for another memory.',
+                            filipino: 'Magiging bakante muli ang puwesto nito.',
+                          ),
+                          confirmLabel: 'Remove',
+                          cancelLabel: 'Keep flower',
+                          icon: Icons.local_florist_outlined,
                         );
-                      }
-                    },
-                  ),
-                ],
-              ),
-            ],
+                        if (!confirmed) return;
+                        final deleted =
+                            await provider.deleteGratitudeEntry(current.id);
+                        if (!sheetContext.mounted) return;
+                        if (deleted) Navigator.of(sheetContext).pop();
+                      },
+                      icon: const Icon(
+                        Icons.delete_outline_rounded,
+                        color: Colors.redAccent,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         );
       },
     );
   }
 
-  void _showEditGratitudeDialog(
-      BuildContext context, GratitudeEntry entry, GratitudeProvider provider) {
-    final editController = TextEditingController(text: entry.content);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    showDialog(
+  void _showEditDialog(
+    BuildContext context,
+    GratitudeEntry entry,
+    GratitudeProvider provider,
+  ) {
+    final controller = TextEditingController(text: entry.content);
+    showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: isDark ? AppColors.darkCard : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Row(
-          children: [
-            Icon(GratitudeEntry.getFlowerMaterialIcon(entry.flowerType),
-                color: GratitudeEntry.getFlowerColor(entry.flowerType)),
-            const SizedBox(width: 8),
-            const Text('Edit Gratitude Note',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-          ],
-        ),
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Edit gratitude'),
         content: TextField(
-          controller: editController,
+          controller: controller,
           maxLines: 3,
-          style: TextStyle(
-              fontSize: 14,
-              color: isDark
-                  ? AppColors.textPrimaryDark
-                  : AppColors.textPrimaryLight),
-          decoration: InputDecoration(
-            hintText: 'Update your gratitude reflection...',
-            filled: true,
-            fillColor: isDark ? Colors.black26 : const Color(0xFFF6F4ED),
-            border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none),
+          decoration: const InputDecoration(
+            hintText: 'Update this gratitude memory…',
           ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel',
-                style:
-                    TextStyle(color: Colors.grey, fontWeight: FontWeight.w600)),
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.sageGreen,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16)),
-            ),
+          FilledButton(
             onPressed: () async {
-              if (editController.text.trim().isNotEmpty) {
-                final saved = await provider.updateGratitudeEntry(
-                  entry.id,
-                  editController.text.trim(),
-                );
-                if (!ctx.mounted) return;
-                if (saved) Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      saved
-                          ? 'Gratitude note updated! ✨'
-                          : provider.errorMessage ??
-                              'The note could not be updated.',
-                    ),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
+              final saved = await provider.updateGratitudeEntry(
+                entry.id,
+                controller.text,
+              );
+              if (saved && dialogContext.mounted) {
+                Navigator.of(dialogContext).pop();
               }
             },
-            child: const Text('Save Changes',
-                style: TextStyle(fontWeight: FontWeight.w700)),
+            child: const Text('Save'),
           ),
         ],
       ),
-    );
+    ).whenComplete(controller.dispose);
   }
+}
 
-  Widget _buildGardenListView(BuildContext context, GratitudeProvider provider,
-      bool isDark, UserProvider userProvider) {
-    if (provider.entries.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+class _GardenBottomControls extends StatelessWidget {
+  final int gardenIndex;
+  final int flowerCount;
+  final int unlockedCount;
+  final bool isFull;
+  final bool isLoading;
+  final bool isDay;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+  final VoidCallback onPlant;
+  final VoidCallback onOpenNext;
+
+  const _GardenBottomControls({
+    required this.gardenIndex,
+    required this.flowerCount,
+    required this.unlockedCount,
+    required this.isFull,
+    required this.isLoading,
+    required this.isDay,
+    required this.onPrevious,
+    required this.onNext,
+    required this.onPlant,
+    required this.onOpenNext,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasNext = gardenIndex < unlockedCount - 1;
+    final foreground = isDay ? AppColors.textPrimaryLight : Colors.white;
+    return Container(
+      key: const ValueKey('garden-controls'),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDay
+            ? Colors.white.withValues(alpha: 0.9)
+            : const Color(0xFF142F38).withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: isDay ? Colors.white : Colors.white24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.14),
+            blurRadius: 22,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            key: const ValueKey('garden-navigator'),
             children: [
-              const Icon(Icons.local_florist_outlined,
-                  size: 48, color: AppColors.sageGreen),
-              const SizedBox(height: 12),
-              Text(
-                'No flowers in your garden yet.',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: isDark
-                      ? AppColors.textPrimaryDark
-                      : AppColors.textPrimaryLight,
+              IconButton(
+                key: const ValueKey('previous-garden'),
+                tooltip: 'Previous garden',
+                onPressed: gardenIndex == 0 ? null : onPrevious,
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.chevron_left_rounded),
+                color: foreground,
+              ),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Garden ${gardenIndex + 1} of $unlockedCount',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: foreground,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '$flowerCount / ${GardenLayout.capacity} flowers',
+                      style: TextStyle(
+                        color: foreground.withValues(alpha: 0.66),
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 6),
-              Text(
-                'Tap the button below to plant your first gratitude note.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: isDark
-                      ? AppColors.textSecondaryDark
-                      : AppColors.textSecondaryLight,
-                ),
+              IconButton(
+                key: const ValueKey('next-garden'),
+                tooltip: 'Next garden',
+                onPressed: gardenIndex >= unlockedCount - 1 ? null : onNext,
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.chevron_right_rounded),
+                color: foreground,
               ),
             ],
           ),
-        ),
-      );
-    }
-
-    return ListView.builder(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-      itemCount: provider.entries.length,
-      itemBuilder: (context, index) {
-        final entry = provider.entries[index];
-        final flowerColor = GratitudeEntry.getFlowerColor(entry.flowerType);
-
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.darkCard : Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isDark
-                  ? AppColors.darkCardBorder
-                  : Colors.black.withValues(alpha: 0.05),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.02),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: ListTile(
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            onTap: () => _showFlowerDetailSheet(
-                context, entry, userProvider.preferredLanguage),
-            leading: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: flowerColor.withValues(alpha: 0.14),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                GratitudeEntry.getFlowerMaterialIcon(entry.flowerType),
-                color: flowerColor,
-                size: 26,
-              ),
-            ),
-            title: Text(
-              '"${entry.content}"',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 14.5,
-                fontWeight: FontWeight.w700,
-                color: isDark
-                    ? AppColors.textPrimaryDark
-                    : AppColors.textPrimaryLight,
-              ),
-            ),
-            subtitle: Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Row(
-                children: [
-                  Text(
-                    GratitudeEntry.getFlowerName(entry.flowerType),
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w700,
-                      color: flowerColor,
+          const SizedBox(height: 7),
+          Row(
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(99),
+                  child: LinearProgressIndicator(
+                    value: flowerCount / GardenLayout.capacity,
+                    minHeight: 7,
+                    backgroundColor:
+                        isDay ? const Color(0xFFE0E8D2) : Colors.white12,
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      AppColors.honeyAmber,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '•  ${entry.waterCount}💧',
-                    style: const TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.blueAccent),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                isFull
+                    ? 'Garden full'
+                    : '${GardenLayout.capacity - flowerCount} plots open',
+                style: TextStyle(
+                  color: foreground,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            height: 49,
+            child: FilledButton(
+              key: ValueKey(isFull ? 'open-next-garden' : 'plant-flower'),
+              onPressed: isLoading
+                  ? null
+                  : isFull && hasNext
+                      ? onOpenNext
+                      : isFull
+                          ? null
+                          : onPlant,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.honeyAmber,
+                foregroundColor: AppColors.onHoney,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    isFull ? Icons.arrow_forward_rounded : Icons.add_rounded,
                   ),
-                  const Spacer(),
-                  Text(
-                    DateFormatter.formatShortDate(entry.createdAt),
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: isDark ? Colors.white38 : Colors.black38,
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      isFull
+                          ? hasNext
+                              ? 'Open Garden ${gardenIndex + 2}'
+                              : 'Garden complete'
+                          : 'Plant a gratitude flower',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
                     ),
                   ),
                 ],
               ),
             ),
-            trailing: IconButton(
-              icon: const Icon(Icons.water_drop_rounded,
-                  color: Colors.blueAccent, size: 20),
-              tooltip: 'Water Flower',
-              onPressed: () async {
-                final saved = await provider.waterFlower(entry.id);
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      saved
-                          ? '💧 Watered flower (+3 💧 Drops)!'
-                          : provider.errorMessage ??
-                              'The flower could not be watered.',
-                    ),
-                    behavior: SnackBarBehavior.floating,
-                    duration: Duration(seconds: 1),
-                  ),
-                );
-              },
-            ),
           ),
-        );
-      },
+        ],
+      ),
+    );
+  }
+}
+
+class _GardenMemoryTile extends StatelessWidget {
+  final GratitudeEntry entry;
+  final bool isDark;
+  final String language;
+  final VoidCallback onTap;
+
+  const _GardenMemoryTile({
+    required this.entry,
+    required this.isDark,
+    required this.language,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: isDark ? AppColors.darkCard : Colors.white,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.all(13),
+          child: Row(
+            children: [
+              Container(
+                width: 58,
+                height: 70,
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: GratitudeEntry.getFlowerColor(entry.flowerType)
+                      .withValues(alpha: 0.11),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: PolishedFlowerAsset(
+                  flowerType: entry.flowerType,
+                  glowOpacity: 0.12,
+                  glowBlur: 4,
+                  cacheWidth: 128,
+                  cacheHeight: 235,
+                ),
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      GratitudeEntry.getFlowerName(entry.flowerType),
+                      style: const TextStyle(
+                        color: AppColors.sageGreen,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      entry.content,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: isDark
+                            ? AppColors.textPrimaryDark
+                            : AppColors.textPrimaryLight,
+                        fontSize: 13.5,
+                        height: 1.35,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      'Garden ${entry.gardenIndex + 1} • ${DateFormatter.formatFullDate(entry.createdAt, language: language)}',
+                      style: TextStyle(
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : AppColors.textSecondaryLight,
+                        fontSize: 10.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

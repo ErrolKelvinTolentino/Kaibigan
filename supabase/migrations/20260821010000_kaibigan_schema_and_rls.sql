@@ -44,9 +44,11 @@ CREATE TABLE IF NOT EXISTS public.gratitude_entries (
     user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
     flower_type TEXT NOT NULL DEFAULT 'sunflower',
-    growth_stage INT DEFAULT 3,
     water_count INT DEFAULT 1,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    garden_index INT NOT NULL DEFAULT 0 CHECK (garden_index >= 0),
+    plot_index INT NOT NULL DEFAULT 0 CHECK (plot_index >= 0 AND plot_index < 15),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (user_id, garden_index, plot_index)
 );
 
 -- 5. Mood Logs Table

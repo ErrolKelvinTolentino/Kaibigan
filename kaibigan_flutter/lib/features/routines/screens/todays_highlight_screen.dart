@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_typography.dart';
+import '../../../core/widgets/cozy_confirm_sheet.dart';
 import '../../settings/user_provider.dart';
 import '../../companion/companion_model.dart';
 import '../../mood_tracking/mood_model.dart';
@@ -25,7 +26,7 @@ class TodaysHighlightScreen extends StatefulWidget {
 
 class _TodaysHighlightScreenState extends State<TodaysHighlightScreen> {
   final TextEditingController _controller = TextEditingController();
-  static const int _maxChars = 60;
+  static const int _maxChars = 180;
   bool _isSaved = false;
   bool _isSaving = false;
 
@@ -122,8 +123,9 @@ class _TodaysHighlightScreenState extends State<TodaysHighlightScreen> {
         centerTitle: true,
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
           child: _isSaved
               ? _buildSuccessView(context, isDark, mascot)
               : _buildInputView(context, isDark, mascot, remainingChars),
@@ -142,17 +144,17 @@ class _TodaysHighlightScreenState extends State<TodaysHighlightScreen> {
             borderRadius: BorderRadius.circular(24),
             child: Image.asset(
               FeatureIconHelper.todaysHighlight,
-              width: 120,
-              height: 120,
+              width: 88,
+              height: 88,
               fit: BoxFit.contain,
               errorBuilder: (context, error, stackTrace) =>
                   const Text('✨', style: TextStyle(fontSize: 56)),
             ),
           ),
-        ).animate().scale(duration: 400.ms, curve: Curves.easeOutBack),
-        const SizedBox(height: 20),
+        ).animate().scale(duration: 320.ms, curve: Curves.easeOutCubic),
+        const SizedBox(height: 14),
         Text(
-          "What is the highlight of your day?",
+          "What moment would you like to keep?",
           style: TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.w800,
@@ -163,7 +165,7 @@ class _TodaysHighlightScreenState extends State<TodaysHighlightScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          "Keep it light, sweet, and memorable (up to 60 characters).",
+          "A small detail is enough—the way something looked, sounded, or felt.",
           style: TextStyle(
             fontSize: 14,
             color: isDark
@@ -197,8 +199,8 @@ class _TodaysHighlightScreenState extends State<TodaysHighlightScreen> {
               TextField(
                 controller: _controller,
                 maxLength: _maxChars,
-                maxLines: 2,
-                autofocus: true,
+                minLines: 3,
+                maxLines: 5,
                 onChanged: (v) => setState(() {}),
                 style: TextStyle(
                   fontSize: 18,
@@ -208,7 +210,7 @@ class _TodaysHighlightScreenState extends State<TodaysHighlightScreen> {
                       : AppColors.textPrimaryLight,
                 ),
                 decoration: InputDecoration(
-                  hintText: "e.g. Sipped warm coffee under morning sun...",
+                  hintText: "I want to remember…",
                   hintStyle: TextStyle(
                     color: isDark
                         ? AppColors.textSecondaryDark.withValues(alpha: 0.5)
@@ -219,23 +221,12 @@ class _TodaysHighlightScreenState extends State<TodaysHighlightScreen> {
                   counterText: '',
                 ),
               ),
-              const SizedBox(height: 8),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: remainingChars < 10
-                      ? AppColors.softRose.withValues(alpha: 0.2)
-                      : (isDark
-                          ? Colors.white10
-                          : Colors.black.withValues(alpha: 0.04)),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '${_controller.text.length} / $_maxChars',
+              if (remainingChars < 40) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '$remainingChars characters left',
                   style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 11.5,
                     color: remainingChars < 10
                         ? AppColors.softRose
                         : (isDark
@@ -243,11 +234,11 @@ class _TodaysHighlightScreenState extends State<TodaysHighlightScreen> {
                             : AppColors.textSecondaryLight),
                   ),
                 ),
-              ),
+              ],
             ],
           ),
         ),
-        const Spacer(),
+        const SizedBox(height: 28),
         SizedBox(
           width: double.infinity,
           height: 56,
@@ -257,7 +248,7 @@ class _TodaysHighlightScreenState extends State<TodaysHighlightScreen> {
                 : null,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.honeyGold,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.onHoney,
               elevation: 0,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20)),
@@ -273,7 +264,7 @@ class _TodaysHighlightScreenState extends State<TodaysHighlightScreen> {
                     ),
                   )
                 : Text(
-                    _isEditing ? 'Update Highlight' : 'Save Highlight',
+                    _isEditing ? 'Update this moment' : 'Save this moment',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
@@ -302,10 +293,10 @@ class _TodaysHighlightScreenState extends State<TodaysHighlightScreen> {
                 size: 60,
                 color: AppColors.honeyGold),
           ),
-        ).animate().scale(duration: 400.ms, curve: Curves.easeOutBack),
+        ).animate().scale(duration: 320.ms, curve: Curves.easeOutCubic),
         const SizedBox(height: 24),
         Text(
-          "Highlight Captured!",
+          "A piece of today is safe here",
           style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.w800,
@@ -329,7 +320,7 @@ class _TodaysHighlightScreenState extends State<TodaysHighlightScreen> {
         ),
         const SizedBox(height: 16),
         Text(
-          "Little moments like this bring so much sweetness to life. 🐝",
+          "You can return to this moment whenever you need it.",
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 14,
@@ -367,27 +358,14 @@ class _TodaysHighlightScreenState extends State<TodaysHighlightScreen> {
   Future<void> _deleteHighlight() async {
     final log = widget.existingHighlight;
     if (log == null) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Remove today\'s highlight?'),
-        content: const Text(
-          'This permanently removes the moment from your saved routine history.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Keep it'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text(
-              'Remove',
-              style: TextStyle(color: Colors.redAccent),
-            ),
-          ),
-        ],
-      ),
+    final confirmed = await CozyConfirmSheet.show(
+      context,
+      title: 'Let this moment go?',
+      message:
+          'This removes it from your saved history. Nothing else will change.',
+      confirmLabel: 'Remove moment',
+      cancelLabel: 'Keep it',
+      icon: Icons.light_mode_outlined,
     );
     if (confirmed != true || !mounted) return;
 

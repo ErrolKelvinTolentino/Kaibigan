@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
+import '../../core/widgets/cozy_confirm_sheet.dart';
 import 'routine_model.dart';
 import 'routines_provider.dart';
 import 'widgets/custom_routine_dialog.dart';
@@ -21,16 +22,19 @@ class RoutineManagementScreen extends StatefulWidget {
   const RoutineManagementScreen({super.key, this.initialIndex = 0});
 
   @override
-  State<RoutineManagementScreen> createState() => _RoutineManagementScreenState();
+  State<RoutineManagementScreen> createState() =>
+      _RoutineManagementScreenState();
 }
 
-class _RoutineManagementScreenState extends State<RoutineManagementScreen> with SingleTickerProviderStateMixin {
+class _RoutineManagementScreenState extends State<RoutineManagementScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this, initialIndex: widget.initialIndex);
+    _tabController = TabController(
+        length: 4, vsync: this, initialIndex: widget.initialIndex);
   }
 
   @override
@@ -71,6 +75,24 @@ class _RoutineManagementScreenState extends State<RoutineManagementScreen> with 
     Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
   }
 
+  Future<void> _removeStep(
+    RoutinesProvider provider,
+    RoutineConfig routine,
+    RoutineStep step,
+  ) async {
+    final confirmed = await CozyConfirmSheet.show(
+      context,
+      title: 'Remove ${step.title}?',
+      message:
+          'This activity will be removed from ${routine.title}. Other activities will stay as they are.',
+      confirmLabel: 'Remove activity',
+      cancelLabel: 'Keep it',
+    );
+    if (confirmed && mounted) {
+      provider.removeStepFromRoutine(routine.id, step.id);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -89,25 +111,32 @@ class _RoutineManagementScreenState extends State<RoutineManagementScreen> with 
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight),
+          icon: Icon(Icons.arrow_back,
+              color: isDark
+                  ? AppColors.textPrimaryDark
+                  : AppColors.textPrimaryLight),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          'Routine Management',
+          'Manage routines',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w800,
-            color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+            color:
+                isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
           ),
         ),
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
           labelColor: AppColors.sageGreen,
-          unselectedLabelColor: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+          unselectedLabelColor: isDark
+              ? AppColors.textSecondaryDark
+              : AppColors.textSecondaryLight,
           indicatorColor: AppColors.sageGreen,
           indicatorWeight: 3,
-          labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+          labelStyle:
+              const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
           tabs: const [
             Tab(text: 'Morning'),
             Tab(text: 'Mid-Day'),
@@ -119,28 +148,36 @@ class _RoutineManagementScreenState extends State<RoutineManagementScreen> with 
       body: TabBarView(
         controller: _tabController,
         children: [
-          if (morningRoutine != null) _buildRoutineEditor(morningRoutine, routinesProvider, isDark),
-          if (middayRoutine != null) _buildRoutineEditor(middayRoutine, routinesProvider, isDark),
-          if (nightRoutine != null) _buildRoutineEditor(nightRoutine, routinesProvider, isDark),
+          if (morningRoutine != null)
+            _buildRoutineEditor(morningRoutine, routinesProvider, isDark),
+          if (middayRoutine != null)
+            _buildRoutineEditor(middayRoutine, routinesProvider, isDark),
+          if (nightRoutine != null)
+            _buildRoutineEditor(nightRoutine, routinesProvider, isDark),
           _buildCustomRoutinesTab(customRoutines, routinesProvider, isDark),
         ],
       ),
     );
   }
 
-  Widget _buildRoutineEditor(RoutineConfig routine, RoutinesProvider provider, bool isDark) {
+  Widget _buildRoutineEditor(
+      RoutineConfig routine, RoutinesProvider provider, bool isDark) {
+    final isCompact = MediaQuery.sizeOf(context).width < 360;
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(isCompact ? 16 : 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header Card with Reminder Time & Enable Toggle
           Container(
-            padding: const EdgeInsets.all(20),
+            padding: EdgeInsets.all(isCompact ? 16 : 20),
             decoration: BoxDecoration(
               color: isDark ? AppColors.darkCard : Colors.white,
               borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: isDark ? AppColors.darkCardBorder : Colors.black.withValues(alpha: 0.06)),
+              border: Border.all(
+                  color: isDark
+                      ? AppColors.darkCardBorder
+                      : Colors.black.withValues(alpha: 0.06)),
             ),
             child: Column(
               children: [
@@ -155,7 +192,9 @@ class _RoutineManagementScreenState extends State<RoutineManagementScreen> with 
                       child: Icon(
                         routine.type == RoutineType.morning
                             ? Icons.wb_sunny_outlined
-                            : (routine.type == RoutineType.midday ? Icons.spa_outlined : Icons.nights_stay_outlined),
+                            : (routine.type == RoutineType.midday
+                                ? Icons.spa_outlined
+                                : Icons.nights_stay_outlined),
                         color: routine.primaryColor,
                         size: 24,
                       ),
@@ -170,12 +209,15 @@ class _RoutineManagementScreenState extends State<RoutineManagementScreen> with 
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
-                              color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                              color: isDark
+                                  ? AppColors.textPrimaryDark
+                                  : AppColors.textPrimaryLight,
                             ),
                           ),
                           Text(
                             '${routine.activeStepsCount} steps • ~${routine.totalMinutes} mins',
-                            style: AppTypography.bodyMedium(context, isDark: isDark),
+                            style: AppTypography.bodyMedium(context,
+                                isDark: isDark),
                           ),
                         ],
                       ),
@@ -183,7 +225,8 @@ class _RoutineManagementScreenState extends State<RoutineManagementScreen> with 
                     Switch.adaptive(
                       value: routine.isEnabled,
                       activeThumbColor: routine.primaryColor,
-                      onChanged: (val) => provider.toggleRoutineEnabled(routine.id),
+                      onChanged: (val) =>
+                          provider.toggleRoutineEnabled(routine.id),
                     ),
                   ],
                 ),
@@ -198,35 +241,48 @@ class _RoutineManagementScreenState extends State<RoutineManagementScreen> with 
                       provider.updateReminderTime(routine.id, time);
                     }
                   },
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.alarm_outlined, size: 20, color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
+                          Icon(Icons.alarm_outlined,
+                              size: 20,
+                              color: isDark
+                                  ? AppColors.textSecondaryDark
+                                  : AppColors.textSecondaryLight),
                           const SizedBox(width: 8),
-                          Text(
-                            'Daily Reminder Time',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                          Expanded(
+                            child: Text(
+                              'Preferred routine time',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: isDark
+                                    ? AppColors.textPrimaryDark
+                                    : AppColors.textPrimaryLight,
+                              ),
                             ),
                           ),
                         ],
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: routine.primaryColor.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          routine.reminderTime.format(context),
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: routine.primaryColor,
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: routine.primaryColor.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            routine.reminderTime.format(context),
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: routine.primaryColor,
+                            ),
                           ),
                         ),
                       ),
@@ -237,39 +293,40 @@ class _RoutineManagementScreenState extends State<RoutineManagementScreen> with 
             ),
           ),
           const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Customize & Reorder Steps',
-                    style: AppTypography.titleMedium(context, isDark: isDark),
-                  ),
-                  Text(
-                    'Tap step to open. Drag to reorder.',
-                    style: AppTypography.bodySmall(context, isDark: isDark),
-                  ),
-                ],
+              Text(
+                'Activities',
+                style: AppTypography.titleMedium(context, isDark: isDark),
               ),
-              ElevatedButton.icon(
-                onPressed: () {
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (_) => AddActionSheet(routineId: routine.id),
-                  );
-                },
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('Add Action'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: routine.primaryColor,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  elevation: 0,
+              Text(
+                'Tap to preview. Long-press and drag to reorder.',
+                style: AppTypography.bodySmall(context, isDark: isDark),
+              ),
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerRight,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => AddActionSheet(routineId: routine.id),
+                    );
+                  },
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add activity'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: routine.primaryColor,
+                    foregroundColor: AppColors.readableOn(routine.primaryColor),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16)),
+                    elevation: 0,
+                  ),
                 ),
               ),
             ],
@@ -280,63 +337,98 @@ class _RoutineManagementScreenState extends State<RoutineManagementScreen> with 
           ReorderableListView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
+            buildDefaultDragHandles: false,
             itemCount: routine.steps.length,
             onReorderItem: (oldIndex, newIndex) {
               provider.reorderSteps(routine.id, oldIndex, newIndex);
             },
             itemBuilder: (context, index) {
               final step = routine.steps[index];
-              return Container(
+              return ReorderableDelayedDragStartListener(
                 key: ValueKey(step.id),
-                margin: const EdgeInsets.only(bottom: 10),
-                child: Material(
-                  color: isDark ? AppColors.darkCard : Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  clipBehavior: Clip.antiAlias,
-                  child: ListTile(
-                    onTap: () => _openStepScreen(context, step.type),
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: step.isEnabled ? routine.primaryColor.withValues(alpha: 0.15) : (isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.04)),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(step.icon, color: step.isEnabled ? routine.primaryColor : (isDark ? Colors.white38 : Colors.black38), size: 20),
-                  ),
-                  title: Text(
-                    step.title,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      decoration: step.isEnabled ? null : TextDecoration.lineThrough,
-                      color: step.isEnabled
-                          ? (isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight)
-                          : (isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
-                    ),
-                  ),
-                  subtitle: Text(
-                    step.subtitle,
-                    style: AppTypography.bodySmall(context, isDark: isDark),
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Switch.adaptive(
-                        value: step.isEnabled,
-                        activeThumbColor: routine.primaryColor,
-                        onChanged: (val) => provider.toggleStep(routine.id, step.id),
+                index: index,
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  child: Material(
+                    color: isDark ? AppColors.darkCard : Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    clipBehavior: Clip.antiAlias,
+                    child: ListTile(
+                      onTap: () => _openStepScreen(context, step.type),
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: step.isEnabled
+                              ? routine.primaryColor.withValues(alpha: 0.15)
+                              : (isDark
+                                  ? Colors.white10
+                                  : Colors.black.withValues(alpha: 0.04)),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(step.icon,
+                            color: step.isEnabled
+                                ? routine.primaryColor
+                                : (isDark ? Colors.white38 : Colors.black38),
+                            size: 20),
                       ),
-                      IconButton(
-                        icon: Icon(Icons.delete_outline, size: 18, color: Colors.redAccent.shade200),
-                        tooltip: 'Remove step',
-                        onPressed: () => provider.removeStepFromRoutine(routine.id, step.id),
+                      title: Text(
+                        step.title,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          decoration: step.isEnabled
+                              ? null
+                              : TextDecoration.lineThrough,
+                          color: step.isEnabled
+                              ? (isDark
+                                  ? AppColors.textPrimaryDark
+                                  : AppColors.textPrimaryLight)
+                              : (isDark
+                                  ? AppColors.textSecondaryDark
+                                  : AppColors.textSecondaryLight),
+                        ),
                       ),
-                      const Icon(Icons.drag_handle, color: Colors.grey),
-                    ],
+                      subtitle: Text(
+                        step.subtitle,
+                        style: AppTypography.bodySmall(context, isDark: isDark),
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            constraints: const BoxConstraints.tightFor(
+                                width: 36, height: 44),
+                            padding: EdgeInsets.zero,
+                            icon: Icon(
+                              step.isEnabled
+                                  ? Icons.check_circle_rounded
+                                  : Icons.circle_outlined,
+                              color: step.isEnabled
+                                  ? routine.primaryColor
+                                  : (isDark ? Colors.white38 : Colors.black38),
+                            ),
+                            tooltip: step.isEnabled
+                                ? 'Pause ${step.title}'
+                                : 'Enable ${step.title}',
+                            onPressed: () =>
+                                provider.toggleStep(routine.id, step.id),
+                          ),
+                          IconButton(
+                            constraints: const BoxConstraints.tightFor(
+                                width: 36, height: 44),
+                            padding: EdgeInsets.zero,
+                            icon: Icon(Icons.delete_outline,
+                                size: 18, color: Colors.redAccent.shade200),
+                            tooltip: 'Remove step',
+                            onPressed: () =>
+                                _removeStep(provider, routine, step),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            );
+              );
             },
           ),
         ],
@@ -344,16 +436,22 @@ class _RoutineManagementScreenState extends State<RoutineManagementScreen> with 
     );
   }
 
-  Widget _buildCustomRoutinesTab(List<RoutineConfig> customRoutines, RoutinesProvider provider, bool isDark) {
+  Widget _buildCustomRoutinesTab(List<RoutineConfig> customRoutines,
+      RoutinesProvider provider, bool isDark) {
+    final isCompact = MediaQuery.sizeOf(context).width < 380;
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(isCompact ? 16 : 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            runSpacing: 10,
             children: [
-              Text('Your Custom Routines', style: AppTypography.titleMedium(context, isDark: isDark)),
+              Text('Your Custom Routines',
+                  style: AppTypography.titleMedium(context, isDark: isDark)),
               ElevatedButton.icon(
                 onPressed: () {
                   showModalBottomSheet(
@@ -368,7 +466,8 @@ class _RoutineManagementScreenState extends State<RoutineManagementScreen> with 
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.sageGreen,
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20)),
                 ),
               ),
             ],
@@ -380,11 +479,21 @@ class _RoutineManagementScreenState extends State<RoutineManagementScreen> with 
                 padding: const EdgeInsets.all(40),
                 child: Column(
                   children: [
-                    Icon(Icons.dashboard_customize_outlined, size: 48, color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
+                    Icon(Icons.dashboard_customize_outlined,
+                        size: 48,
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : AppColors.textSecondaryLight),
                     const SizedBox(height: 12),
-                    Text('No Custom Routines Yet', style: AppTypography.titleSmall(context, isDark: isDark)),
+                    Text('No Custom Routines Yet',
+                        style:
+                            AppTypography.titleSmall(context, isDark: isDark)),
                     const SizedBox(height: 4),
-                    Text('Create tailored routines matching your personal wellness flow.', textAlign: TextAlign.center, style: AppTypography.bodyMedium(context, isDark: isDark)),
+                    Text(
+                        'Create tailored routines matching your personal wellness flow.',
+                        textAlign: TextAlign.center,
+                        style:
+                            AppTypography.bodyMedium(context, isDark: isDark)),
                   ],
                 ),
               ),
@@ -397,7 +506,10 @@ class _RoutineManagementScreenState extends State<RoutineManagementScreen> with 
                 decoration: BoxDecoration(
                   color: isDark ? AppColors.darkCard : Colors.white,
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: isDark ? AppColors.darkCardBorder : Colors.black.withValues(alpha: 0.06)),
+                  border: Border.all(
+                      color: isDark
+                          ? AppColors.darkCardBorder
+                          : Colors.black.withValues(alpha: 0.06)),
                 ),
                 child: Row(
                   children: [
@@ -407,20 +519,30 @@ class _RoutineManagementScreenState extends State<RoutineManagementScreen> with 
                         color: AppColors.sageGreen.withValues(alpha: 0.15),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.star_outline, color: AppColors.sageGreen, size: 22),
+                      child: const Icon(Icons.star_outline,
+                          color: AppColors.sageGreen, size: 22),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(routine.title, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight)),
-                          Text('${routine.activeStepsCount} steps', style: AppTypography.bodySmall(context, isDark: isDark)),
+                          Text(routine.title,
+                              style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: isDark
+                                      ? AppColors.textPrimaryDark
+                                      : AppColors.textPrimaryLight)),
+                          Text('${routine.activeStepsCount} steps',
+                              style: AppTypography.bodySmall(context,
+                                  isDark: isDark)),
                         ],
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                      icon: const Icon(Icons.delete_outline,
+                          color: Colors.redAccent),
                       onPressed: () => provider.deleteCustomRoutine(routine.id),
                     ),
                   ],

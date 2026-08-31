@@ -18,7 +18,16 @@ class SleepLogFlowScreen extends StatefulWidget {
 }
 
 class _SleepLogFlowScreenState extends State<SleepLogFlowScreen> {
-  int _currentStep = 0; // 0: Quality/Feeling, 1: Hours Spinner, 2: Completed Recap
+  static const _sleepFeelingOptions = [
+    SleepFeeling.energized,
+    SleepFeeling.wellRested,
+    SleepFeeling.moderate,
+    SleepFeeling.groggy,
+    SleepFeeling.restless,
+  ];
+
+  int _currentStep =
+      0; // 0: Quality/Feeling, 1: Hours Spinner, 2: Completed Recap
   SleepFeeling _selectedFeeling = SleepFeeling.moderate;
   int _selectedHoursIndex = 7; // Default to '7' hours
 
@@ -42,7 +51,8 @@ class _SleepLogFlowScreenState extends State<SleepLogFlowScreen> {
   @override
   void initState() {
     super.initState();
-    _scrollController = FixedExtentScrollController(initialItem: _selectedHoursIndex);
+    _scrollController =
+        FixedExtentScrollController(initialItem: _selectedHoursIndex);
   }
 
   @override
@@ -52,7 +62,8 @@ class _SleepLogFlowScreenState extends State<SleepLogFlowScreen> {
   }
 
   void _saveSleepLog() async {
-    final routinesProvider = Provider.of<RoutinesProvider>(context, listen: false);
+    final routinesProvider =
+        Provider.of<RoutinesProvider>(context, listen: false);
     final hoursString = _sleepHoursOptions[_selectedHoursIndex];
 
     await routinesProvider.addLog(
@@ -61,7 +72,8 @@ class _SleepLogFlowScreenState extends State<SleepLogFlowScreen> {
         routineId: 'sleep_${DateTime.now().millisecondsSinceEpoch}',
         routineType: RoutineType.morning,
         sleepFeeling: _selectedFeeling,
-        focusOrHighlight: "Slept $hoursString hrs: ${_selectedFeeling.description}",
+        focusOrHighlight:
+            "Slept $hoursString hrs: ${_selectedFeeling.description}",
         completedAt: DateTime.now(),
       ),
     );
@@ -84,8 +96,11 @@ class _SleepLogFlowScreenState extends State<SleepLogFlowScreen> {
         elevation: 0,
         leading: IconButton(
           icon: Icon(
-            _currentStep == 0 ? Icons.close_rounded : Icons.arrow_back_ios_new_rounded,
-            color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+            _currentStep == 0
+                ? Icons.close_rounded
+                : Icons.arrow_back_ios_new_rounded,
+            color:
+                isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
           ),
           onPressed: () {
             if (_currentStep > 0 && _currentStep < 2) {
@@ -110,7 +125,8 @@ class _SleepLogFlowScreenState extends State<SleepLogFlowScreen> {
     );
   }
 
-  Widget _buildCurrentStep(BuildContext context, bool isDark, MascotInfo mascot) {
+  Widget _buildCurrentStep(
+      BuildContext context, bool isDark, MascotInfo mascot) {
     if (_currentStep == 0) {
       return _buildQualityStep(context, isDark);
     } else if (_currentStep == 1) {
@@ -133,22 +149,27 @@ class _SleepLogFlowScreenState extends State<SleepLogFlowScreen> {
           style: TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.w800,
-            color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+            color:
+                isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
             letterSpacing: -0.5,
           ),
         ),
         const SizedBox(height: 6),
         Text(
           "Pick the bee energy that matches how rested you feel.",
-          style: TextStyle(fontSize: 14, color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
+          style: TextStyle(
+              fontSize: 14,
+              color: isDark
+                  ? AppColors.textSecondaryDark
+                  : AppColors.textSecondaryLight),
         ),
         const SizedBox(height: 20),
 
         Expanded(
           child: ListView.builder(
-            itemCount: SleepFeeling.values.length,
+            itemCount: _sleepFeelingOptions.length,
             itemBuilder: (context, index) {
-              final feeling = SleepFeeling.values[index];
+              final feeling = _sleepFeelingOptions[index];
               final isSelected = _selectedFeeling == feeling;
 
               return GestureDetector(
@@ -159,13 +180,16 @@ class _SleepLogFlowScreenState extends State<SleepLogFlowScreen> {
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? AppColors.honeyGold.withValues(alpha: isDark ? 0.25 : 0.15)
+                        ? AppColors.honeyGold
+                            .withValues(alpha: isDark ? 0.25 : 0.15)
                         : (isDark ? AppColors.darkCard : Colors.white),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
                       color: isSelected
                           ? AppColors.honeyGold
-                          : (isDark ? AppColors.darkCardBorder : Colors.black.withValues(alpha: 0.06)),
+                          : (isDark
+                              ? AppColors.darkCardBorder
+                              : Colors.black.withValues(alpha: 0.06)),
                       width: isSelected ? 2 : 1,
                     ),
                   ),
@@ -178,7 +202,10 @@ class _SleepLogFlowScreenState extends State<SleepLogFlowScreen> {
                           width: 80,
                           height: 80,
                           fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) => Icon(feeling.icon, color: AppColors.honeyAmber, size: 52),
+                          errorBuilder: (context, error, stackTrace) => Icon(
+                              feeling.icon,
+                              color: AppColors.honeyAmber,
+                              size: 52),
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -191,7 +218,9 @@ class _SleepLogFlowScreenState extends State<SleepLogFlowScreen> {
                               style: TextStyle(
                                 fontSize: 16.5,
                                 fontWeight: FontWeight.w800,
-                                color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                color: isDark
+                                    ? AppColors.textPrimaryDark
+                                    : AppColors.textPrimaryLight,
                               ),
                             ),
                             const SizedBox(height: 3),
@@ -199,14 +228,17 @@ class _SleepLogFlowScreenState extends State<SleepLogFlowScreen> {
                               feeling.description,
                               style: TextStyle(
                                 fontSize: 13,
-                                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                color: isDark
+                                    ? AppColors.textSecondaryDark
+                                    : AppColors.textSecondaryLight,
                               ),
                             ),
                           ],
                         ),
                       ),
                       if (isSelected)
-                        const Icon(Icons.check_circle_rounded, color: AppColors.honeyGold, size: 24),
+                        const Icon(Icons.check_circle_rounded,
+                            color: AppColors.honeyGold, size: 24),
                     ],
                   ),
                 ),
@@ -225,9 +257,11 @@ class _SleepLogFlowScreenState extends State<SleepLogFlowScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.sageGreen,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20)),
             ),
-            child: const Text("Next: Sleep Duration", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            child: const Text("Next: Sleep Duration",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
           ),
         ),
       ],
@@ -246,14 +280,19 @@ class _SleepLogFlowScreenState extends State<SleepLogFlowScreen> {
           style: TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.w800,
-            color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+            color:
+                isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
             letterSpacing: -0.5,
           ),
         ),
         const SizedBox(height: 6),
         Text(
           "Scroll to select your total hours of sleep.",
-          style: TextStyle(fontSize: 14, color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
+          style: TextStyle(
+              fontSize: 14,
+              color: isDark
+                  ? AppColors.textSecondaryDark
+                  : AppColors.textSecondaryLight),
         ),
 
         const SizedBox(height: 30),
@@ -273,7 +312,9 @@ class _SleepLogFlowScreenState extends State<SleepLogFlowScreen> {
                       decoration: BoxDecoration(
                         color: AppColors.honeyGold.withValues(alpha: 0.16),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppColors.honeyGold.withValues(alpha: 0.4), width: 1.5),
+                        border: Border.all(
+                            color: AppColors.honeyGold.withValues(alpha: 0.4),
+                            width: 1.5),
                       ),
                     ),
                   ),
@@ -298,7 +339,9 @@ class _SleepLogFlowScreenState extends State<SleepLogFlowScreen> {
                             '$label ${label.contains('than') ? 'hour' : (label == '1' ? 'hour' : 'hours')}',
                             style: TextStyle(
                               fontSize: isSelected ? 22 : 16,
-                              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
+                              fontWeight: isSelected
+                                  ? FontWeight.w800
+                                  : FontWeight.w500,
                               color: isSelected
                                   ? AppColors.honeyAmber
                                   : (isDark ? Colors.white38 : Colors.black38),
@@ -323,10 +366,12 @@ class _SleepLogFlowScreenState extends State<SleepLogFlowScreen> {
             onPressed: _saveSleepLog,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.honeyGold,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              foregroundColor: AppColors.onHoney,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20)),
             ),
-            child: const Text("Save Sleep Log", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            child: const Text("Save Sleep Log",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
           ),
         ),
       ],
@@ -346,48 +391,54 @@ class _SleepLogFlowScreenState extends State<SleepLogFlowScreen> {
             width: 140,
             height: 140,
             fit: BoxFit.contain,
-            errorBuilder: (context, error, stackTrace) => const Icon(Icons.bedtime_rounded, size: 72, color: AppColors.honeyGold),
+            errorBuilder: (context, error, stackTrace) => const Icon(
+                Icons.bedtime_rounded,
+                size: 72,
+                color: AppColors.honeyGold),
           ),
-        ).animate().scale(duration: 400.ms, curve: Curves.easeOutBack),
-
+        ).animate().scale(duration: 320.ms, curve: Curves.easeOutCubic),
         const SizedBox(height: 24),
-
         Text(
           "Sleep Recorded!",
           style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.w800,
-            color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+            color:
+                isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
           ),
         ),
-
         const SizedBox(height: 12),
-
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           decoration: BoxDecoration(
             color: isDark ? AppColors.darkCard : Colors.white,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: isDark ? AppColors.darkCardBorder : Colors.black.withValues(alpha: 0.08)),
+            border: Border.all(
+                color: isDark
+                    ? AppColors.darkCardBorder
+                    : Colors.black.withValues(alpha: 0.08)),
           ),
           child: Column(
             children: [
               Text(
                 "Logged $hours hours • ${_selectedFeeling.label}",
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 6),
               Text(
                 _selectedFeeling.description,
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13.5, color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
+                style: TextStyle(
+                    fontSize: 13.5,
+                    color: isDark
+                        ? AppColors.textSecondaryDark
+                        : AppColors.textSecondaryLight),
               ),
             ],
           ),
         ),
-
         const SizedBox(height: 20),
-
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -401,15 +452,17 @@ class _SleepLogFlowScreenState extends State<SleepLogFlowScreen> {
               Expanded(
                 child: Text(
                   "${mascot.name}: Staying mindful of your rest habits builds consistent daily energy. Let's make today gentle!",
-                  style: TextStyle(fontSize: 13, color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight),
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: isDark
+                          ? AppColors.textPrimaryDark
+                          : AppColors.textPrimaryLight),
                 ),
               ),
             ],
           ),
         ),
-
         const SizedBox(height: 36),
-
         SizedBox(
           width: double.infinity,
           height: 52,
@@ -424,9 +477,11 @@ class _SleepLogFlowScreenState extends State<SleepLogFlowScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.sageGreen,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18)),
             ),
-            child: const Text("Done", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            child: const Text("Done",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
           ),
         ),
       ],
@@ -444,7 +499,9 @@ class _SleepLogFlowScreenState extends State<SleepLogFlowScreen> {
             decoration: BoxDecoration(
               color: isFilled
                   ? AppColors.honeyGold
-                  : (isDark ? Colors.white12 : Colors.black.withValues(alpha: 0.08)),
+                  : (isDark
+                      ? Colors.white12
+                      : Colors.black.withValues(alpha: 0.08)),
               borderRadius: BorderRadius.circular(4),
             ),
           ),
