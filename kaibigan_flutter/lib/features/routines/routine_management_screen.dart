@@ -9,7 +9,7 @@ import 'widgets/custom_routine_dialog.dart';
 import 'widgets/add_action_sheet.dart';
 
 // Standalone feature screens
-import 'screens/sleep_tracker_screen.dart';
+import 'screens/sleep_log_flow_screen.dart';
 import 'screens/morning_focus_screen.dart';
 import 'screens/grounding_session_screen.dart';
 import 'screens/mindfulness_meditation_screen.dart';
@@ -47,7 +47,7 @@ class _RoutineManagementScreenState extends State<RoutineManagementScreen>
     Widget screen;
     switch (type) {
       case StepType.sleepTracker:
-        screen = const SleepTrackerScreen();
+        screen = const SleepLogFlowScreen();
         break;
       case StepType.journalFocus:
         screen = const MorningFocusScreen();

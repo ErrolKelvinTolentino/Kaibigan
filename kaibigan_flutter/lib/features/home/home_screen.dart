@@ -30,6 +30,7 @@ import '../routines/routines_provider.dart';
 import '../routines/screens/daily_reflection_screen.dart';
 import '../routines/screens/grounding_session_screen.dart';
 import '../routines/screens/mindfulness_meditation_screen.dart';
+import '../routines/screens/sleep_analytics_screen.dart';
 import '../routines/screens/sleep_log_flow_screen.dart';
 import '../routines/screens/todays_focus_screen.dart';
 import '../routines/screens/todays_highlight_screen.dart';
@@ -1108,7 +1109,7 @@ class _HomeScreenState extends State<HomeScreen> {
         assetPath: FeatureIconHelper.sleepLog,
         onTap: () => Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => const SleepLogFlowScreen()),
+          MaterialPageRoute(builder: (_) => const SleepAnalyticsScreen()),
         ),
       ),
       _ActivityItem(

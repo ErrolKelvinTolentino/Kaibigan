@@ -15,6 +15,7 @@ import 'flows/progressive_routine_runner.dart';
 import 'widgets/custom_routine_dialog.dart';
 
 // Standalone feature screens
+import 'screens/sleep_analytics_screen.dart';
 import 'screens/sleep_log_flow_screen.dart';
 import 'screens/todays_focus_screen.dart';
 import 'screens/todays_highlight_screen.dart';
@@ -129,7 +130,7 @@ class RoutinesHubScreen extends StatelessWidget {
         'asset': FeatureIconHelper.sleepLog,
         'icon': Icons.wb_twilight,
         'color': AppColors.honeyAmber,
-        'screen': const SleepLogFlowScreen()
+        'screen': const SleepAnalyticsScreen()
       },
       {
         'title': "Today's Highlight",
