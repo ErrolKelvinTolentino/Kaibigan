@@ -84,6 +84,42 @@ void main() {
     expect(prompt, contains('1 journal entries'));
     expect(prompt, isNot(contains('Secret title')));
     expect(prompt, isNot(contains('highly private')));
+    expect(prompt, isNot(contains('not logged/5')));
+  });
+
+  test('aggregate signature changes when the underlying weekly totals change',
+      () {
+    final before = WeeklyReflectionService.build(
+      now: DateTime(2026, 8, 25),
+      moods: [
+        MoodLog(
+          id: 'm1',
+          moodScore: 3,
+          moodLabel: 'Okay',
+          createdAt: DateTime(2026, 8, 25),
+        ),
+      ],
+    );
+    final after = WeeklyReflectionService.build(
+      now: DateTime(2026, 8, 25),
+      moods: [
+        MoodLog(
+          id: 'm1',
+          moodScore: 3,
+          moodLabel: 'Okay',
+          createdAt: DateTime(2026, 8, 25),
+        ),
+        MoodLog(
+          id: 'm2',
+          moodScore: 5,
+          moodLabel: 'Great',
+          createdAt: DateTime(2026, 8, 24),
+        ),
+      ],
+    );
+
+    expect(before.dataSignature, isNot(after.dataSignature));
+    expect(before.dataSignature, isNot(contains('Okay')));
   });
 
   test('weekly mode owns the structure instead of treating it as journal text',

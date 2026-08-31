@@ -594,6 +594,7 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
         conversationHistory: _conversationHistoryBeforeTurn(turnIndex),
         cancellationToken: cancellationToken,
         adjustment: _adjustmentFor(reason),
+        previousResponse: turn.aiResponse,
       );
       if (!mounted || cancellationToken.isCancelled) return;
       setState(() {

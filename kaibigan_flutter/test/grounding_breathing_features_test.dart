@@ -23,7 +23,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.byKey(const ValueKey('art-placeholder-grounding-landscape')),
+      find.byKey(const ValueKey('feature-art-grounding-landscape')),
       findsOneWidget,
     );
     await tester.tap(find.byKey(const ValueKey('begin-grounding-button')));
@@ -61,7 +61,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.byKey(const ValueKey('art-placeholder-breathing-landscape')),
+      find.byKey(const ValueKey('feature-art-breathing-landscape')),
       findsOneWidget,
     );
     await tester.ensureVisible(find.text('Box breathing'));

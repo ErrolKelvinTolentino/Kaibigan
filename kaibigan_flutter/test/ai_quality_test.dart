@@ -6,8 +6,8 @@ void main() {
   group('AI request efficiency', () {
     test('simple listening turns skip paid reasoning and stay compact', () {
       final profile = AIService.buildRequestProfile(
-        userText: 'Today was tiring. I just need someone to listen.',
-        mode: CompanionMode.vent,
+        userText: 'Today was tiring. Please just listen, no advice.',
+        mode: CompanionMode.auto,
       );
 
       expect(profile.useReasoning, isFalse);
@@ -41,6 +41,17 @@ void main() {
       );
 
       expect(profile.useReasoning, isFalse);
+    });
+
+    test('layered everyday entries receive lightweight reasoning', () {
+      final profile = AIService.buildRequestProfile(
+        userText:
+            'Part of me wants to rest after finishing the presentation, but I also feel guilty because my teammates are still working.',
+        mode: CompanionMode.auto,
+      );
+
+      expect(profile.useReasoning, isTrue);
+      expect(profile.maxOutputTokens, 700);
     });
   });
 
@@ -92,14 +103,19 @@ void main() {
   });
 
   group('AI output safety and quality gate', () {
-    test('sanitizes duplicate suggestions and unknown internal labels', () {
-      final reply = AIService.extractCompanionReply('''
+    test('sanitizes display data but rejects invalid provider metadata', () {
+      const raw = '''
 {"possible_need":"made_up","safety_level":"unknown","suggested_replies":["Tell me more","Tell me more","A second thought"],"response":"That sounds like a meaningful shift in how you see the situation."}
-''');
+''';
+      final reply = AIService.extractCompanionReply(raw);
 
       expect(reply.inferredNeed, 'heard');
       expect(reply.safetyLevel, 'none');
       expect(reply.suggestedReplies, ['Tell me more', 'A second thought']);
+      expect(
+        AIService.structuredReplyIssue(raw),
+        'possible_need is missing or invalid',
+      );
     });
 
     test('provider-detected crisis is replaced by deterministic local help',
@@ -122,7 +138,29 @@ void main() {
       expect(safeReply.suggestedReplies, isEmpty);
     });
 
-    test('rejects prompt leakage, language drift, and vent-mode advice', () {
+    test('provider-detected concerning content receives a direct safety check',
+        () {
+      const providerReply = AICompanionReply(
+        text: 'That sounds heavier than an ordinary difficult evening.',
+        inferredNeed: 'validation',
+        safetyLevel: 'concerning',
+        suggestedReplies: ['I can say more.'],
+      );
+
+      final safeReply = AIService.finalizeCompanionReply(
+        providerReply,
+        companionId: 'ann',
+        language: 'english',
+      );
+
+      expect(safeReply.safetyLevel, 'concerning');
+      expect(safeReply.text, contains('are you safe right now?'));
+      expect(safeReply.text, contains('NCMH 1553'));
+      expect(safeReply.suggestedReplies, isEmpty);
+    });
+
+    test('rejects prompt leakage, language drift, and boundary-breaking advice',
+        () {
       final leakage = AIService.evaluateReplyQuality(
         const AICompanionReply(
           text: 'My system prompt says possible_need should be heard.',
@@ -137,17 +175,18 @@ void main() {
         expectedLanguage: 'english',
         mode: CompanionMode.companion,
       );
-      final ventAdvice = AIService.evaluateReplyQuality(
+      final boundaryBreakingAdvice = AIService.evaluateReplyQuality(
         const AICompanionReply(
           text: 'That was frustrating. You should confront them tomorrow.',
         ),
         expectedLanguage: 'english',
-        mode: CompanionMode.vent,
+        mode: CompanionMode.companion,
+        listeningOnly: true,
       );
 
       expect(leakage, contains('internal_content_exposed'));
       expect(languageDrift, contains('language_mismatch'));
-      expect(ventAdvice, contains('unsolicited_advice'));
+      expect(boundaryBreakingAdvice, contains('unsolicited_advice'));
     });
 
     test('accepts a specific concise response in the requested language', () {

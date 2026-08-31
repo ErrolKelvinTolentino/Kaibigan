@@ -107,29 +107,57 @@ class WeeklyReflectionSnapshot {
 
   bool get hasData => activeDays > 0;
 
+  /// Identifies the aggregate data behind a saved reflection without storing
+  /// any raw journal, gratitude, or routine content.
+  String get dataSignature => [
+        start.toIso8601String(),
+        moodCheckIns,
+        journalEntries,
+        gratitudeEntries,
+        completedRoutines,
+        activeDays,
+        _signatureValue(averageMood),
+        _signatureValue(averageEnergy),
+        _signatureValue(averageStress),
+        _signatureValue(averageSleep),
+        _signatureValue(moodTrend),
+        _signatureValue(routineMoodDelta),
+        pairedRoutineMoodDays,
+        _signatureValue(sleepMoodDelta),
+        pairedSleepMoodDays,
+      ].join('|');
+
+  static String _signatureValue(double? value) =>
+      value == null ? '-' : value.toStringAsFixed(4);
+
   String toCompactPrompt({required String language}) {
-    String score(double? value) =>
-        value == null ? 'not logged' : value.toStringAsFixed(1);
-    final scores = 'mood ${score(averageMood)}/5, '
-        'energy ${score(averageEnergy)}/5, stress ${score(averageStress)}/5, '
-        'sleep ${score(averageSleep)}/5';
-    final comparisons = 'mood trend ${score(moodTrend)}, '
-        'routine-day mood difference ${score(routineMoodDelta)} across '
-        '$pairedRoutineMoodDays paired days, sleep-day mood difference '
-        '${score(sleepMoodDelta)} across $pairedSleepMoodDays paired days';
-    final counts = '$moodCheckIns mood check-ins, $journalEntries journal '
-        'entries, $gratitudeEntries gratitude notes, $completedRoutines '
-        'completed routines, $activeDays of 7 active days';
+    String average(double? value) =>
+        value == null ? 'not logged' : '${value.toStringAsFixed(1)}/5';
+    String difference(double? value) => value == null
+        ? 'not enough comparable data'
+        : '${value >= 0 ? '+' : ''}${value.toStringAsFixed(1)} points';
+    final scores = 'mood ${average(averageMood)}, '
+        'energy ${average(averageEnergy)}, stress ${average(averageStress)}, '
+        'sleep ${average(averageSleep)}';
+    final comparisons = 'later-minus-earlier mood '
+        '${difference(moodTrend)}; routine-minus-non-routine mood '
+        '${difference(routineMoodDelta)} across $pairedRoutineMoodDays mood '
+        'days; better-sleep-minus-lower-sleep mood '
+        '${difference(sleepMoodDelta)} across $pairedSleepMoodDays mood days';
+    final counts = '$activeDays of 7 active days, $moodCheckIns mood '
+        'check-ins, $journalEntries journal entries, $gratitudeEntries '
+        'gratitude notes, and $completedRoutines completed routines';
     if (language == 'filipino') {
-      return 'Pinagsama-samang datos sa huling pitong araw. Mga average: '
-          '$scores. Mga paghahambing: $comparisons. Mga bilang: $counts.';
+      return 'Pinagsama-samang datos lamang sa huling pitong araw. Coverage '
+          'at bilang: $counts. Mga average: $scores. Mga paghahambing: '
+          '$comparisons.';
     }
     if (language == 'taglish') {
-      return 'Seven-day aggregate. Average scores: $scores. Comparisons: '
-          '$comparisons. Logged counts: $counts.';
+      return 'Seven-day aggregates only. Coverage and counts: $counts. '
+          'Average scores: $scores. Within-week comparisons: $comparisons.';
     }
-    return 'Seven-day aggregate. Average scores: $scores. Comparisons: '
-        '$comparisons. Logged counts: $counts.';
+    return 'Seven-day aggregates only. Coverage and counts: $counts. '
+        'Average scores: $scores. Within-week comparisons: $comparisons.';
   }
 }
 

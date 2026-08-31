@@ -8,6 +8,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_typography.dart';
 import '../../../core/widgets/cozy_confirm_sheet.dart';
 import '../../../core/widgets/cozy_feature_banner.dart';
+import '../../mood_tracking/mood_model.dart';
 import '../routine_model.dart';
 import '../routines_provider.dart';
 
@@ -229,7 +230,7 @@ class _MindfulnessMeditationScreenState
             eyebrow: 'Make room for one breath',
             title: 'Breathe with the rhythm',
             subtitle: 'Choose a pace. The guide will do the counting.',
-            assetPath: 'assets/feature icons/Breathing.png',
+            assetPath: FeatureIconHelper.breathing,
             placeholderLabel: 'breathing-landscape',
             placeholderIcon: Icons.air_rounded,
             accent: AppColors.honeyAmber,

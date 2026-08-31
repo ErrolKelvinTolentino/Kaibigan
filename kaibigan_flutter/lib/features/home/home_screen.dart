@@ -1063,6 +1063,7 @@ class _HomeScreenState extends State<HomeScreen> {
         title: copy('Weekly reflection', 'Lingguhang pagninilay'),
         subtitle: copy('Connect your week', 'Pag-ugnayin ang linggo'),
         accent: AppColors.lavenderMist,
+        assetPath: FeatureIconHelper.weeklyInsights,
         placeholderIcon: Icons.auto_graph_rounded,
         placeholderColor: AppColors.honeyAmber,
         onTap: () => Navigator.push(
@@ -1144,6 +1145,7 @@ class _HomeScreenState extends State<HomeScreen> {
         title: copy('Affirmations', 'Mga pagpapatibay'),
         subtitle: copy('Supportive reminders', 'Mga paalalang may malasakit'),
         accent: AppColors.softRose,
+        assetPath: FeatureIconHelper.affirmations,
         placeholderIcon: Icons.format_quote_rounded,
         placeholderColor: AppColors.honeyAmber,
         onTap: _openAffirmations,
@@ -1152,7 +1154,7 @@ class _HomeScreenState extends State<HomeScreen> {
         title: copy('Grounding', 'Pagpapakalma'),
         subtitle: copy('5–4–3–2–1 senses', '5–4–3–2–1 pandama'),
         accent: AppColors.softOlive,
-        assetPath: 'assets/feature icons/Grounding.png',
+        assetPath: FeatureIconHelper.grounding,
         placeholderIcon: Icons.spa_outlined,
         placeholderColor: AppColors.honeyAmber,
         onTap: () => Navigator.push(
@@ -1164,7 +1166,7 @@ class _HomeScreenState extends State<HomeScreen> {
         title: copy('Breathe', 'Huminga'),
         subtitle: copy('Guided rhythms', 'Gabay sa paghinga'),
         accent: AppColors.skyBlue,
-        assetPath: 'assets/feature icons/Breathing.png',
+        assetPath: FeatureIconHelper.breathing,
         placeholderIcon: Icons.air_rounded,
         placeholderColor: AppColors.honeyGold,
         onTap: () => Navigator.push(
@@ -1300,8 +1302,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 Row(
                   children: [
                     Container(
+                      key: const ValueKey('learning-preview-art'),
                       width: 82,
                       height: 96,
+                      clipBehavior: Clip.antiAlias,
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           begin: Alignment.topLeft,
@@ -1318,25 +1322,15 @@ class _HomeScreenState extends State<HomeScreen> {
                           color: Colors.white.withValues(alpha: 0.26),
                         ),
                       ),
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Icon(
-                            Icons.local_library_rounded,
-                            size: 42,
-                            color: isDark ? honey : AppColors.onHoney,
-                          ),
-                          Positioned(
-                            right: 11,
-                            top: 12,
-                            child: Icon(
-                              Icons.auto_awesome_rounded,
-                              size: 15,
-                              color:
-                                  isDark ? AppColors.warmHoney : Colors.white,
-                            ),
-                          ),
-                        ],
+                      child: Image.asset(
+                        FeatureIconHelper.learn,
+                        fit: BoxFit.cover,
+                        filterQuality: FilterQuality.high,
+                        errorBuilder: (_, __, ___) => Icon(
+                          Icons.local_library_rounded,
+                          size: 42,
+                          color: isDark ? honey : AppColors.onHoney,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 15),

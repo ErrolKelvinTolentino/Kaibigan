@@ -4,8 +4,7 @@ import '../../core/utils/uuid_helper.dart';
 class GratitudeEntry {
   final String id;
   final String content;
-  final String
-      flowerType; // 'sunflower', 'sampaguita', 'tulip', 'orchid', 'rose'
+  final String flowerType;
   final int waterCount;
   final int gardenIndex;
   final int plotIndex;
@@ -14,7 +13,7 @@ class GratitudeEntry {
   GratitudeEntry({
     required this.id,
     required this.content,
-    this.flowerType = 'sunflower',
+    this.flowerType = 'anemone',
     this.waterCount = 1,
     this.gardenIndex = 0,
     this.plotIndex = 0,
@@ -62,7 +61,7 @@ class GratitudeEntry {
     return GratitudeEntry(
       id: map['id'] ?? '',
       content: map['content'] ?? '',
-      flowerType: map['flower_type'] ?? 'sunflower',
+      flowerType: map['flower_type'] ?? 'anemone',
       waterCount: map['water_count'] ?? 1,
       gardenIndex: map['garden_index'] ?? 0,
       plotIndex: map['plot_index'] ?? 0,

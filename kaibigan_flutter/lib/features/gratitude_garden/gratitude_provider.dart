@@ -101,7 +101,7 @@ class GratitudeProvider extends ChangeNotifier {
 
   Future<GratitudeEntry?> addGratitudeEntry(
     String content, {
-    String flowerType = 'sunflower',
+    String flowerType = 'anemone',
     bool shareToCommunity = false,
     int? gardenIndex,
   }) async {

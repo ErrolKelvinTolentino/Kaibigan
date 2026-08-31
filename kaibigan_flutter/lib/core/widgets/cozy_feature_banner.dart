@@ -49,6 +49,7 @@ class CozyFeatureBanner extends StatelessWidget {
                 if (assetPath != null)
                   Image.asset(
                     assetPath!,
+                    key: ValueKey('feature-art-$placeholderLabel'),
                     fit: BoxFit.cover,
                     alignment: imageAlignment,
                     errorBuilder: (_, __, ___) => _placeholder(isDark),

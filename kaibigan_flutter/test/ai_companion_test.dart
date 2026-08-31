@@ -64,10 +64,13 @@ void main() {
         language: 'english',
         currentText: 'I feel stuck on my project.',
         adjustment: AIResponseAdjustment.moreSpecific,
+        previousResponse: 'It sounds like this project has been difficult.',
       );
 
       expect(prompt, contains('previous reply felt generic'));
       expect(prompt, contains('concrete detail'));
+      expect(prompt, contains('PREVIOUS REPLY FOR REVISION ONLY'));
+      expect(prompt, contains('this project has been difficult'));
     });
 
     test('keeps the reusable prompt compact enough for efficient requests', () {
@@ -80,6 +83,9 @@ void main() {
       expect(prompt.length, lessThan(6000));
       expect(prompt, isNot(contains('emotion_intensity')));
       expect(prompt, contains('"possible_need"'));
+      expect(prompt, contains('THINK, THEN SPEAK NATURALLY'));
+      expect(prompt, contains('NATURAL WARMTH'));
+      expect(prompt, contains("user's first-person voice"));
     });
 
     test('detects the latest entry language instead of forcing Taglish', () {
@@ -197,18 +203,17 @@ void main() {
       expect(prompt, contains('INSIGHT, NOT PARAPHRASE'));
     });
 
-    test(
-        'CompanionMode.vent strictly prohibits unsolicited advice or problem-solving',
-        () {
+    test('automatic conversation respects an explicit listening boundary', () {
       final prompt = AIService.getSystemPrompt(
         companionId: 'ann',
         language: 'taglish',
-        mode: CompanionMode.vent,
+        mode: CompanionMode.auto,
+        currentText: 'Please just listen, no advice muna.',
       );
 
-      expect(prompt, contains('CURRENT MODE: JUST VENTING'));
-      expect(prompt, contains('ZERO unsolicited advice'));
-      expect(prompt, contains('Do not try to fix or reframe'));
+      expect(prompt, contains('USER BOUNDARY'));
+      expect(prompt, contains('explicitly asked to be heard without advice'));
+      expect(prompt, contains('do not suggest a step'));
     });
 
     test('CompanionMode.advice instructs 1-2 small actionable steps only', () {
@@ -271,13 +276,13 @@ void main() {
       expect(res, isNot(contains('pinakamabigat sa pakiramdam')));
     });
 
-    test('generates thoughtful fallback for vent mode without API key',
+    test('generates a listening-only fallback without a separate mode',
         () async {
       final res = await AIService.generateCompanionResponse(
-        userText: 'Sobrang frustrated ako sa groupmate ko.',
+        userText:
+            'Sobrang frustrated ako sa groupmate ko. Makinig ka lang, no advice muna.',
         companionId: 'kai',
         language: 'taglish',
-        mode: CompanionMode.vent,
       );
 
       expect(res.isNotEmpty, isTrue);
@@ -431,7 +436,11 @@ void main() {
     test('automatic offline intent inference follows explicit language', () {
       expect(
         AIService.inferCompanionMode('Please just listen, no advice.'),
-        CompanionMode.vent,
+        CompanionMode.companion,
+      );
+      expect(
+        AIService.requestsListeningOnly('Please just listen, no advice.'),
+        isTrue,
       );
       expect(
         AIService.inferCompanionMode('What should I do about this?'),
@@ -503,10 +512,23 @@ void main() {
 
       expect(entry.reflectionMode, 'auto');
 
-      final updated = entry.copyWith(reflectionMode: 'vent');
-      expect(updated.reflectionMode, 'vent');
+      final updated = entry.copyWith(reflectionMode: 'advice');
+      expect(updated.reflectionMode, 'advice');
       expect(updated.id, 'test-1');
       expect(updated.companionId, 'ann');
+    });
+
+    test('legacy vent records reopen as automatic conversations', () {
+      final entry = JournalEntry.fromMap({
+        'id': 'legacy-entry',
+        'title': 'Old entry',
+        'content': 'An older journal entry.',
+        'companion_id': 'kai',
+        'reflection_mode': 'vent',
+        'created_at': DateTime(2026, 8, 20).toIso8601String(),
+      });
+
+      expect(entry.reflectionMode, 'auto');
     });
   });
 }

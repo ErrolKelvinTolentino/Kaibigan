@@ -14,7 +14,6 @@ import 'package:kaibigan_flutter/features/mood_tracking/mood_tracker_screen.dart
 import 'package:kaibigan_flutter/features/routines/flows/progressive_routine_runner.dart';
 import 'package:kaibigan_flutter/features/routines/routine_model.dart';
 import 'package:kaibigan_flutter/features/routines/routines_provider.dart';
-import 'package:kaibigan_flutter/features/routines/screens/gratitude_planting_screen.dart';
 import 'package:kaibigan_flutter/features/routines/screens/grounding_session_screen.dart';
 import 'package:kaibigan_flutter/features/routines/screens/mindfulness_meditation_screen.dart';
 import 'package:kaibigan_flutter/features/routines/screens/sleep_log_flow_screen.dart';
@@ -85,14 +84,10 @@ void main() {
     await pumpRoutine(tester);
 
     expect(find.byType(GratitudePlantingPage), findsOneWidget);
+    expect(find.byType(GardenScreen), findsNothing);
     expect(find.text('A gratitude moment'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.close_rounded));
-    await tester.pumpAndSettle();
-    expect(find.byType(GratitudePlantingScreen), findsOneWidget);
-    expect(find.byType(GardenScreen), findsOneWidget);
-
-    await tester.pageBack();
     await tester.pumpAndSettle();
 
     expect(find.text('Routine paused'), findsOneWidget);

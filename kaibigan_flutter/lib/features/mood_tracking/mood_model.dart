@@ -186,12 +186,18 @@ class SleepAssetHelper {
 }
 
 class FeatureIconHelper {
+  static const String affirmations =
+      'assets/feature icons/Affirmations.png';
+  static const String breathing = 'assets/feature icons/Breathing.png';
   static const String dailyReflection =
       'assets/feature icons/Daily Reflection.png';
   static const String entries = 'assets/feature icons/Entries.png';
   static const String gratitudeGarden =
       'assets/feature icons/Gratitude Garden.png';
+  static const String grounding =
+      'assets/feature icons/5-4-3-2-1 Grounding.png';
   static const String journal = 'assets/feature icons/Journal.png';
+  static const String learn = 'assets/feature icons/Learn.png';
   static const String midDayRoutine =
       'assets/feature icons/Mid-day routine.png';
   static const String moodTracker = 'assets/feature icons/Mood Tracker.png';
@@ -203,6 +209,8 @@ class FeatureIconHelper {
   static const String todaysFocus = 'assets/feature icons/Today\'s Focus.png';
   static const String todaysHighlight =
       'assets/feature icons/Today\'s Higlight.png';
+  static const String weeklyInsights =
+      'assets/feature icons/Weekly Insights.png';
 }
 
 enum EmotionalWeatherType {

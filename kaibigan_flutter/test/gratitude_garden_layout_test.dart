@@ -285,7 +285,8 @@ void main() {
 
     expect(find.byKey(const ValueKey('gratitude-flower-carousel')),
         findsOneWidget);
-    expect(find.byKey(const ValueKey('flower-seed-sunflower')), findsOneWidget);
+    expect(find.byKey(const ValueKey('flower-seed-anemone')), findsOneWidget);
+    expect(find.text('Anemone'), findsOneWidget);
     expect(find.byKey(const ValueKey('confirm-plant-flower')), findsOneWidget);
   });
 }

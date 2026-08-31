@@ -37,8 +37,7 @@ class JournalEntry {
   final String? aiResponse;
   final String companionId;
   final String mood;
-  final String
-      reflectionMode; // 'auto' for new entries; legacy explicit modes still load
+  final String reflectionMode; // 'auto' for new conversational entries
   final List<String> tags;
   final bool isFavorite;
   final int reflectionSeedStage; // 1: Seed, 2: Sprout, 3: Bloom
@@ -126,7 +125,9 @@ class JournalEntry {
           decodedTurns.isEmpty ? storedResponse : _joinResponses(decodedTurns),
       companionId: map['companion_id'] ?? 'kai',
       mood: map['mood'] ?? '',
-      reflectionMode: map['reflection_mode'] ?? 'auto',
+      reflectionMode: map['reflection_mode'] == 'vent'
+          ? 'auto'
+          : map['reflection_mode'] ?? 'auto',
       tags: List<String>.from(map['tags'] ?? []),
       isFavorite: map['is_favorite'] ?? false,
       reflectionSeedStage: map['reflection_seed_stage'] ?? 1,

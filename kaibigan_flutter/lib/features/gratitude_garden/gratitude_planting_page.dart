@@ -17,10 +17,12 @@ class GratitudePlantingPage extends StatefulWidget {
     super.key,
     required this.gardenIndex,
     this.allowRoutineSkip = false,
+    this.onSaved,
   });
 
   final int gardenIndex;
   final bool allowRoutineSkip;
+  final VoidCallback? onSaved;
 
   @override
   State<GratitudePlantingPage> createState() => _GratitudePlantingPageState();
@@ -58,8 +60,7 @@ class _GratitudePlantingPageState extends State<GratitudePlantingPage> {
   @override
   void initState() {
     super.initState();
-    _flowerIndex = GratitudeEntry.availableFlowerTypes.indexOf('sunflower');
-    if (_flowerIndex < 0) _flowerIndex = 0;
+    _flowerIndex = 0;
     _flowerController = PageController(
       initialPage: _flowerIndex,
       viewportFraction: 0.78,
@@ -111,7 +112,11 @@ class _GratitudePlantingPageState extends State<GratitudePlantingPage> {
       });
       return;
     }
-    Navigator.of(context).pop(entry);
+    if (widget.onSaved != null) {
+      widget.onSaved!();
+    } else {
+      Navigator.of(context).pop(entry);
+    }
   }
 
   @override

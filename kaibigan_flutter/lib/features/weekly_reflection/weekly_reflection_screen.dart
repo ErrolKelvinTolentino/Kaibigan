@@ -17,6 +17,7 @@ import '../companion/companion_model.dart';
 import '../gratitude_garden/gratitude_provider.dart';
 import '../journaling/journal_provider.dart';
 import '../mood_tracking/mood_provider.dart';
+import '../mood_tracking/mood_model.dart';
 import '../routines/routines_provider.dart';
 import '../settings/user_provider.dart';
 import 'weekly_reflection_service.dart';
@@ -51,20 +52,30 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
   Future<void> _loadSavedReflection(
     WeeklyReflectionSnapshot snapshot,
     String storageKey,
+    String storageIdentity,
   ) async {
     final preferences = await SharedPreferences.getInstance();
     final saved = preferences.getString(storageKey);
     String? reflection;
     DateTime? savedAt;
     var createdOnDevice = false;
+    Map<String, dynamic>? savedPayload;
 
     if (saved != null && saved.trim().isNotEmpty) {
       try {
         final decoded = jsonDecode(saved);
         if (decoded is Map<String, dynamic>) {
+          savedPayload = decoded;
           reflection = decoded['text']?.toString();
           savedAt = DateTime.tryParse(decoded['savedAt']?.toString() ?? '');
           createdOnDevice = decoded['origin'] == 'device';
+          final savedSignature = decoded['snapshotSignature']?.toString();
+          if (savedSignature != null &&
+              savedSignature != snapshot.dataSignature) {
+            reflection = null;
+            savedAt = null;
+            await preferences.remove(storageKey);
+          }
         }
       } catch (_) {
         // Version 1 stored the reflection as a plain string.
@@ -78,6 +89,18 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
         await preferences.remove(storageKey);
         reflection = null;
         savedAt = null;
+      } else if (savedPayload != null &&
+          savedPayload['snapshotSignature'] == null) {
+        // Upgrade older valid reflections so later check-ins can invalidate
+        // them instead of leaving a stale analysis on screen.
+        await preferences.setString(
+          storageKey,
+          jsonEncode({
+            ...savedPayload,
+            'version': 3,
+            'snapshotSignature': snapshot.dataSignature,
+          }),
+        );
       }
     }
 
@@ -86,7 +109,7 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
       _aiReflection = reflection;
       _savedAt = savedAt;
       _createdOnDevice = createdOnDevice;
-      _loadedStorageKey = storageKey;
+      _loadedStorageKey = storageIdentity;
       _scheduledStorageKey = null;
       _isLoadingSavedReflection = false;
     });
@@ -94,6 +117,7 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
 
   Future<void> _generate(WeeklyReflectionSnapshot snapshot) async {
     final user = context.read<UserProvider>();
+    final previousReflection = _aiReflection?.trim();
     setState(() {
       _isGenerating = true;
       _generationError = null;
@@ -107,6 +131,10 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
         language: user.language,
         mode: CompanionMode.weeklyReflection,
         useReasoning: true,
+        adjustment: previousReflection == null
+            ? null
+            : AIResponseAdjustment.lessRepetitive,
+        previousResponse: previousReflection,
       );
       if (reply.isOffline) throw const _WeeklyReflectionOfflineException();
       reflection = reply.text.trim();
@@ -127,10 +155,11 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
       await preferences.setString(
         _storageKey(snapshot),
         jsonEncode({
-          'version': 2,
+          'version': 3,
           'text': reflection,
           'savedAt': savedAt.toIso8601String(),
           'origin': createdOnDevice ? 'device' : 'companion',
+          'snapshotSignature': snapshot.dataSignature,
         }),
       );
       if (mounted) {
@@ -190,11 +219,13 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
       routines: context.watch<RoutinesProvider>().logs,
     );
     final storageKey = _storageKey(snapshot);
-    if (_loadedStorageKey != storageKey && _scheduledStorageKey != storageKey) {
-      _scheduledStorageKey = storageKey;
+    final storageIdentity = '$storageKey:${snapshot.dataSignature}';
+    if (_loadedStorageKey != storageIdentity &&
+        _scheduledStorageKey != storageIdentity) {
+      _scheduledStorageKey = storageIdentity;
       _isLoadingSavedReflection = true;
       WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _loadSavedReflection(snapshot, storageKey),
+        (_) => _loadSavedReflection(snapshot, storageKey, storageIdentity),
       );
     }
 
@@ -226,6 +257,7 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
                   'See patterns across mood, rest, routines, gratitude, and reflection.',
                   'Tingnan ang banayad na ugnayan ng damdamin, pahinga, routine, pasasalamat, at pagninilay.',
                 ),
+                assetPath: FeatureIconHelper.weeklyInsights,
                 placeholderLabel: 'weekly-reflection',
                 placeholderIcon: Icons.auto_graph_rounded,
                 accent: AppColors.honeyAmber,
@@ -385,6 +417,7 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
     }
     if (snapshot.moodTrend != null && snapshot.moodTrend!.abs() >= 0.25) {
       final rising = snapshot.moodTrend! > 0;
+      final difference = snapshot.moodTrend!.abs().toStringAsFixed(1);
       items.add(_Observation(
         Icons.trending_up_rounded,
         _copy(
@@ -396,11 +429,11 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
         _copy(
           language,
           rising
-              ? 'Your later mood check-ins were a little higher than your earlier ones.'
-              : 'Your later mood check-ins were a little lower than your earlier ones. Extra rest may be worth protecting.',
+              ? 'Your later mood check-ins averaged $difference points higher than your earlier ones. The direction is encouraging, though one week cannot explain what caused it.'
+              : 'Your later mood check-ins averaged $difference points lower than your earlier ones. That shift is worth tracking, but one week cannot explain what caused it.',
           rising
-              ? 'Bahagyang mas mataas ang mga huling mood check-in kaysa sa mga nauna.'
-              : 'Bahagyang mas mababa ang mga huling mood check-in. Maaaring makatulong ang pagprotekta sa pahinga.',
+              ? 'Mas mataas ng $difference points ang average ng mga huling mood check-in kaysa sa mga nauna. Magandang direksyon ito, pero hindi pa masasabi ng isang linggo ang sanhi.'
+              : 'Mas mababa ng $difference points ang average ng mga huling mood check-in kaysa sa mga nauna. Mahalagang subaybayan ito, pero hindi pa masasabi ng isang linggo ang sanhi.',
         ),
       ));
     }
@@ -408,17 +441,18 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
         snapshot.sleepMoodDelta != null &&
         snapshot.sleepMoodDelta!.abs() >= 0.25) {
       final positive = snapshot.sleepMoodDelta! > 0;
+      final difference = snapshot.sleepMoodDelta!.abs().toStringAsFixed(1);
       items.add(_Observation(
         Icons.nights_stay_rounded,
         _copy(language, 'Rest and mood', 'Pahinga at mood'),
         _copy(
           language,
           positive
-              ? 'On days with better logged sleep, your logged mood was also a little higher.'
-              : 'Your sleep and mood logs did not move together this week—and that is useful to notice too.',
+              ? 'Mood averaged $difference points higher on better-sleep days than on lower-sleep days. This is an association to test again, not proof that sleep caused the change.'
+              : 'Mood averaged $difference points lower on better-sleep days than on lower-sleep days. That unexpected association is worth retesting before drawing a conclusion.',
           positive
-              ? 'Sa mga araw na mas maayos ang naitalang tulog, bahagyang mas mataas din ang naitalang mood.'
-              : 'Hindi magkasabay ang galaw ng tulog at mood logs ngayong linggo—mahalaga ring mapansin iyon.',
+              ? 'Mas mataas ng $difference points ang average mood sa better-sleep days. Ugnayang susubukan muli ito, hindi patunay na tulog ang sanhi.'
+              : 'Mas mababa ng $difference points ang average mood sa better-sleep days. Hindi ito inaasahang ugnayan, kaya mas mabuting subukan muli bago magkonklusyon.',
         ),
       ));
     }
@@ -426,17 +460,18 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
         snapshot.routineMoodDelta != null &&
         snapshot.routineMoodDelta!.abs() >= 0.25) {
       final positive = snapshot.routineMoodDelta! > 0;
+      final difference = snapshot.routineMoodDelta!.abs().toStringAsFixed(1);
       items.add(_Observation(
         Icons.hive_rounded,
         _copy(language, 'Daily anchors', 'Araw-araw na sandigan'),
         _copy(
           language,
           positive
-              ? 'Your logged mood was a little higher on routine days. This is an observation, not a conclusion.'
-              : 'Routine days looked a little heavier in your mood logs. The routine may be supporting you on the days you need it most.',
+              ? 'Mood averaged $difference points higher on routine days than on non-routine days. This may be a useful signal, but it does not establish cause.'
+              : 'Mood averaged $difference points lower on routine days than on non-routine days. You may use routines on harder days, so the difference should not be treated as an effect of the routine.',
           positive
-              ? 'Bahagyang mas mataas ang mood logs sa mga araw na may routine. Obserbasyon ito, hindi konklusyon.'
-              : 'Mas mabigat nang kaunti ang mood logs sa routine days. Maaaring ginagamit mo ang routine sa mga araw na mas kailangan mo ito.',
+              ? 'Mas mataas ng $difference points ang average mood sa routine days. Posibleng signal ito, pero hindi nito pinatutunayan ang sanhi.'
+              : 'Mas mababa ng $difference points ang average mood sa routine days. Maaaring mas ginagamit ang routine sa mahihirap na araw, kaya huwag muna itong ituring na epekto ng routine.',
         ),
       ));
     }

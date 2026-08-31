@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_typography.dart';
 import '../../../core/widgets/cozy_feature_banner.dart';
+import '../../mood_tracking/mood_model.dart';
 import '../routine_model.dart';
 import '../routines_provider.dart';
 
@@ -356,7 +357,7 @@ class _GroundingIntro extends StatelessWidget {
             eyebrow: 'Return to the room',
             title: 'Find the present',
             subtitle: 'Five senses. One steady step at a time.',
-            assetPath: 'assets/feature icons/Grounding.png',
+            assetPath: FeatureIconHelper.grounding,
             placeholderLabel: 'grounding-landscape',
             placeholderIcon: Icons.spa_outlined,
             accent: AppColors.honeyAmber,

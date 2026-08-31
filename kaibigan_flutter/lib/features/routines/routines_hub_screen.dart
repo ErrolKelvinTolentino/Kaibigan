@@ -150,7 +150,7 @@ class RoutinesHubScreen extends StatelessWidget {
       {
         'title': '5–4–3–2–1 Grounding',
         'subtitle': 'Sensory reset',
-        'asset': 'assets/feature icons/Grounding.png',
+        'asset': FeatureIconHelper.grounding,
         'icon': Icons.spa_outlined,
         'color': AppColors.honeyAmber,
         'screen': const GroundingSessionScreen()
@@ -158,7 +158,7 @@ class RoutinesHubScreen extends StatelessWidget {
       {
         'title': 'Breathing Exercise',
         'subtitle': 'Guided rhythms',
-        'asset': 'assets/feature icons/Breathing.png',
+        'asset': FeatureIconHelper.breathing,
         'icon': Icons.air_rounded,
         'color': AppColors.honeyAmber,
         'screen': const MindfulnessMeditationScreen()

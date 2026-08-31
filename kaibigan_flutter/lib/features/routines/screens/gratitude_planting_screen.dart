@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
-import '../../gratitude_garden/garden_screen.dart';
+import '../../gratitude_garden/garden_layout.dart';
+import '../../gratitude_garden/gratitude_planting_page.dart';
+import '../../gratitude_garden/gratitude_provider.dart';
 
 /// Routine entry point for the canonical gratitude garden.
 class GratitudePlantingScreen extends StatelessWidget {
@@ -15,10 +18,11 @@ class GratitudePlantingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GardenScreen(
-      openPlantingOnStart: true,
-      onEntrySaved: onCompleted,
-      onRoutineSkip: onSkipped,
+    final provider = context.watch<GratitudeProvider>();
+    final gardenIndex = GardenLayout.automaticPlantingGarden(provider.entries);
+    return GratitudePlantingPage(
+      gardenIndex: gardenIndex,
+      onSaved: onCompleted,
     );
   }
 }

@@ -123,6 +123,91 @@ Log mood before and after the busiest period on three days next week.
     expect(find.textContaining('Mood averaged 4.0/5'), findsOneWidget);
     expect(find.text('Reflect again'), findsOneWidget);
     expect(find.text('Delete'), findsOneWidget);
+    final preferences = await SharedPreferences.getInstance();
+    final migrated = jsonDecode(preferences.getString(storageKey)!);
+    expect(migrated['version'], 3);
+    expect(migrated['snapshotSignature'], isNotEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('stale reflection is removed when weekly totals have changed',
+      (tester) async {
+    final storageKey = currentStorageKey();
+    SharedPreferences.setMockInitialValues({
+      'preferred_language': 'english',
+      storageKey: jsonEncode({
+        'version': 3,
+        'savedAt': DateTime.now().toIso8601String(),
+        'snapshotSignature': 'older-weekly-totals',
+        'text': '''
+**Evidence**
+
+Old evidence that no longer matches.
+
+**Pattern**
+
+Old pattern that no longer matches.
+
+**One experiment**
+
+Old experiment that no longer matches.
+''',
+      }),
+    });
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(screenUnderTest());
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('weekly-companion-reflection')),
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Create reflection'), findsOneWidget);
+    expect(find.textContaining('Old evidence'), findsNothing);
+    final preferences = await SharedPreferences.getInstance();
+    expect(preferences.containsKey(storageKey), isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('weekly reflection generates and saves a structured fallback',
+      (tester) async {
+    final storageKey = currentStorageKey();
+    SharedPreferences.setMockInitialValues({
+      'preferred_language': 'english',
+    });
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(screenUnderTest());
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('weekly-companion-reflection')),
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    final generateButton =
+        find.byKey(const ValueKey('weekly-reflection-generate'));
+    await tester.ensureVisible(generateButton);
+    await tester.pumpAndSettle();
+    await tester.tap(generateButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('EVIDENCE'), findsOneWidget);
+    expect(find.text('PATTERN'), findsOneWidget);
+    expect(find.text('ONE EXPERIMENT'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('weekly-reflection-device-note')),
+      findsOneWidget,
+    );
+    final preferences = await SharedPreferences.getInstance();
+    final saved = jsonDecode(preferences.getString(storageKey)!);
+    expect(saved['version'], 3);
+    expect(saved['snapshotSignature'], isNotEmpty);
     expect(tester.takeException(), isNull);
   });
 }

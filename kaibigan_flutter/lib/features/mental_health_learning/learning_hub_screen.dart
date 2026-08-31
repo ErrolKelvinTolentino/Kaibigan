@@ -9,6 +9,7 @@ import '../../core/widgets/kaibigan_state_view.dart';
 import '../../core/widgets/kaibigan_surface.dart';
 import '../../core/widgets/mobile_layout.dart';
 import '../settings/user_provider.dart';
+import '../mood_tracking/mood_model.dart';
 import 'learning_catalog.dart';
 import 'learning_lesson_screen.dart';
 import 'learning_model.dart';
@@ -235,30 +236,23 @@ class _LearningHubScreenState extends State<LearningHubScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
+                          key: const ValueKey('learning-hub-art'),
                           width: 54,
                           height: 54,
+                          clipBehavior: Clip.antiAlias,
                           decoration: BoxDecoration(
                             color: palette.surface.withValues(alpha: 0.72),
                             borderRadius: BorderRadius.circular(18),
                           ),
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              Icon(
-                                Icons.local_library_outlined,
-                                color: palette.accent,
-                                size: 29,
-                              ),
-                              Positioned(
-                                top: 7,
-                                right: 7,
-                                child: Icon(
-                                  Icons.hexagon_rounded,
-                                  size: 10,
-                                  color: palette.accentStrong,
-                                ),
-                              ),
-                            ],
+                          child: Image.asset(
+                            FeatureIconHelper.learn,
+                            fit: BoxFit.cover,
+                            filterQuality: FilterQuality.high,
+                            errorBuilder: (_, __, ___) => Icon(
+                              Icons.local_library_outlined,
+                              color: palette.accent,
+                              size: 29,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 15),
