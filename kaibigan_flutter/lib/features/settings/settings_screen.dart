@@ -11,6 +11,7 @@ import 'user_provider.dart';
 import 'profile_screen.dart';
 import 'ai_memory_screen.dart';
 import 'journal_appearance_screen.dart';
+import 'privacy_data_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -307,23 +308,46 @@ class SettingsScreen extends StatelessWidget {
                       : Colors.black.withValues(alpha: 0.05),
                 ),
               ),
-              child: _settingsTile(
-                context: context,
-                isDark: isDark,
-                leading: const Icon(Icons.psychology_alt_rounded,
-                    color: AppColors.honeyAmber, size: 22),
-                iconColor: AppColors.honeyAmber,
-                title: copy('AI memory & privacy', 'AI memory at privacy'),
-                subtitle: copy(
-                  'Review or pause what Kaibigan remembers',
-                  'Suriin o i-pause ang naaalala ng Kaibigan',
-                ),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => AiMemoryScreen(language: language),
+              child: Column(
+                children: [
+                  _settingsTile(
+                    context: context,
+                    isDark: isDark,
+                    leading: const Icon(Icons.psychology_alt_rounded,
+                        color: AppColors.honeyAmber, size: 22),
+                    iconColor: AppColors.honeyAmber,
+                    title: copy('AI memory controls', 'Kontrol sa AI memory'),
+                    subtitle: copy(
+                      'Review or pause what Kai remembers',
+                      'Suriin o i-pause ang naaalala ni Kai',
+                    ),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => AiMemoryScreen(language: language),
+                      ),
+                    ),
                   ),
-                ),
+                  const Divider(height: 1, indent: 72),
+                  _settingsTile(
+                    context: context,
+                    isDark: isDark,
+                    leading: const Icon(Icons.shield_outlined,
+                        color: AppColors.sageGreen, size: 22),
+                    iconColor: AppColors.sageGreen,
+                    title: copy('Privacy & your data', 'Privacy at iyong data'),
+                    subtitle: copy(
+                      'See what is stored, shared, or deleted',
+                      'Alamin kung ano ang sine-save, ipinapadala, o binubura',
+                    ),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => PrivacyDataScreen(language: language),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
 

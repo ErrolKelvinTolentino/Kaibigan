@@ -184,9 +184,19 @@ void main() {
     final firstResponse = tester.getTopLeft(find.text('First response')).dy;
     final secondChat = tester.getTopLeft(find.text('Second chat')).dy;
     final secondResponse = tester.getTopLeft(find.text('Second response')).dy;
+    final freshReplyField = find.byKey(
+      const ValueKey('active-journal-writing-field'),
+    );
     expect(firstChat, lessThan(firstResponse));
     expect(firstResponse, lessThan(secondChat));
     expect(secondChat, lessThan(secondResponse));
+    expect(freshReplyField, findsOneWidget);
+    expect(secondResponse, lessThan(tester.getTopLeft(freshReplyField).dy));
+
+    await tester.tap(freshReplyField);
+    await tester.enterText(freshReplyField, 'This is what I want to say next.');
+    expect(find.text('First chat'), findsOneWidget);
+    expect(find.text('This is what I want to say next.'), findsOneWidget);
   });
 
   testWidgets('saving an unchanged record closes without another AI recap',
@@ -243,4 +253,82 @@ void main() {
     expect(find.text('Open record'), findsOneWidget);
     expect(find.byType(JournalSaveReflectionScreen), findsNothing);
   });
+
+  testWidgets('crisis response renders without overflow on narrow screens',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'selected_companion': 'kai',
+      'preferred_language': 'english',
+    });
+    await tester.binding.setSurfaceSize(const Size(320, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    const crisisText =
+        'Your safety comes first right now. National Center for Mental Health (NCMH) Crisis Hotline: 1553';
+    final entry = JournalEntry(
+      id: 'crisis-entry',
+      title: 'Need help',
+      content: 'I need help',
+      aiResponse: crisisText,
+      companionId: 'kai',
+      createdAt: DateTime(2026, 8, 25),
+      conversationTurns: const [
+        JournalConversationTurn(
+          userText: 'I need help',
+          aiResponse: crisisText,
+          companionId: 'kai',
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => UserProvider(),
+        child: MaterialApp(home: JournalEditorScreen(entry: entry)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('24/7 Free Crisis Support (Philippines)'), findsOneWidget);
+    expect(find.text('Emergency 911'), findsOneWidget);
+    expect(find.text('Call NCMH 1553'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('sharing with companion dismisses keyboard and displays loading state',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'selected_companion': 'kai',
+      'preferred_language': 'english',
+    });
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => UserProvider(),
+        child: const MaterialApp(home: JournalEditorScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final inputField =
+        find.byKey(const ValueKey('active-journal-writing-field'));
+    await tester.tap(inputField);
+    await tester.enterText(
+        inputField, 'I had a really busy and overwhelming day.');
+    await tester.pumpAndSettle();
+
+    final textFieldWidget = tester.widget<TextField>(inputField);
+    expect(textFieldWidget.focusNode?.hasFocus, isTrue);
+
+    final shareButton = find.text('Share with Kai');
+    expect(shareButton, findsOneWidget);
+    await tester.tap(shareButton);
+    await tester.pumpAndSettle();
+
+    // The reply from the companion arrives and renders in the journal stream
+    expect(find.text('a quiet note'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
+

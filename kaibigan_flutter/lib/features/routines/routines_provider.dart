@@ -28,7 +28,10 @@ class RoutinesProvider extends ChangeNotifier {
   }
 
   List<RoutineConfig> get allRoutines => _routines.values.toList();
-  List<RoutineLog> get logs => List.unmodifiable(_logs);
+  List<RoutineLog> get logs => List.unmodifiable(
+      List<RoutineLog>.of(_logs)
+        ..sort((a, b) => b.completedAt.compareTo(a.completedAt)),
+  );
   String? get errorMessage => _errorMessage;
   bool get isLoading => _isLoading;
   RoutineSessionState? get activeSession => _activeSession;
@@ -37,7 +40,9 @@ class RoutinesProvider extends ChangeNotifier {
     final now = DateTime.now();
     final candidates = _logs.where((log) {
       final text = log.focusOrHighlight?.trim() ?? '';
-      return text.isNotEmpty && _isSameDay(log.completedAt, now);
+      return text.isNotEmpty &&
+          text.toLowerCase() != 'sample' &&
+          _isSameDay(log.completedAt, now);
     }).toList()
       ..sort((left, right) => right.completedAt.compareTo(left.completedAt));
 
@@ -539,6 +544,7 @@ class RoutinesProvider extends ChangeNotifier {
       final List data = response as List;
       _logs.clear();
       _logs.addAll(data.map((e) => RoutineLog.fromMap(e)).toList());
+      _logs.sort((a, b) => b.completedAt.compareTo(a.completedAt));
       notifyListeners();
     } catch (e) {
       _errorMessage = 'We could not refresh routine history.';
@@ -691,6 +697,7 @@ class RoutinesProvider extends ChangeNotifier {
       final savedLog = RoutineLog.fromMap(response);
       _logs.removeWhere((item) => item.id == savedLog.id);
       _logs.insert(0, savedLog);
+      _logs.sort((a, b) => b.completedAt.compareTo(a.completedAt));
       ApiLogger.logDatabase(
         operation: 'INSERT',
         table: 'routine_logs',

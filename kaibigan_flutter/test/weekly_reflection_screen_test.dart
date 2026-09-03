@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/intl.dart';
 import 'package:kaibigan_flutter/features/gratitude_garden/gratitude_provider.dart';
+import 'package:kaibigan_flutter/features/journaling/journal_model.dart';
 import 'package:kaibigan_flutter/features/journaling/journal_provider.dart';
 import 'package:kaibigan_flutter/features/mood_tracking/mood_model.dart';
 import 'package:kaibigan_flutter/features/mood_tracking/mood_provider.dart';
@@ -18,13 +19,23 @@ void main() {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final start = today.subtract(const Duration(days: 6));
-    return 'weekly_reflection_local_${DateFormat('yyyyMMdd').format(start)}';
+    return 'weekly_reflection_v4_local_${DateFormat('yyyyMMdd').format(start)}';
   }
 
   Widget screenUnderTest() => MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (_) => UserProvider()),
-          ChangeNotifierProvider(create: (_) => JournalProvider()),
+          ChangeNotifierProvider<JournalProvider>(
+            create: (_) => _FakeJournalProvider([
+              JournalEntry(
+                id: 'weekly-entry',
+                title: 'What helped',
+                content: 'I felt overloaded, and stepping outside helped.',
+                companionId: 'kai',
+                createdAt: DateTime.now(),
+              ),
+            ]),
+          ),
           ChangeNotifierProvider(create: (_) => GratitudeProvider()),
           ChangeNotifierProvider<MoodProvider>(
             create: (_) => _FakeMoodProvider([
@@ -117,15 +128,15 @@ Log mood before and after the busiest period on three days next week.
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('EVIDENCE'), findsOneWidget);
-    expect(find.text('PATTERN'), findsOneWidget);
-    expect(find.text('ONE EXPERIMENT'), findsOneWidget);
+    expect(find.text('WHAT YOU SHARED'), findsOneWidget);
+    expect(find.text('WHAT MAY CONNECT'), findsOneWidget);
+    expect(find.text('TRY THIS NEXT'), findsOneWidget);
     expect(find.textContaining('Mood averaged 4.0/5'), findsOneWidget);
     expect(find.text('Reflect again'), findsOneWidget);
     expect(find.text('Delete'), findsOneWidget);
     final preferences = await SharedPreferences.getInstance();
     final migrated = jsonDecode(preferences.getString(storageKey)!);
-    expect(migrated['version'], 3);
+    expect(migrated['version'], 4);
     expect(migrated['snapshotSignature'], isNotEmpty);
     expect(tester.takeException(), isNull);
   });
@@ -197,16 +208,17 @@ Old experiment that no longer matches.
     await tester.tap(generateButton);
     await tester.pumpAndSettle();
 
-    expect(find.text('EVIDENCE'), findsOneWidget);
-    expect(find.text('PATTERN'), findsOneWidget);
-    expect(find.text('ONE EXPERIMENT'), findsOneWidget);
+    expect(find.text('WHAT YOU SHARED'), findsOneWidget);
+    expect(find.text('WHAT MAY CONNECT'), findsOneWidget);
+    expect(find.text('TRY THIS NEXT'), findsOneWidget);
+    expect(find.textContaining('stepping outside helped'), findsWidgets);
     expect(
       find.byKey(const ValueKey('weekly-reflection-device-note')),
       findsOneWidget,
     );
     final preferences = await SharedPreferences.getInstance();
     final saved = jsonDecode(preferences.getString(storageKey)!);
-    expect(saved['version'], 3);
+    expect(saved['version'], 4);
     expect(saved['snapshotSignature'], isNotEmpty);
     expect(tester.takeException(), isNull);
   });
@@ -222,4 +234,16 @@ class _FakeMoodProvider extends MoodProvider {
 
   @override
   Future<void> fetchMoodLogs() async {}
+}
+
+class _FakeJournalProvider extends JournalProvider {
+  _FakeJournalProvider(this._entries);
+
+  final List<JournalEntry> _entries;
+
+  @override
+  List<JournalEntry> get allEntries => List.unmodifiable(_entries);
+
+  @override
+  Future<void> fetchJournalEntries() async {}
 }

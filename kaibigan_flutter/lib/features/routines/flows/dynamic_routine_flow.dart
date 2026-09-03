@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_typography.dart';
 import '../../../core/utils/language_helper.dart';
+import '../../mood_tracking/mood_model.dart';
 import '../../mood_tracking/mood_tracker_screen.dart';
 import '../../settings/user_provider.dart';
 import '../routine_model.dart';
@@ -82,7 +83,10 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
                 _RoutineActivityOutcome.skipped,
               );
           return _RoutineActivityFrame(
+            routineTitle: widget.config.title,
             stepTitle: step.title,
+            currentIndex: _currentStepIndex,
+            totalSteps: steps.length,
             accent: widget.config.primaryColor,
             onSkip: skipActivity,
             child: _activityFor(
@@ -354,19 +358,48 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
   Widget _buildCompletion(bool isDark) {
     final user = context.watch<UserProvider>();
     final language = user.language;
-    return Center(
-      child: SingleChildScrollView(
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
         padding: const EdgeInsets.all(30),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 460),
+          constraints: BoxConstraints(
+            minHeight: constraints.maxHeight - 40,
+            maxWidth: 460,
+          ),
           child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                Icons.stars_rounded,
-                size: 74,
-                color: widget.config.primaryColor,
-              ).animate().scale(duration: 550.ms, curve: Curves.elasticOut),
-              const SizedBox(height: 22),
+              Container(
+                width: 170,
+                height: 170,
+                decoration: BoxDecoration(
+                  color: widget.config.primaryColor
+                      .withValues(alpha: isDark ? 0.16 : 0.10),
+                  borderRadius: BorderRadius.circular(36),
+                  boxShadow: [
+                    BoxShadow(
+                      color: widget.config.primaryColor
+                          .withValues(alpha: isDark ? 0.18 : 0.14),
+                      blurRadius: 28,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                padding: const EdgeInsets.all(16),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(28),
+                  child: Image.asset(
+                    FeatureIconHelper.routines,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => Icon(
+                      Icons.stars_rounded,
+                      size: 80,
+                      color: widget.config.primaryColor,
+                    ),
+                  ),
+                ),
+              ).animate().scale(duration: 450.ms, curve: Curves.easeOutBack),
+              const SizedBox(height: 24),
               Text(
                 LanguageHelper.pick(
                   language,
@@ -393,11 +426,15 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
               const SizedBox(height: 34),
               SizedBox(
                 width: double.infinity,
+                height: 54,
                 child: FilledButton(
                   key: const ValueKey('finish-routine'),
                   onPressed: _isFinishing ? null : _finishRoutine,
                   style: FilledButton.styleFrom(
                     backgroundColor: widget.config.primaryColor,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
                   ),
                   child: _isFinishing
                       ? const SizedBox(
@@ -413,6 +450,10 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
                             language,
                             english: 'Finish & return home',
                             filipino: 'Tapusin at bumalik sa home',
+                          ),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                 ),
@@ -458,13 +499,19 @@ enum _RoutineActivityOutcome { completed, skipped }
 
 class _RoutineActivityFrame extends StatelessWidget {
   const _RoutineActivityFrame({
+    required this.routineTitle,
     required this.stepTitle,
+    required this.currentIndex,
+    required this.totalSteps,
     required this.accent,
     required this.onSkip,
     required this.child,
   });
 
+  final String routineTitle;
   final String stepTitle;
+  final int currentIndex;
+  final int totalSteps;
   final Color accent;
   final VoidCallback onSkip;
   final Widget child;
@@ -472,56 +519,119 @@ class _RoutineActivityFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        child,
-        SafeArea(
-          minimum: const EdgeInsets.only(top: 7, right: 12),
-          child: Align(
-            alignment: Alignment.topRight,
-            child: Semantics(
-              button: true,
-              label: 'Skip $stepTitle and continue the routine',
-              child: Material(
-                color: isDark
-                    ? AppColors.darkCard.withValues(alpha: 0.94)
-                    : Colors.white.withValues(alpha: 0.94),
-                elevation: 2,
-                shadowColor: Colors.black26,
-                borderRadius: BorderRadius.circular(99),
-                child: TextButton.icon(
-                  key: const ValueKey('skip-routine-activity'),
-                  onPressed: onSkip,
-                  style: TextButton.styleFrom(
-                    foregroundColor: accent,
-                    padding: const EdgeInsets.fromLTRB(14, 9, 12, 9),
-                    minimumSize: const Size(0, 42),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  icon: const Icon(Icons.skip_next_rounded, size: 19),
-                  label: const Text(
-                    'Skip',
-                    style: TextStyle(fontWeight: FontWeight.w800),
+    final primaryTextColor =
+        isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight;
+    final backgroundColor =
+        isDark ? AppColors.darkBackground : AppColors.warmCream;
+
+    return Scaffold(
+      backgroundColor: backgroundColor,
+      body: Column(
+        children: [
+          SafeArea(
+            bottom: false,
+            child: Container(
+              key: const ValueKey('routine-activity-progress-bar'),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.darkCard : Colors.white,
+                border: Border(
+                  bottom: BorderSide(
+                    color: isDark
+                        ? AppColors.darkCardBorder
+                        : Colors.black.withValues(alpha: 0.06),
+                    width: 1,
                   ),
                 ),
               ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: accent.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'Step ${currentIndex + 1} of $totalSteps',
+                          style: TextStyle(
+                            color: accent,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '$routineTitle • $stepTitle',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: primaryTextColor,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      Semantics(
+                        button: true,
+                        label: 'Skip $stepTitle and continue the routine',
+                        child: TextButton.icon(
+                          key: const ValueKey('skip-routine-activity'),
+                          onPressed: onSkip,
+                          style: TextButton.styleFrom(
+                            foregroundColor: accent,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          icon: const Icon(Icons.skip_next_rounded, size: 18),
+                          label: const Text(
+                            'Skip',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  _RoutineProgress(
+                    keyPrefix: 'routine-activity-progress-',
+                    stepCount: totalSteps - 1,
+                    activeIndex: currentIndex,
+                    accent: accent,
+                    isDark: isDark,
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      ],
+          Expanded(child: child),
+        ],
+      ),
     );
   }
 }
 
 class _RoutineProgress extends StatelessWidget {
   const _RoutineProgress({
+    this.keyPrefix = 'routine-progress-',
     required this.stepCount,
     required this.activeIndex,
     required this.accent,
     required this.isDark,
   });
 
+  final String keyPrefix;
   final int stepCount;
   final int activeIndex;
   final Color accent;
@@ -535,7 +645,7 @@ class _RoutineProgress extends StatelessWidget {
         final passed = index < activeIndex;
         return Expanded(
           child: AnimatedContainer(
-            key: ValueKey('routine-progress-$index'),
+            key: ValueKey('$keyPrefix$index'),
             duration: const Duration(milliseconds: 240),
             height: active ? 6 : 4,
             margin: EdgeInsets.only(right: index == stepCount ? 0 : 6),

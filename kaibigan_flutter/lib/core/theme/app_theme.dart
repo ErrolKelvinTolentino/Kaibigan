@@ -129,7 +129,7 @@ class AppTheme {
         labelLarge: GoogleFonts.quicksand(
           fontSize: 15,
           fontWeight: FontWeight.w800,
-          color: isDark ? AppColors.darkBackground : Colors.white,
+          color: textPrimary,
           letterSpacing: 0.1,
         ),
       ),

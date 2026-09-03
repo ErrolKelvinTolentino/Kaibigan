@@ -14,7 +14,7 @@ class JournalProvider extends ChangeNotifier {
   String? _activeUserId;
 
   List<JournalEntry> get entries {
-    return _entries.where((entry) {
+    final list = _entries.where((entry) {
       final matchesSearch = _searchQuery.isEmpty ||
           entry.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           entry.content.toLowerCase().contains(_searchQuery.toLowerCase());
@@ -23,15 +23,21 @@ class JournalProvider extends ChangeNotifier {
           entry.tags.contains(_selectedCategoryFilter);
 
       return matchesSearch && matchesCategory;
-    }).toList();
+    }).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return list;
   }
 
   /// The complete signed-in history, unaffected by the list screen's current
   /// search and category filters. Aggregate wellness views should use this.
-  List<JournalEntry> get allEntries => List.unmodifiable(_entries);
+  List<JournalEntry> get allEntries => List.unmodifiable(
+      List<JournalEntry>.of(_entries)
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt)),
+  );
 
   List<JournalEntry> get favoriteEntries =>
-      _entries.where((e) => e.isFavorite).toList();
+      _entries.where((e) => e.isFavorite).toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
   JournalEntry? getMemoryLaneEntry() {
     if (_entries.isEmpty) return null;
@@ -97,6 +103,7 @@ class JournalProvider extends ChangeNotifier {
       final List data = response as List;
       _entries.clear();
       _entries.addAll(data.map((e) => JournalEntry.fromMap(e)).toList());
+      _entries.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
       ApiLogger.logDatabase(
         operation: 'SELECT',
@@ -130,7 +137,6 @@ class JournalProvider extends ChangeNotifier {
     required String mood,
     String reflectionMode = 'auto',
     List<String> tags = const [],
-    int seedStage = 1,
     List<JournalConversationTurn> conversationTurns = const [],
   }) async {
     final cleanTitle = title.trim();
@@ -154,7 +160,6 @@ class JournalProvider extends ChangeNotifier {
       reflectionMode: reflectionMode,
       tags: tags,
       isFavorite: false,
-      reflectionSeedStage: seedStage,
       createdAt: DateTime.now(),
       conversationTurns: conversationTurns,
     );
@@ -165,7 +170,16 @@ class JournalProvider extends ChangeNotifier {
       try {
         final userId = SupabaseService.client.auth.currentUser!.id;
         final map = newEntry.toMap(userId: userId);
-        await SupabaseService.client.from('journal_entries').insert(map);
+        try {
+          await SupabaseService.client.from('journal_entries').insert(map);
+        } catch (insertError) {
+          if (map.containsKey('conversation_turns')) {
+            map.remove('conversation_turns');
+            await SupabaseService.client.from('journal_entries').insert(map);
+          } else {
+            rethrow;
+          }
+        }
         saved = true;
 
         ApiLogger.logDatabase(
@@ -189,7 +203,9 @@ class JournalProvider extends ChangeNotifier {
     }
 
     if (saved) {
+      _entries.removeWhere((e) => e.id == newEntry.id);
       _entries.insert(0, newEntry);
+      _entries.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       AIMemoryService.extractMemoryFromNote(title, content);
     }
 
@@ -223,8 +239,7 @@ class JournalProvider extends ChangeNotifier {
               .update({'is_favorite': updated.isFavorite})
               .eq('id', id)
               .eq('user_id', userId)
-              .select()
-              .single();
+              .select();
 
           ApiLogger.logDatabase(
             operation: 'UPDATE',
@@ -268,25 +283,70 @@ class JournalProvider extends ChangeNotifier {
     if (index != -1) {
       final previous = _entries[index];
       _entries[index] = entry;
+      _entries.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       notifyListeners();
 
       if (SupabaseService.isInitialized && UuidHelper.isValidUuid(entry.id)) {
         try {
           final userId = SupabaseService.client.auth.currentUser?.id;
-          final map = entry.toMap(userId: userId);
-          map['updated_at'] = DateTime.now().toUtc().toIso8601String();
-          await SupabaseService.client
-              .from('journal_entries')
-              .update(map)
-              .eq('id', entry.id)
-              .eq('user_id', userId!)
-              .select()
-              .single();
+          if (userId == null) {
+            throw Exception('No authenticated user found for sync.');
+          }
+
+          final updatePayload =
+              Map<String, dynamic>.from(entry.toMap(userId: userId));
+          updatePayload.remove('id');
+          updatePayload.remove('user_id');
+          updatePayload.remove('created_at');
+          updatePayload['updated_at'] =
+              DateTime.now().toUtc().toIso8601String();
+
+          List<dynamic> response;
+          try {
+            response = await SupabaseService.client
+                .from('journal_entries')
+                .update(updatePayload)
+                .eq('id', entry.id)
+                .eq('user_id', userId)
+                .select();
+          } catch (updateError) {
+            if (updatePayload.containsKey('conversation_turns')) {
+              updatePayload.remove('conversation_turns');
+              response = await SupabaseService.client
+                  .from('journal_entries')
+                  .update(updatePayload)
+                  .eq('id', entry.id)
+                  .eq('user_id', userId)
+                  .select();
+            } else {
+              rethrow;
+            }
+          }
+
+          // If no row was updated in Supabase (e.g. created offline or seeded demo),
+          // insert it now so the user's progress is permanently saved.
+          if (response.isEmpty) {
+            final insertMap = entry.toMap(userId: userId);
+            try {
+              await SupabaseService.client
+                  .from('journal_entries')
+                  .insert(insertMap);
+            } catch (insertError) {
+              if (insertMap.containsKey('conversation_turns')) {
+                insertMap.remove('conversation_turns');
+                await SupabaseService.client
+                    .from('journal_entries')
+                    .insert(insertMap);
+              } else {
+                rethrow;
+              }
+            }
+          }
 
           ApiLogger.logDatabase(
-            operation: 'UPDATE',
+            operation: response.isEmpty ? 'INSERT (UPSERT)' : 'UPDATE',
             table: 'journal_entries',
-            payload: map,
+            payload: updatePayload,
             result: {'status': 'success', 'id': entry.id},
           );
         } catch (e) {

@@ -44,9 +44,9 @@ class FutureLetter {
       'id': validId,
       'title': title,
       'content': content,
-      'deliver_at': deliverAt.toIso8601String(),
+      'deliver_at': deliverAt.toUtc().toIso8601String(),
       'is_opened': isOpened,
-      'created_at': createdAt.toIso8601String(),
+      'created_at': createdAt.toUtc().toIso8601String(),
     };
     if (userId != null && userId.isNotEmpty) {
       map['user_id'] = userId;
@@ -76,7 +76,10 @@ class LettersProvider extends ChangeNotifier {
   String? _errorMessage;
   String? _activeUserId;
 
-  List<FutureLetter> get letters => List.unmodifiable(_letters);
+  List<FutureLetter> get letters => List.unmodifiable(
+      List<FutureLetter>.of(_letters)
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt)),
+  );
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
@@ -118,6 +121,7 @@ class LettersProvider extends ChangeNotifier {
       final List data = response as List;
       _letters.clear();
       _letters.addAll(data.map((e) => FutureLetter.fromMap(e)).toList());
+      _letters.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     } catch (e) {
       _errorMessage = 'We could not refresh your Future Letters.';
       ApiLogger.logDatabase(
@@ -184,7 +188,11 @@ class LettersProvider extends ChangeNotifier {
           'Your Future Letter could not be saved because sync is unavailable.';
     }
 
-    if (saved) _letters.insert(0, newLetter);
+    if (saved) {
+      _letters.removeWhere((item) => item.id == newLetter.id);
+      _letters.insert(0, newLetter);
+      _letters.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }
 
     _isLoading = false;
     notifyListeners();
@@ -216,6 +224,7 @@ class LettersProvider extends ChangeNotifier {
 
     final previous = _letters[index];
     _letters[index] = updated;
+    _letters.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     notifyListeners();
     try {
       await SupabaseService.client

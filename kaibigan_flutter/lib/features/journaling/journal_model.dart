@@ -40,7 +40,6 @@ class JournalEntry {
   final String reflectionMode; // 'auto' for new conversational entries
   final List<String> tags;
   final bool isFavorite;
-  final int reflectionSeedStage; // 1: Seed, 2: Sprout, 3: Bloom
   final DateTime createdAt;
   final List<JournalConversationTurn> conversationTurns;
 
@@ -54,7 +53,6 @@ class JournalEntry {
     this.reflectionMode = 'auto',
     this.tags = const [],
     this.isFavorite = false,
-    this.reflectionSeedStage = 1,
     required this.createdAt,
     this.conversationTurns = const [],
   });
@@ -69,7 +67,6 @@ class JournalEntry {
     String? reflectionMode,
     List<String>? tags,
     bool? isFavorite,
-    int? reflectionSeedStage,
     DateTime? createdAt,
     List<JournalConversationTurn>? conversationTurns,
   }) {
@@ -83,7 +80,6 @@ class JournalEntry {
       reflectionMode: reflectionMode ?? this.reflectionMode,
       tags: tags ?? this.tags,
       isFavorite: isFavorite ?? this.isFavorite,
-      reflectionSeedStage: reflectionSeedStage ?? this.reflectionSeedStage,
       createdAt: createdAt ?? this.createdAt,
       conversationTurns: conversationTurns ?? this.conversationTurns,
     );
@@ -97,16 +93,15 @@ class JournalEntry {
       'content': content,
       'ai_response': conversationTurns.isEmpty
           ? aiResponse
-          : '$_conversationPrefix${jsonEncode(
-              conversationTurns.map((turn) => turn.toJson()).toList(),
-            )}',
+          : _joinResponses(conversationTurns),
+      'conversation_turns':
+          conversationTurns.map((turn) => turn.toJson()).toList(),
       'companion_id': companionId,
       'mood': mood,
       'reflection_mode': reflectionMode,
       'tags': tags,
       'is_favorite': isFavorite,
-      'reflection_seed_stage': reflectionSeedStage,
-      'created_at': createdAt.toIso8601String(),
+      'created_at': createdAt.toUtc().toIso8601String(),
     };
     if (userId != null && userId.isNotEmpty) {
       map['user_id'] = userId;
@@ -116,7 +111,13 @@ class JournalEntry {
 
   factory JournalEntry.fromMap(Map<String, dynamic> map) {
     final storedResponse = map['ai_response'] as String?;
-    final decodedTurns = _decodeConversation(storedResponse);
+    final structuredTurns = map['conversation_turns'];
+    final decodedTurns = structuredTurns is List && structuredTurns.isNotEmpty
+        ? structuredTurns
+            .whereType<Map<String, dynamic>>()
+            .map(JournalConversationTurn.fromJson)
+            .toList(growable: false)
+        : _decodeConversation(storedResponse);
     return JournalEntry(
       id: map['id'] ?? '',
       title: map['title'] ?? '',
@@ -130,7 +131,6 @@ class JournalEntry {
           : map['reflection_mode'] ?? 'auto',
       tags: List<String>.from(map['tags'] ?? []),
       isFavorite: map['is_favorite'] ?? false,
-      reflectionSeedStage: map['reflection_seed_stage'] ?? 1,
       createdAt: map['created_at'] != null
           ? DateTime.parse(map['created_at']).toLocal()
           : DateTime.now(),

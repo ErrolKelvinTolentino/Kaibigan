@@ -8,7 +8,7 @@ import 'gratitude_model.dart';
 import 'gratitude_provider.dart';
 import 'polished_flower_asset.dart';
 
-enum _PlantingStage { reflection, flower }
+enum _PlantingStage { reflection, flower, bloomed }
 
 enum GratitudePlantingOutcome { skipped }
 
@@ -52,6 +52,7 @@ class _GratitudePlantingPageState extends State<GratitudePlantingPage> {
   final _entryFocus = FocusNode();
   late final PageController _flowerController;
   _PlantingStage _stage = _PlantingStage.reflection;
+  GratitudeEntry? _savedEntry;
   int _promptIndex = 0;
   late int _flowerIndex;
   bool _isSaving = false;
@@ -112,11 +113,11 @@ class _GratitudePlantingPageState extends State<GratitudePlantingPage> {
       });
       return;
     }
-    if (widget.onSaved != null) {
-      widget.onSaved!();
-    } else {
-      Navigator.of(context).pop(entry);
-    }
+    setState(() {
+      _isSaving = false;
+      _savedEntry = entry;
+      _stage = _PlantingStage.bloomed;
+    });
   }
 
   @override
@@ -169,7 +170,9 @@ class _GratitudePlantingPageState extends State<GratitudePlantingPage> {
               Text(
                 _stage == _PlantingStage.reflection
                     ? 'A gratitude moment'
-                    : 'Choose your flower',
+                    : _stage == _PlantingStage.flower
+                        ? 'Choose your flower'
+                        : 'Memory bloomed',
                 style: TextStyle(
                   color: primary,
                   fontSize: 18,
@@ -177,7 +180,9 @@ class _GratitudePlantingPageState extends State<GratitudePlantingPage> {
                 ),
               ),
               Text(
-                'Garden ${widget.gardenIndex + 1}  •  ${_stage == _PlantingStage.reflection ? 'Reflect' : 'Let it bloom'}',
+                _stage == _PlantingStage.bloomed
+                    ? 'Garden ${widget.gardenIndex + 1}  •  Bloomed'
+                    : 'Garden ${widget.gardenIndex + 1}  •  ${_stage == _PlantingStage.reflection ? 'Reflect' : 'Let it bloom'}',
                 style: TextStyle(
                   color: secondary,
                   fontSize: 10.5,
@@ -200,7 +205,7 @@ class _GratitudePlantingPageState extends State<GratitudePlantingPage> {
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 240),
                     height: 4,
-                    color: _stage == _PlantingStage.flower
+                    color: _stage != _PlantingStage.reflection
                         ? AppColors.honeyAmber
                         : (isDark ? Colors.white12 : const Color(0xFFE4E0D7)),
                   ),
@@ -232,12 +237,19 @@ class _GratitudePlantingPageState extends State<GratitudePlantingPage> {
                     secondary: secondary,
                     surface: surface,
                   )
-                : _buildFlowerCarousel(
-                    isDark: isDark,
-                    primary: primary,
-                    secondary: secondary,
-                    surface: surface,
-                  ),
+                : _stage == _PlantingStage.flower
+                    ? _buildFlowerCarousel(
+                        isDark: isDark,
+                        primary: primary,
+                        secondary: secondary,
+                        surface: surface,
+                      )
+                    : _buildBloomedView(
+                        isDark: isDark,
+                        primary: primary,
+                        secondary: secondary,
+                        surface: surface,
+                      ),
           ),
         ),
         bottomNavigationBar: _buildBottomAction(
@@ -564,69 +576,209 @@ class _GratitudePlantingPageState extends State<GratitudePlantingPage> {
             ),
           ],
         ),
-        child: _stage == _PlantingStage.reflection
+        child: _stage == _PlantingStage.bloomed
             ? SizedBox(
                 height: 54,
-                child: FilledButton.icon(
-                  key: const ValueKey('continue-to-flower'),
-                  onPressed: _continueToFlower,
-                  icon: const Icon(Icons.arrow_forward_rounded),
-                  label: const Text('Continue to your flower'),
+                child: FilledButton(
+                  key: const ValueKey('continue-after-planting'),
+                  onPressed: () {
+                    if (widget.onSaved != null) {
+                      widget.onSaved!();
+                    } else {
+                      Navigator.of(context).pop(_savedEntry);
+                    }
+                  },
                   style: _primaryButtonStyle(),
+                  child: const Text('Continue'),
                 ),
               )
-            : Row(
-                children: [
-                  SizedBox(
-                    width: 104,
+            : _stage == _PlantingStage.reflection
+                ? SizedBox(
                     height: 54,
-                    child: OutlinedButton(
-                      onPressed: _isSaving
-                          ? null
-                          : () => setState(
-                                () => _stage = _PlantingStage.reflection,
-                              ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: primary,
-                        side: BorderSide(
-                          color: isDark
-                              ? AppColors.darkCardBorder
-                              : const Color(0xFFDCD6CC),
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(17),
-                        ),
-                      ),
-                      child: const Text('Back'),
+                    child: FilledButton.icon(
+                      key: const ValueKey('continue-to-flower'),
+                      onPressed: _continueToFlower,
+                      icon: const Icon(Icons.arrow_forward_rounded),
+                      label: const Text('Continue to your flower'),
+                      style: _primaryButtonStyle(),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: SizedBox(
-                      height: 54,
-                      child: FilledButton.icon(
-                        key: const ValueKey('confirm-plant-flower'),
-                        onPressed: _isSaving ? null : _plant,
-                        icon: _isSaving
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Icon(Icons.eco_outlined),
-                        label: Text(
-                          _isSaving ? 'Planting…' : 'Plant this memory',
+                  )
+                : Row(
+                    children: [
+                      SizedBox(
+                        width: 104,
+                        height: 54,
+                        child: OutlinedButton(
+                          onPressed: _isSaving
+                              ? null
+                              : () => setState(
+                                    () => _stage = _PlantingStage.reflection,
+                                  ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: primary,
+                            side: BorderSide(
+                              color: isDark
+                                  ? AppColors.darkCardBorder
+                                  : const Color(0xFFDCD6CC),
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(17),
+                            ),
+                          ),
+                          child: const Text('Back'),
                         ),
-                        style: _primaryButtonStyle(),
                       ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: SizedBox(
+                          height: 54,
+                          child: FilledButton.icon(
+                            key: const ValueKey('confirm-plant-flower'),
+                            onPressed: _isSaving ? null : _plant,
+                            icon: _isSaving
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Icon(Icons.eco_outlined),
+                            label: Text(
+                              _isSaving ? 'Planting…' : 'Plant this memory',
+                            ),
+                            style: _primaryButtonStyle(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+      ),
+    );
+  }
+
+  Widget _buildBloomedView({
+    required bool isDark,
+    required Color primary,
+    required Color secondary,
+    required Color surface,
+  }) {
+    final entry = _savedEntry;
+    final flowerType = entry?.flowerType ??
+        GratitudeEntry.availableFlowerTypes[_flowerIndex];
+    final flowerName = GratitudeEntry.getFlowerName(flowerType);
+    final meaning = GratitudeEntry.getFlowerMeaning(flowerType);
+
+    return ListView(
+      key: const ValueKey('gratitude-bloomed-step'),
+      padding: const EdgeInsets.fromLTRB(22, 20, 22, 28),
+      children: [
+        Center(
+          child: Container(
+            width: 170,
+            height: 170,
+            decoration: BoxDecoration(
+              color: AppColors.honeyAmber
+                  .withValues(alpha: isDark ? 0.16 : 0.10),
+              borderRadius: BorderRadius.circular(32),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.honeyAmber
+                      .withValues(alpha: isDark ? 0.20 : 0.12),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(16),
+            child: PolishedFlowerAsset(
+              flowerType: flowerType,
+              glowOpacity: 0.25,
+              glowBlur: 14,
+            ),
+          ),
+        ),
+        const SizedBox(height: 22),
+        Text(
+          '$flowerName has bloomed! ✨',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: primary,
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Planted in Garden ${widget.gardenIndex + 1}  •  $meaning',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: secondary,
+            fontSize: 13.5,
+            height: 1.4,
+          ),
+        ),
+        const SizedBox(height: 22),
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: surface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isDark
+                  ? AppColors.darkCardBorder
+                  : const Color(0xFFE4E0D7),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.format_quote_rounded,
+                      color: AppColors.honeyAmber, size: 20),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Your gratitude note',
+                    style: TextStyle(
+                      color: primary,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ],
               ),
-      ),
+              const SizedBox(height: 8),
+              Text(
+                '“${_entryController.text.trim()}”',
+                style: TextStyle(
+                  color: primary,
+                  fontSize: 15,
+                  height: 1.5,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'This moment is now safe in your garden.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: secondary,
+            fontSize: 13,
+          ),
+        ),
+      ],
     );
   }
 

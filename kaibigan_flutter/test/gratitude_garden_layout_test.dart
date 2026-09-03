@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kaibigan_flutter/core/constants/app_colors.dart';
 import 'package:kaibigan_flutter/core/theme/garden_appearance.dart';
 import 'package:kaibigan_flutter/features/gratitude_garden/garden_layout.dart';
 import 'package:kaibigan_flutter/features/gratitude_garden/garden_screen.dart';
@@ -62,11 +63,11 @@ void main() {
     );
   });
 
-  test('fifteen perspective plots stay inside the supplied clean lawn', () {
+  test('ten perspective plots stay inside the supplied clean lawn', () {
     expect(GardenLayout.plots.length, GardenLayout.capacity);
     expect(
       GardenLayout.plots.map((plot) => '${plot.x}-${plot.groundY}').toSet(),
-      hasLength(15),
+      hasLength(10),
     );
     for (final plot in GardenLayout.plots) {
       expect(plot.x, inInclusiveRange(220, 850));
@@ -79,28 +80,28 @@ void main() {
     );
   });
 
-  test('a new garden unlocks only after fifteen flowers', () {
+  test('a new garden unlocks only after ten flowers', () {
     expect(GardenLayout.unlockedGardenCount(const []), 1);
     expect(
-      GardenLayout.unlockedGardenCount(List.generate(14, entry)),
+      GardenLayout.unlockedGardenCount(List.generate(9, entry)),
       1,
     );
     expect(
-      GardenLayout.unlockedGardenCount(List.generate(15, entry)),
+      GardenLayout.unlockedGardenCount(List.generate(10, entry)),
       2,
     );
     expect(
-      GardenLayout.unlockedGardenCount(List.generate(29, entry)),
+      GardenLayout.unlockedGardenCount(List.generate(19, entry)),
       2,
     );
     expect(
-      GardenLayout.unlockedGardenCount(List.generate(30, entry)),
+      GardenLayout.unlockedGardenCount(List.generate(20, entry)),
       3,
     );
   });
 
   test('unlocked gardens remain available when an older plot is cleared', () {
-    final entries = List.generate(16, entry)..removeAt(3);
+    final entries = List.generate(11, entry)..removeAt(3);
 
     expect(GardenLayout.unlockedGardenCount(entries), 2);
     expect(GardenLayout.firstAvailablePlot(entries, 0), 3);
@@ -130,11 +131,15 @@ void main() {
     final restored = GratitudeEntry.fromMap({
       ...map,
       'growth_stage': 1,
+      'water_count': 7,
     });
 
     expect(map, isNot(contains('growth_stage')));
+    expect(map, isNot(contains('water_count')));
+    expect(restored.toMap(), isNot(contains('water_count')));
+    expect(restored.content, original.content);
     expect(restored.gardenIndex, 1);
-    expect(restored.plotIndex, 4);
+    expect(restored.plotIndex, 9);
     expect(restored.flowerType, 'lavender');
   });
 
@@ -194,7 +199,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Garden 1 of 2'), findsOneWidget);
-    expect(find.text('15 / 15 flowers'), findsOneWidget);
+    expect(find.text('10 / 10 flowers'), findsOneWidget);
     expect(find.text('Open Garden 2'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('garden-flower-shadow-flower-0')),
@@ -221,12 +226,87 @@ void main() {
       findsOneWidget,
     );
 
+    await tester.tap(find.byKey(const ValueKey('garden-view-toggle')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Gratitude 9'));
+    await tester.pumpAndSettle();
+    expect(find.text('“Gratitude 9”'), findsOneWidget);
+    expect(find.text('Edit gratitude'), findsOneWidget);
+    expect(find.byTooltip('Remove flower'), findsOneWidget);
+    expect(find.byIcon(Icons.water_drop_outlined), findsNothing);
+    expect(find.textContaining('Watered'), findsNothing);
+    tester.state<NavigatorState>(find.byType(Navigator)).pop();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('garden-view-toggle')));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.byKey(const ValueKey('open-next-garden')));
     await tester.pumpAndSettle();
 
     expect(find.text('Garden 2 of 2'), findsOneWidget);
     expect(find.byKey(const ValueKey('empty-garden-plant-action')),
         findsOneWidget);
+  });
+
+  testWidgets('garden header controls stay readable over the illustration',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'preferred_language': 'english',
+      'garden_appearance': 'day',
+    });
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => UserProvider()),
+          ChangeNotifierProvider<GratitudeProvider>(
+            create: (_) => _FakeGratitudeProvider([]),
+          ),
+        ],
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                key: const ValueKey('open-garden'),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const GardenScreen(),
+                  ),
+                ),
+                child: const Text('Open garden'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('open-garden')));
+    await tester.pumpAndSettle();
+
+    final back = tester.widget<Material>(
+      find.byKey(const ValueKey('garden-back-button')),
+    );
+    final menu = tester.widget<Material>(
+      find.byKey(const ValueKey('garden-view-toggle')),
+    );
+    expect(back.color, AppColors.pollenGlow.withValues(alpha: .96));
+    expect(menu.color, AppColors.pollenGlow.withValues(alpha: .96));
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('garden-back-button')),
+        matching: find.byIcon(Icons.arrow_back_rounded),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('garden-view-toggle')),
+        matching: find.byIcon(Icons.format_list_bulleted_rounded),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets(

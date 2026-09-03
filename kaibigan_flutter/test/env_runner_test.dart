@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kaibigan_flutter/core/utils/env_config.dart';
 
 import '../tool/run_with_env.dart';
 
@@ -47,6 +48,40 @@ not a valid line
 
     expect(values['GEMINI_MODEL'], 'gemini-demo-model');
     expect(values['GROQ_FALLBACK_MODEL'], 'groq-demo-model');
+  });
+
+  test('loads runtime env values when no dart-define value is supplied', () {
+    EnvConfig.applyRuntimeValues({
+      'SUPABASE_URL': 'https://runtime.supabase.co',
+      'SUPABASE_ANON_KEY': 'runtime-anon-key',
+      'ENABLE_GOOGLE_AUTH': 'true',
+      'GEMINI_API_KEY': 'runtime-gemini-key',
+      'PRIMARY_AI_MODEL': 'primary-model',
+      'FALLBACK_AI_MODEL': 'fallback-model',
+    });
+
+    try {
+      expect(EnvConfig.supabaseUrl, 'https://runtime.supabase.co');
+      expect(EnvConfig.supabaseAnonKey, 'runtime-anon-key');
+      expect(EnvConfig.googleAuthEnabled, isTrue);
+      expect(EnvConfig.geminiApiKey, 'runtime-gemini-key');
+      expect(EnvConfig.geminiModel, 'primary-model');
+      expect(EnvConfig.groqFallbackModel, 'fallback-model');
+    } finally {
+      EnvConfig.clearRuntimeValues();
+    }
+  });
+
+  test('EnvConfig falls back to GOOGLE_API_KEY if GEMINI_API_KEY is not set', () {
+    EnvConfig.applyRuntimeValues({
+      'GOOGLE_API_KEY': 'google-fallback-key',
+    });
+
+    try {
+      expect(EnvConfig.geminiApiKey, 'google-fallback-key');
+    } finally {
+      EnvConfig.clearRuntimeValues();
+    }
   });
 
   group('device selection', () {

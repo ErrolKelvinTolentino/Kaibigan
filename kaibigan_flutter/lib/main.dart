@@ -17,9 +17,9 @@ import 'features/gratitude_garden/gratitude_provider.dart';
 import 'features/mood_tracking/mood_provider.dart';
 import 'features/comfort_corner/comfort_provider.dart';
 import 'features/future_letters/letters_provider.dart';
-import 'features/wellness_journey/daily_goals_provider.dart';
 import 'features/routines/routines_provider.dart';
 import 'features/auth_onboarding/auth_screen.dart';
+import 'features/auth_onboarding/kai_value_demo_screen.dart';
 import 'features/auth_onboarding/reset_password_screen.dart';
 import 'features/home/home_screen.dart';
 
@@ -108,8 +108,26 @@ class AppScrollBehavior extends MaterialScrollBehavior {
   }
 }
 
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  bool _showDemo = false;
+  int _authTabIndex = 0;
+
+  void _finishDemo(bool register) {
+    context.read<UserProvider>().completeKaiValueDemo();
+    setState(() {
+      _showDemo = false;
+      _authTabIndex = register ? 1 : 0;
+    });
+  }
+
+  void _reopenDemo() => setState(() => _showDemo = true);
 
   @override
   Widget build(BuildContext context) {
@@ -124,7 +142,13 @@ class AuthGate extends StatelessWidget {
         if (userProvider.isAuthenticated) {
           return const HomeScreen();
         }
-        return const AuthScreen();
+        if (_showDemo || !userProvider.hasSeenKaiValueDemo) {
+          return KaiValueDemoScreen(onContinue: _finishDemo);
+        }
+        return AuthScreen(
+          initialTabIndex: _authTabIndex,
+          onShowDemo: _reopenDemo,
+        );
       },
     );
   }
@@ -168,14 +192,6 @@ class KaibiganApp extends StatelessWidget {
           create: (_) => LettersProvider(),
           update: (_, __, provider) {
             final value = provider ?? LettersProvider();
-            value.syncForCurrentUser();
-            return value;
-          },
-        ),
-        ChangeNotifierProxyProvider<UserProvider, DailyGoalsProvider>(
-          create: (_) => DailyGoalsProvider(),
-          update: (_, __, provider) {
-            final value = provider ?? DailyGoalsProvider();
             value.syncForCurrentUser();
             return value;
           },

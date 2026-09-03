@@ -80,6 +80,24 @@ void main() {
     expect(find.text('Inhale'), findsWidgets);
     expect(find.text('Box breathing'), findsWidgets);
 
+    final startingScale = tester
+        .widget<Transform>(find.byKey(const ValueKey('breath-orb-scale')))
+        .transform
+        .storage[0];
+    await tester.pump(const Duration(seconds: 1));
+    final gentleScale = tester
+        .widget<Transform>(find.byKey(const ValueKey('breath-orb-scale')))
+        .transform
+        .storage[0];
+    await tester.pump(const Duration(seconds: 1));
+    final laterScale = tester
+        .widget<Transform>(find.byKey(const ValueKey('breath-orb-scale')))
+        .transform
+        .storage[0];
+    expect(gentleScale, greaterThan(startingScale));
+    expect(gentleScale, lessThan(1.13));
+    expect(laterScale, greaterThan(gentleScale));
+
     await tester.tap(find.byKey(const ValueKey('breathing-pause-button')));
     await tester.pump();
     expect(find.text('Paused'), findsOneWidget);
@@ -119,8 +137,11 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('grounding-continue-button')));
     await tester.pumpAndSettle();
 
+    expect(find.byKey(const ValueKey('grounding-complete')), findsOneWidget);
+    expect(completed, isFalse);
+    await tester.tap(find.text('Return feeling steadier'));
+    await tester.pumpAndSettle();
     expect(completed, isTrue);
-    expect(find.byKey(const ValueKey('grounding-complete')), findsNothing);
   });
 
   testWidgets('routine breathing is capped at thirty seconds', (tester) async {
@@ -147,6 +168,10 @@ void main() {
     expect(find.text('00:30'), findsOneWidget);
 
     await tester.pump(const Duration(seconds: 30));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('breathing-complete')), findsOneWidget);
+    expect(completed, isFalse);
+    await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
     expect(completed, isTrue);
   });

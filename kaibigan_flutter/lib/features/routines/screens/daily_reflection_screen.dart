@@ -15,6 +15,7 @@ import '../../../core/widgets/journal_paper_surface.dart';
 import '../../settings/user_provider.dart';
 import '../../companion/companion_model.dart';
 import '../../journaling/journal_provider.dart';
+import '../../mood_tracking/mood_model.dart';
 
 class DailyReflectionScreen extends StatefulWidget {
   final VoidCallback? onCompleted;
@@ -844,104 +845,143 @@ class _DailyReflectionScreenState extends State<DailyReflectionScreen> {
 
   Widget _buildAiInsightView(
       BuildContext context, bool isDark, MascotInfo mascot) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        const SizedBox(height: 20),
-        Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: mascot.primaryColor.withValues(alpha: 0.16),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(
-            mascot.materialIcon,
-            size: 48,
-            color: mascot.primaryColor,
-          ),
-        ).animate().scale(duration: 320.ms, curve: Curves.easeOutCubic),
-        const SizedBox(height: 20),
-        Text(
-          "${mascot.name}'s Reflection Insight",
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-            color:
-                isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
-          ),
-        ),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(22),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.darkCard : Colors.white,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: isDark
-                  ? AppColors.darkCardBorder
-                  : Colors.black.withValues(alpha: 0.08),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Column(
+                children: [
+                  const SizedBox(height: 12),
+                  Container(
+                    width: 140,
+                    height: 140,
+                    decoration: BoxDecoration(
+                      color: mascot.primaryColor
+                          .withValues(alpha: isDark ? 0.16 : 0.10),
+                      borderRadius: BorderRadius.circular(32),
+                      boxShadow: [
+                        BoxShadow(
+                          color: mascot.primaryColor
+                              .withValues(alpha: isDark ? 0.18 : 0.14),
+                          blurRadius: 24,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.all(12),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(24),
+                      child: Image.asset(
+                        FeatureIconHelper.dailyReflection,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) => Icon(
+                          mascot.materialIcon,
+                          size: 64,
+                          color: mascot.primaryColor,
+                        ),
+                      ),
+                    ),
+                  ).animate().scale(duration: 380.ms, curve: Curves.easeOutBack),
+                  const SizedBox(height: 20),
+                  Text(
+                    "${mascot.name}'s Reflection Insight",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: isDark
+                          ? AppColors.textPrimaryDark
+                          : AppColors.textPrimaryLight,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(22),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.darkCard : Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: isDark
+                            ? AppColors.darkCardBorder
+                            : Colors.black.withValues(alpha: 0.08),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black
+                              .withValues(alpha: isDark ? 0.2 : 0.04),
+                          blurRadius: 16,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: MarkdownBody(
+                      data: _generatedAiInsight,
+                      selectable: true,
+                      styleSheet: MarkdownStyleSheet(
+                        p: TextStyle(
+                          fontSize: 15,
+                          height: 1.6,
+                          fontWeight: FontWeight.w500,
+                          color: isDark
+                              ? AppColors.textPrimaryDark
+                              : AppColors.textPrimaryLight,
+                        ),
+                        em: GoogleFonts.lora(
+                          fontStyle: FontStyle.italic,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          color: isDark
+                              ? AppColors.honeyGold
+                              : AppColors.honeyAmber,
+                          height: 1.5,
+                        ),
+                        strong: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                        blockquote: TextStyle(
+                          fontStyle: FontStyle.italic,
+                          color: isDark ? Colors.white70 : Colors.black87,
+                        ),
+                      ),
+                    ),
+                  ).animate().fadeIn(delay: 200.ms),
+                ],
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 24, bottom: 12),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 54,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      if (widget.onCompleted != null) {
+                        widget.onCompleted!();
+                      } else {
+                        Navigator.of(context).pop();
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.sageGreen,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20)),
+                    ),
+                    child: const Text("Save & Finish 🌙",
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w700)),
+                  ),
+                ),
               ),
             ],
           ),
-          child: MarkdownBody(
-            data: _generatedAiInsight,
-            selectable: true,
-            styleSheet: MarkdownStyleSheet(
-              p: TextStyle(
-                fontSize: 15,
-                height: 1.6,
-                fontWeight: FontWeight.w500,
-                color: isDark
-                    ? AppColors.textPrimaryDark
-                    : AppColors.textPrimaryLight,
-              ),
-              em: GoogleFonts.lora(
-                fontStyle: FontStyle.italic,
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-                color: isDark ? AppColors.honeyGold : AppColors.honeyAmber,
-                height: 1.5,
-              ),
-              strong: TextStyle(
-                fontWeight: FontWeight.w800,
-                color: isDark ? Colors.white : Colors.black87,
-              ),
-              blockquote: TextStyle(
-                fontStyle: FontStyle.italic,
-                color: isDark ? Colors.white70 : Colors.black87,
-              ),
-            ),
-          ),
-        ).animate().fadeIn(delay: 200.ms),
-        const Spacer(),
-        SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: ElevatedButton(
-            onPressed: () {
-              if (widget.onCompleted != null) {
-                widget.onCompleted!();
-              } else {
-                Navigator.of(context).pop();
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.sageGreen,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18)),
-            ),
-            child: const Text("Save & Finish 🌙",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-          ),
         ),
-      ],
+      ),
     );
   }
 

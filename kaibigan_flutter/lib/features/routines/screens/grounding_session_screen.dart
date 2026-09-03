@@ -165,11 +165,7 @@ class _GroundingSessionScreenState extends State<GroundingSessionScreen> {
           );
       if (!mounted) return;
     }
-    if (widget.routineMode) {
-      _finish();
-    } else {
-      setState(() => _page = _completePage);
-    }
+    setState(() => _page = _completePage);
   }
 
   void _finish() {
@@ -734,47 +730,70 @@ class _GroundingComplete extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: SingleChildScrollView(
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
         padding: const EdgeInsets.all(28),
-        child: Column(
-          children: [
-            Container(
-              width: 92,
-              height: 92,
-              decoration: BoxDecoration(
-                color: AppColors.honeyAmber.withValues(alpha: 0.13),
-                borderRadius: BorderRadius.circular(32),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight - 56),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 190,
+                height: 190,
+                decoration: BoxDecoration(
+                  color: AppColors.honeyAmber
+                      .withValues(alpha: isDark ? 0.16 : 0.10),
+                  borderRadius: BorderRadius.circular(36),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.honeyAmber
+                          .withValues(alpha: isDark ? 0.18 : 0.14),
+                      blurRadius: 28,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                padding: const EdgeInsets.all(12),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(28),
+                  child: Image.asset(
+                    FeatureIconHelper.grounding,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) => const Icon(
+                      Icons.spa_outlined,
+                      color: AppColors.honeyAmber,
+                      size: 80,
+                    ),
+                  ),
+                ),
+              ).animate().scale(duration: 380.ms, curve: Curves.easeOutBack),
+              const SizedBox(height: 24),
+              Text('You are here.',
+                  textAlign: TextAlign.center,
+                  style: AppTypography.titleLarge(context, isDark: isDark)),
+              const SizedBox(height: 12),
+              Text(
+                'The room did not need to change. You simply found your way back into it.',
+                textAlign: TextAlign.center,
+                style: AppTypography.bodyMedium(context, isDark: isDark)
+                    .copyWith(height: 1.55),
               ),
-              child: const Icon(
-                Icons.check_rounded,
-                color: AppColors.honeyAmber,
-                size: 44,
+              const SizedBox(height: 32),
+              FilledButton(
+                onPressed: onDone,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 54),
+                  backgroundColor: AppColors.honeyAmber,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20)),
+                ),
+                child: const Text('Return feeling steadier',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
               ),
-            ).animate().scale(duration: 320.ms, curve: Curves.easeOutCubic),
-            const SizedBox(height: 24),
-            Text('You are here.',
-                style: AppTypography.titleLarge(context, isDark: isDark)),
-            const SizedBox(height: 9),
-            Text(
-              'The room did not need to change. You simply found your way back into it.',
-              textAlign: TextAlign.center,
-              style: AppTypography.bodyMedium(context, isDark: isDark)
-                  .copyWith(height: 1.55),
-            ),
-            const SizedBox(height: 30),
-            FilledButton(
-              onPressed: onDone,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size(double.infinity, 54),
-                backgroundColor: AppColors.honeyAmber,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(19)),
-              ),
-              child: const Text('Return feeling steadier',
-                  style: TextStyle(fontWeight: FontWeight.w800)),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

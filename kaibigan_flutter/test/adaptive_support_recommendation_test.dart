@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kaibigan_flutter/features/home/adaptive_support_recommendation.dart';
+import 'package:kaibigan_flutter/features/home/activity_feedback_store.dart';
 import 'package:kaibigan_flutter/features/mood_tracking/mood_model.dart';
 
 void main() {
@@ -109,6 +110,76 @@ void main() {
 
       expect(result.kind, AdaptiveSupportKind.breathing);
       expect(result.reason, AdaptiveSupportReason.balancedPause);
+    });
+
+    test('tries a different support type after a recent unhelpful result', () {
+      final result = AdaptiveSupportEngine.recommend(
+        logs: [log(stress: 5, anxiety: 4)],
+        now: now,
+        feedback: [
+          ActivityFeedbackRecord(
+            activityId: AdaptiveSupportKind.grounding.name,
+            helpfulness: ActivityHelpfulness.notHelpful,
+            createdAt: now.subtract(const Duration(minutes: 10)),
+          ),
+        ],
+      );
+
+      expect(result.kind, AdaptiveSupportKind.breathing);
+      expect(result.source, isNotNull);
+    });
+
+    test('does not let stale feedback override current check-in signals', () {
+      final result = AdaptiveSupportEngine.recommend(
+        logs: [log(stress: 5)],
+        now: now,
+        feedback: [
+          ActivityFeedbackRecord(
+            activityId: AdaptiveSupportKind.grounding.name,
+            helpfulness: ActivityHelpfulness.notHelpful,
+            createdAt: now.subtract(const Duration(days: 2)),
+          ),
+        ],
+      );
+
+      expect(result.kind, AdaptiveSupportKind.grounding);
+    });
+
+    test('does not bounce back to another recently rejected support type', () {
+      final result = AdaptiveSupportEngine.recommend(
+        logs: [log(stress: 5, anxiety: 4)],
+        now: now,
+        feedback: [
+          ActivityFeedbackRecord(
+            activityId: AdaptiveSupportKind.grounding.name,
+            helpfulness: ActivityHelpfulness.notHelpful,
+            createdAt: now.subtract(const Duration(minutes: 20)),
+          ),
+          ActivityFeedbackRecord(
+            activityId: AdaptiveSupportKind.breathing.name,
+            helpfulness: ActivityHelpfulness.notHelpful,
+            createdAt: now.subtract(const Duration(minutes: 5)),
+          ),
+        ],
+      );
+
+      expect(result.kind, AdaptiveSupportKind.reflection);
+    });
+
+    test('uses Kai conversation feedback when considering reflection', () {
+      final result = AdaptiveSupportEngine.recommend(
+        logs: [log(mood: 2)],
+        now: now,
+        feedback: [
+          ActivityFeedbackRecord(
+            activityId: 'journal',
+            helpfulness: ActivityHelpfulness.notHelpful,
+            createdAt: now.subtract(const Duration(minutes: 10)),
+          ),
+        ],
+      );
+
+      expect(result.kind, AdaptiveSupportKind.grounding);
     });
   });
 }

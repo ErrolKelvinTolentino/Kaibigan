@@ -131,6 +131,14 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
         ));
       }
       if (_turns.isEmpty) _addTurn(JournalTurn(userText: target.content));
+      final lastTurn = _turns.last;
+      if (lastTurn.aiResponse?.trim().isNotEmpty ?? false) {
+        _addTurn(JournalTurn(
+          userText: '',
+          mode: CompanionMode.auto,
+          companionId: lastTurn.companionId ?? target.companionId,
+        ));
+      }
     } else {
       _addTurn(JournalTurn(userText: ''));
       _restoreDraft();
@@ -347,10 +355,33 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
       return;
     }
 
+    // Unfocus active input so the keyboard does not obscure the loading progress
+    FocusScope.of(context).unfocus();
+
     final cancellationToken = AIRequestCancellationToken();
     _aiCancellationToken?.cancel();
     _aiCancellationToken = cancellationToken;
     setState(() => _isGeneratingAi = true);
+
+    // Scroll immediately so the thinking indicator is brought into view
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+      );
+    });
+
+    // Ensure indicator stays centered/visible after keyboard dismiss animation
+    Future.delayed(const Duration(milliseconds: 280), () {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
+      );
+    });
 
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     final companionId = _activeCompanionId ?? userProvider.selectedCompanion;
@@ -579,10 +610,32 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
     final text = turn.userController.text.trim();
     if (reason == null || text.isEmpty || _isGeneratingAi) return;
 
+    // Unfocus active input so the keyboard does not obscure the loading progress
+    FocusScope.of(context).unfocus();
+
     final cancellationToken = AIRequestCancellationToken();
     _aiCancellationToken?.cancel();
     _aiCancellationToken = cancellationToken;
     setState(() => _isGeneratingAi = true);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+      );
+    });
+
+    Future.delayed(const Duration(milliseconds: 280), () {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
+      );
+    });
+
     final user = context.read<UserProvider>();
     final companionId = turn.companionId ?? user.selectedCompanion;
     try {
@@ -678,46 +731,54 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: mascot.primaryColor.withValues(alpha: 0.2),
-                        shape: BoxShape.circle,
+                Expanded(
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: mascot.primaryColor.withValues(alpha: 0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(mascot.materialIcon,
+                            size: 16, color: mascot.primaryColor),
                       ),
-                      child: Icon(mascot.materialIcon,
-                          size: 16, color: mascot.primaryColor),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      mascot.name,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        color: mascot.primaryColor,
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          mascot.name,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            color: mascot.primaryColor,
+                          ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 7),
-                    Text(
-                      isOfflineReply
-                          ? _t(
-                              language,
-                              english: 'a quiet note',
-                              filipino: 'munting tala',
-                            )
-                          : _t(
-                              language,
-                              english: 'with you',
-                              filipino: 'kasama mo',
-                            ),
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white38 : Colors.black38,
+                      const SizedBox(width: 7),
+                      Flexible(
+                        child: Text(
+                          isOfflineReply
+                              ? _t(
+                                  language,
+                                  english: 'a quiet note',
+                                  filipino: 'munting tala',
+                                )
+                              : _t(
+                                  language,
+                                  english: 'with you',
+                                  filipino: 'kasama mo',
+                                ),
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white38 : Colors.black38,
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.copy_rounded, size: 16),
@@ -868,17 +929,20 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(
+                    Row(
                       children: [
-                        Icon(Icons.shield_outlined,
+                        const Icon(Icons.shield_outlined,
                             color: Colors.redAccent, size: 18),
-                        SizedBox(width: 8),
-                        Text(
-                          '24/7 Free Crisis Support (Philippines)',
-                          style: TextStyle(
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '24/7 Free Crisis Support (Philippines)',
+                            style: const TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w700,
-                              color: Colors.redAccent),
+                              color: Colors.redAccent,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -887,16 +951,11 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        ElevatedButton.icon(
+                        ElevatedButton(
                           onPressed: () async {
                             final uri = Uri(scheme: 'tel', path: '911');
                             if (await canLaunchUrl(uri)) await launchUrl(uri);
                           },
-                          icon: const Icon(Icons.emergency_rounded,
-                              size: 14, color: Colors.white),
-                          label: const Text('Emergency 911',
-                              style: TextStyle(
-                                  fontSize: 12, fontWeight: FontWeight.w700)),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.redAccent,
                             foregroundColor: Colors.white,
@@ -905,17 +964,29 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                             minimumSize: Size.zero,
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.emergency_rounded,
+                                  size: 14, color: Colors.white),
+                              SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  'Emergency 911',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        ElevatedButton.icon(
+                        ElevatedButton(
                           onPressed: () async {
                             final uri = Uri(scheme: 'tel', path: '1553');
                             if (await canLaunchUrl(uri)) await launchUrl(uri);
                           },
-                          icon: const Icon(Icons.phone,
-                              size: 14, color: Colors.white),
-                          label: const Text('Call NCMH 1553',
-                              style: TextStyle(
-                                  fontSize: 12, fontWeight: FontWeight.w700)),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.sageGreen,
                             foregroundColor: Colors.white,
@@ -924,17 +995,29 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                             minimumSize: Size.zero,
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.phone,
+                                  size: 14, color: Colors.white),
+                              SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  'Call NCMH 1553',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        OutlinedButton.icon(
+                        OutlinedButton(
                           onPressed: () async {
                             final uri = Uri(scheme: 'tel', path: '09178001123');
                             if (await canLaunchUrl(uri)) await launchUrl(uri);
                           },
-                          icon: const Icon(Icons.phone_in_talk,
-                              size: 14, color: Colors.redAccent),
-                          label: const Text('In Touch 0917-800-1123',
-                              style: TextStyle(
-                                  fontSize: 12, fontWeight: FontWeight.w700)),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: Colors.redAccent,
                             side: const BorderSide(color: Colors.redAccent),
@@ -943,14 +1026,26 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                             minimumSize: Size.zero,
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.phone_in_talk,
+                                  size: 14, color: Colors.redAccent),
+                              SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  'In Touch 0917-800-1123',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        OutlinedButton.icon(
+                        OutlinedButton(
                           onPressed: () => AkbaySafetySheet.show(context),
-                          icon: const Icon(Icons.info_outline,
-                              size: 14, color: AppColors.sageGreen),
-                          label: const Text('All Safety Lines',
-                              style: TextStyle(
-                                  fontSize: 12, fontWeight: FontWeight.w700)),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: AppColors.sageGreen,
                             side: const BorderSide(color: AppColors.sageGreen),
@@ -958,6 +1053,23 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                                 horizontal: 12, vertical: 8),
                             minimumSize: Size.zero,
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.info_outline,
+                                  size: 14, color: AppColors.sageGreen),
+                              SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  'All Safety Lines',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -1148,23 +1260,28 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
             itemBuilder: (_) => [
               PopupMenuItem(
                 value: 'export',
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.picture_as_pdf_outlined),
-                  title: Text(_t(language,
-                      english: 'Export as PDF',
-                      filipino: 'I-export bilang PDF')),
+                child: Row(
+                  children: [
+                    const Icon(Icons.picture_as_pdf_outlined),
+                    const SizedBox(width: 12),
+                    Text(_t(language,
+                        english: 'Export as PDF',
+                        filipino: 'I-export bilang PDF')),
+                  ],
                 ),
               ),
               if (widget.targetEntry != null)
                 PopupMenuItem(
                   value: 'delete',
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.delete_outline_rounded,
-                        color: Colors.redAccent),
-                    title: Text(_t(language,
-                        english: 'Delete entry', filipino: 'Burahin ang tala')),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.delete_outline_rounded,
+                          color: Colors.redAccent),
+                      const SizedBox(width: 12),
+                      Text(_t(language,
+                          english: 'Delete entry',
+                          filipino: 'Burahin ang tala')),
+                    ],
                   ),
                 ),
             ],
@@ -1574,24 +1691,41 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                         onPressed: _isGeneratingAi || _isSaving
                             ? null
                             : _triggerAiReflection,
-                        icon: Icon(
-                          _turns.length > 1
-                              ? Icons.send_rounded
-                              : Icons.forum_outlined,
-                          size: 16,
-                        ),
+                        icon: _isGeneratingAi
+                            ? SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    AppColors.readableOn(journalAccent),
+                                  ),
+                                ),
+                              )
+                            : Icon(
+                                _turns.length > 1
+                                    ? Icons.send_rounded
+                                    : Icons.forum_outlined,
+                                size: 16,
+                              ),
                         label: Text(
-                          _turns.length > 1
+                          _isGeneratingAi
                               ? _t(
                                   language,
-                                  english: 'Send',
-                                  filipino: 'Ipadala',
+                                  english: '${mascot.name} is replying…',
+                                  filipino: 'Sumasagot si ${mascot.name}…',
                                 )
-                              : _t(
-                                  language,
-                                  english: 'Share with ${mascot.name}',
-                                  filipino: 'Ibahagi kay ${mascot.name}',
-                                ),
+                              : (_turns.length > 1
+                                  ? _t(
+                                      language,
+                                      english: 'Send',
+                                      filipino: 'Ipadala',
+                                    )
+                                  : _t(
+                                      language,
+                                      english: 'Share with ${mascot.name}',
+                                      filipino: 'Ibahagi kay ${mascot.name}',
+                                    )),
                           style: const TextStyle(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w800,
@@ -1600,8 +1734,12 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                         style: FilledButton.styleFrom(
                           backgroundColor: journalAccent,
                           foregroundColor: AppColors.readableOn(journalAccent),
-                          disabledBackgroundColor:
-                              journalAccent.withValues(alpha: 0.28),
+                          disabledBackgroundColor: _isGeneratingAi
+                              ? journalAccent.withValues(alpha: 0.72)
+                              : journalAccent.withValues(alpha: 0.28),
+                          disabledForegroundColor: _isGeneratingAi
+                              ? AppColors.readableOn(journalAccent)
+                              : null,
                           elevation: 0,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 17,

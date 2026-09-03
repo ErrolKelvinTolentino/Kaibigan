@@ -183,12 +183,12 @@ class _AddActionSheetState extends State<AddActionSheet> {
               ..._presetSteps.map((step) {
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),
-                  decoration: BoxDecoration(
+                  child: Material(
                     color:
                         isDark ? AppColors.darkBackground : AppColors.warmCream,
                     borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: ListTile(
+                    clipBehavior: Clip.antiAlias,
+                    child: ListTile(
                     leading: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
@@ -206,8 +206,9 @@ class _AddActionSheetState extends State<AddActionSheet> {
                     trailing: const Icon(Icons.add, color: AppColors.sageGreen),
                     onTap: () => _addPresetAction(step),
                   ),
-                );
-              }),
+                ),
+              );
+            }),
             ] else ...[
               TextField(
                 controller: _customTitleController,

@@ -26,7 +26,7 @@ class UserMemory {
       summary: map['memory_summary'] ?? '',
       relevanceScore: map['relevance_score'] ?? 5,
       createdAt: map['created_at'] != null
-          ? DateTime.parse(map['created_at'])
+          ? DateTime.parse(map['created_at']).toLocal()
           : DateTime.now(),
     );
   }

@@ -174,8 +174,6 @@ class _UnifiedEntryDetailScreenState extends State<UnifiedEntryDetailScreen> {
           entry: rawData as GratitudeEntry,
           palette: palette,
           isDark: isDark,
-          onWater: _waterFlower,
-          isWorking: _isWorking,
         ),
       EntryCategory.mood => _MoodEntryBody(
           log: rawData as MoodLog,
@@ -283,26 +281,6 @@ class _UnifiedEntryDetailScreenState extends State<UnifiedEntryDetailScreen> {
     final entries = context.read<JournalProvider>().entries;
     final updated = entries.where((candidate) => candidate.id == entry.id);
     if (updated.isNotEmpty) setState(() => _rawData = updated.first);
-  }
-
-  Future<void> _waterFlower() async {
-    final raw = _currentRawData(context);
-    if (raw is! GratitudeEntry || _isWorking) return;
-    setState(() => _isWorking = true);
-    final provider = context.read<GratitudeProvider>();
-    final saved = await provider.waterFlower(raw.id);
-    if (!mounted) return;
-    setState(() => _isWorking = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          saved
-              ? 'You revisited this gratitude memory.'
-              : provider.errorMessage ?? 'The flower could not be watered.',
-        ),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
   }
 
   Future<void> _deleteEntry(Object? rawData) async {
@@ -742,15 +720,11 @@ class _GratitudeEntryBody extends StatelessWidget {
     required this.entry,
     required this.palette,
     required this.isDark,
-    required this.onWater,
-    required this.isWorking,
   });
 
   final GratitudeEntry entry;
   final _DetailPalette palette;
   final bool isDark;
-  final VoidCallback onWater;
-  final bool isWorking;
 
   @override
   Widget build(BuildContext context) {
@@ -780,45 +754,14 @@ class _GratitudeEntryBody extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: _InfoTile(
-                icon: Icons.local_florist_outlined,
-                label: GratitudeEntry.getFlowerMeaning(entry.flowerType),
-                color: palette.accent,
-                surface: palette.surface,
-                isDark: isDark,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _InfoTile(
-                icon: Icons.water_drop_outlined,
-                label: 'Revisited ${entry.waterCount}×',
-                color: AppColors.skyBlue,
-                surface: palette.surface,
-                isDark: isDark,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
         SizedBox(
           width: double.infinity,
-          child: FilledButton.icon(
-            key: const ValueKey('entry-detail-water-flower'),
-            onPressed: isWorking ? null : onWater,
-            icon: const Icon(Icons.water_drop_outlined),
-            label: const Text('Revisit and water this memory'),
-            style: FilledButton.styleFrom(
-              backgroundColor: palette.accent,
-              foregroundColor: AppColors.readableOn(palette.accent),
-              minimumSize: const Size.fromHeight(51),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(17),
-              ),
-            ),
+          child: _InfoTile(
+            icon: Icons.local_florist_outlined,
+            label: GratitudeEntry.getFlowerMeaning(entry.flowerType),
+            color: palette.accent,
+            surface: palette.surface,
+            isDark: isDark,
           ),
         ),
       ],

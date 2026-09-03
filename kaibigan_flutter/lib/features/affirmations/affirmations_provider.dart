@@ -36,23 +36,33 @@ class AffirmationsProvider extends ChangeNotifier {
     await prefs.setString(_categoryKey, category.id);
   }
 
-  String? affirmationForDay(DateTime date) {
+  String? affirmationForDay(
+    DateTime date, {
+    String language = 'english',
+  }) {
     final category = selectedCategory;
     if (category == null) return null;
-    return _affirmationFor(category, date);
+    return _affirmationFor(category, date, language);
   }
 
-  String homeAffirmationForDay(DateTime date) {
+  String homeAffirmationForDay(
+    DateTime date, {
+    String language = 'english',
+  }) {
     final category = selectedCategory ?? AffirmationCatalog.categories.first;
-    return _affirmationFor(category, date);
+    return _affirmationFor(category, date, language);
   }
 
-  String _affirmationFor(AffirmationCategory category, DateTime date) {
+  String _affirmationFor(
+    AffirmationCategory category,
+    DateTime date,
+    String language,
+  ) {
     final localDay = DateTime(date.year, date.month, date.day);
     final dayNumber =
         localDay.millisecondsSinceEpoch ~/ Duration.millisecondsPerDay;
     final salt = AffirmationCatalog.categories.indexOf(category) * 7;
-    return category
-        .affirmations[(dayNumber + salt) % category.affirmations.length];
+    final affirmations = category.affirmationsFor(language);
+    return affirmations[(dayNumber + salt) % affirmations.length];
   }
 }

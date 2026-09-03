@@ -28,7 +28,8 @@ class MindfulnessMeditationScreen extends StatefulWidget {
 }
 
 class _MindfulnessMeditationScreenState
-    extends State<MindfulnessMeditationScreen> {
+    extends State<MindfulnessMeditationScreen>
+    with SingleTickerProviderStateMixin {
   static const _patterns = [
     _BreathPattern(
       id: 'calm',
@@ -69,18 +70,41 @@ class _MindfulnessMeditationScreenState
   int _phaseSecondsLeft = 4;
   int _totalSecondsLeft = 60;
   bool _running = false;
-  int _cycle = 0;
-  double _previousScale = 0.78;
   Timer? _timer;
   bool _recorded = false;
+  late final AnimationController _breathController;
+  Animation<double> _breathScale = const AlwaysStoppedAnimation(0.78);
 
   _BreathPhase get _phase => _pattern.phases[_phaseIndex];
   int get _targetSeconds => widget.routineMode ? 30 : _durationMinutes * 60;
 
   @override
+  void initState() {
+    super.initState();
+    _breathController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 4),
+    );
+  }
+
+  @override
   void dispose() {
     _timer?.cancel();
+    _breathController.dispose();
     super.dispose();
+  }
+
+  void _animateCurrentPhase({double? from}) {
+    final start = from ?? _breathScale.value;
+    _breathController.stop();
+    _breathController.duration = Duration(seconds: _phase.seconds);
+    _breathScale = Tween<double>(begin: start, end: _phase.scale).animate(
+      CurvedAnimation(
+        parent: _breathController,
+        curve: Curves.easeInOutSine,
+      ),
+    );
+    _breathController.forward(from: 0);
   }
 
   void _begin() {
@@ -91,10 +115,9 @@ class _MindfulnessMeditationScreenState
       _phaseSecondsLeft = _pattern.phases.first.seconds;
       _totalSecondsLeft = _targetSeconds;
       _running = true;
-      _cycle = 0;
-      _previousScale = 0.78;
       _recorded = false;
     });
+    _animateCurrentPhase(from: 0.78);
     _startTimer();
   }
 
@@ -110,30 +133,34 @@ class _MindfulnessMeditationScreenState
       return;
     }
 
+    var phaseChanged = false;
     setState(() {
       _totalSecondsLeft--;
       if (_phaseSecondsLeft <= 1) {
-        _previousScale = _phase.scale;
         _phaseIndex = (_phaseIndex + 1) % _pattern.phases.length;
-        if (_phaseIndex == 0) _cycle++;
         _phaseSecondsLeft = _phase.seconds;
+        phaseChanged = true;
       } else {
         _phaseSecondsLeft--;
       }
     });
+    if (phaseChanged) _animateCurrentPhase();
   }
 
   void _togglePause() {
     setState(() => _running = !_running);
     if (_running) {
+      _breathController.forward();
       _startTimer();
     } else {
       _timer?.cancel();
+      _breathController.stop();
     }
   }
 
   Future<void> _complete() async {
     _timer?.cancel();
+    _breathController.stop();
     if (mounted) {
       setState(() {
         _running = false;
@@ -154,7 +181,6 @@ class _MindfulnessMeditationScreenState
                 : 'Completed $_durationMinutes minute ${_pattern.title} breathing exercise.',
           ),
         );
-    if (widget.routineMode && mounted) _done();
   }
 
   Future<void> _close() async {
@@ -196,8 +222,10 @@ class _MindfulnessMeditationScreenState
             ),
             Expanded(
               child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 420),
-                switchInCurve: Curves.easeOutCubic,
+                duration: const Duration(milliseconds: 750),
+                reverseDuration: const Duration(milliseconds: 550),
+                switchInCurve: Curves.easeInOutCubic,
+                switchOutCurve: Curves.easeInOutCubic,
                 transitionBuilder: (child, animation) => FadeTransition(
                   opacity: animation,
                   child: ScaleTransition(
@@ -388,26 +416,38 @@ class _MindfulnessMeditationScreenState
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _SessionPill(
+              Expanded(
+                child: _SessionPill(
                   icon: Icons.tune_rounded,
                   label: _pattern.title,
-                  isDark: isDark),
+                  isDark: isDark,
+                ),
+              ),
               const SizedBox(width: 8),
-              _SessionPill(
+              Expanded(
+                child: _SessionPill(
                   icon: Icons.schedule_rounded,
                   label: '$minutes:$seconds',
-                  isDark: isDark),
+                  isDark: isDark,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 15),
           ClipRRect(
             borderRadius: BorderRadius.circular(99),
-            child: LinearProgressIndicator(
-              value: sessionProgress,
-              minHeight: 5,
-              backgroundColor:
-                  isDark ? Colors.white12 : const Color(0xFFEDE5D8),
-              valueColor: const AlwaysStoppedAnimation(AppColors.honeyAmber),
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(end: sessionProgress),
+              duration: const Duration(milliseconds: 900),
+              curve: Curves.easeInOutCubic,
+              builder: (context, value, child) => LinearProgressIndicator(
+                value: value,
+                minHeight: 5,
+                backgroundColor:
+                    isDark ? Colors.white12 : const Color(0xFFEDE5D8),
+                valueColor:
+                    const AlwaysStoppedAnimation(AppColors.honeyAmber),
+              ),
             ),
           ),
           const SizedBox(height: 14),
@@ -416,7 +456,8 @@ class _MindfulnessMeditationScreenState
               final active = entry.key == _phaseIndex;
               return Expanded(
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 220),
+                  duration: const Duration(milliseconds: 900),
+                  curve: Curves.easeInOutCubic,
                   margin: EdgeInsets.only(
                     right: entry.key == _pattern.phases.length - 1 ? 0 : 6,
                   ),
@@ -457,14 +498,19 @@ class _MindfulnessMeditationScreenState
             }).toList(),
           ),
           const Spacer(),
-          Text(
-            _running ? _phase.label : 'Paused',
-            key: ValueKey('breathing-phase-${_phase.label}-$_running'),
-            style: TextStyle(
-              color: AppColors.honeyAmber,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.3,
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 850),
+            switchInCurve: Curves.easeInOutCubic,
+            switchOutCurve: Curves.easeInOutCubic,
+            child: Text(
+              _running ? _phase.label : 'Paused',
+              key: ValueKey('breathing-phase-${_phase.label}-$_running'),
+              style: const TextStyle(
+                color: AppColors.honeyAmber,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.3,
+              ),
             ),
           ),
           const SizedBox(height: 22),
@@ -473,30 +519,28 @@ class _MindfulnessMeditationScreenState
             child: Stack(
               alignment: Alignment.center,
               children: [
-                SizedBox.square(
-                  dimension: 220,
-                  child: CircularProgressIndicator(
-                    value: phaseProgress,
-                    strokeWidth: 4,
-                    strokeCap: StrokeCap.round,
-                    color: AppColors.honeyAmber,
-                    backgroundColor: AppColors.honeyAmber.withValues(
-                      alpha: isDark ? 0.13 : 0.10,
+                TweenAnimationBuilder<double>(
+                  tween: Tween(end: phaseProgress),
+                  duration: const Duration(milliseconds: 900),
+                  curve: Curves.easeInOutCubic,
+                  builder: (context, value, child) => SizedBox.square(
+                    dimension: 220,
+                    child: CircularProgressIndicator(
+                      value: value,
+                      strokeWidth: 4,
+                      strokeCap: StrokeCap.round,
+                      color: AppColors.honeyAmber,
+                      backgroundColor: AppColors.honeyAmber.withValues(
+                        alpha: isDark ? 0.13 : 0.10,
+                      ),
                     ),
                   ),
                 ),
-                TweenAnimationBuilder<double>(
-                  key: ValueKey(
-                    'breath-orb-$_cycle-$_phaseIndex-$_running',
-                  ),
-                  tween: Tween(
-                    begin: _previousScale,
-                    end: _running ? _phase.scale : _previousScale,
-                  ),
-                  duration: Duration(seconds: _running ? _phaseSecondsLeft : 0),
-                  curve: Curves.easeInOutSine,
-                  builder: (context, value, child) => Transform.scale(
-                    scale: value,
+                AnimatedBuilder(
+                  animation: _breathScale,
+                  builder: (context, child) => Transform.scale(
+                    key: const ValueKey('breath-orb-scale'),
+                    scale: _breathScale.value,
                     child: child,
                   ),
                   child: Container(
@@ -528,13 +572,21 @@ class _MindfulnessMeditationScreenState
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Text(
-                            '$_phaseSecondsLeft',
-                            style: const TextStyle(
-                              color: AppColors.beeDark,
-                              fontSize: 48,
-                              height: 1,
-                              fontWeight: FontWeight.w800,
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 650),
+                            switchInCurve: Curves.easeInOutCubic,
+                            switchOutCurve: Curves.easeInOutCubic,
+                            child: Text(
+                              '$_phaseSecondsLeft',
+                              key: ValueKey(
+                                'breathing-count-$_phaseSecondsLeft',
+                              ),
+                              style: const TextStyle(
+                                color: AppColors.beeDark,
+                                fontSize: 48,
+                                height: 1,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -555,10 +607,16 @@ class _MindfulnessMeditationScreenState
             ),
           ),
           const SizedBox(height: 24),
-          Text(
-            _running ? _phase.guidance : 'Take your time. Resume when ready.',
-            textAlign: TextAlign.center,
-            style: AppTypography.bodyLarge(context, isDark: isDark),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 900),
+            switchInCurve: Curves.easeInOutCubic,
+            switchOutCurve: Curves.easeInOutCubic,
+            child: Text(
+              _running ? _phase.guidance : 'Take your time. Resume when ready.',
+              key: ValueKey('breathing-guidance-${_phase.label}-$_running'),
+              textAlign: TextAlign.center,
+              style: AppTypography.bodyLarge(context, isDark: isDark),
+            ),
           ),
           const Spacer(),
           Row(
@@ -609,45 +667,80 @@ class _MindfulnessMeditationScreenState
   }
 
   Widget _buildComplete(bool isDark) {
-    return Center(
+    return LayoutBuilder(
       key: const ValueKey('breathing-complete'),
-      child: SingleChildScrollView(
+      builder: (context, constraints) => SingleChildScrollView(
         padding: const EdgeInsets.all(28),
-        child: Column(
-          children: [
-            Container(
-              width: 96,
-              height: 96,
-              decoration: BoxDecoration(
-                color: AppColors.honeyGold.withValues(alpha: 0.16),
-                borderRadius: BorderRadius.circular(34),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight - 56),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 190,
+                height: 190,
+                decoration: BoxDecoration(
+                  color: AppColors.honeyGold
+                      .withValues(alpha: isDark ? 0.16 : 0.10),
+                  borderRadius: BorderRadius.circular(36),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.honeyAmber
+                          .withValues(alpha: isDark ? 0.18 : 0.14),
+                      blurRadius: 28,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                padding: const EdgeInsets.all(12),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(28),
+                  child: Image.asset(
+                    FeatureIconHelper.breathing,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) => const Icon(
+                      Icons.air_rounded,
+                      color: AppColors.honeyAmber,
+                      size: 80,
+                    ),
+                  ),
+                ),
+              )
+                  .animate()
+                  .fadeIn(duration: 700.ms, curve: Curves.easeInOutCubic)
+                  .scale(
+                    begin: const Offset(.97, .97),
+                    duration: 900.ms,
+                    curve: Curves.easeInOutCubic,
+                  ),
+              const SizedBox(height: 24),
+              Text('One breath quieter.',
+                  textAlign: TextAlign.center,
+                  style: AppTypography.titleLarge(context, isDark: isDark)),
+              const SizedBox(height: 12),
+              Text(
+                widget.routineMode
+                    ? 'You completed your 30-second ${_pattern.title.toLowerCase()} reset. Notice what feels different before moving on.'
+                    : 'You completed a $_durationMinutes minute ${_pattern.title.toLowerCase()} practice. Notice what feels different before moving on.',
+                textAlign: TextAlign.center,
+                style: AppTypography.bodyMedium(context, isDark: isDark)
+                    .copyWith(height: 1.55),
               ),
-              child: const Icon(Icons.air_rounded,
-                  color: AppColors.honeyAmber, size: 46),
-            ).animate().scale(duration: 320.ms, curve: Curves.easeOutCubic),
-            const SizedBox(height: 24),
-            Text('One breath quieter.',
-                style: AppTypography.titleLarge(context, isDark: isDark)),
-            const SizedBox(height: 9),
-            Text(
-              'You completed a $_durationMinutes minute ${_pattern.title.toLowerCase()} practice. Notice what feels different before moving on.',
-              textAlign: TextAlign.center,
-              style: AppTypography.bodyMedium(context, isDark: isDark)
-                  .copyWith(height: 1.55),
-            ),
-            const SizedBox(height: 30),
-            FilledButton(
-              onPressed: _done,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size(double.infinity, 54),
-                backgroundColor: AppColors.honeyAmber,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(19)),
+              const SizedBox(height: 32),
+              FilledButton(
+                onPressed: _done,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 54),
+                  backgroundColor: AppColors.honeyAmber,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20)),
+                ),
+                child: Text(widget.routineMode ? 'Continue' : 'Return to my day',
+                    style:
+                        const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
               ),
-              child: const Text('Return to my day',
-                  style: TextStyle(fontWeight: FontWeight.w800)),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -813,7 +906,14 @@ class _SessionPill extends StatelessWidget {
         children: [
           Icon(icon, size: 15, color: AppColors.honeyAmber),
           const SizedBox(width: 6),
-          Text(label, style: AppTypography.bodySmall(context, isDark: isDark)),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.bodySmall(context, isDark: isDark),
+            ),
+          ),
         ],
       ),
     );

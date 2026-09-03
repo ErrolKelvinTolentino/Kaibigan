@@ -119,9 +119,18 @@ Directory _findProjectDirectory() {
 
 Future<void> main(List<String> arguments) async {
   final projectDirectory = _findProjectDirectory();
-  final envFile = File(
+  var envFile = File(
     '${projectDirectory.path}${Platform.pathSeparator}.env',
   );
+
+  if (!envFile.existsSync()) {
+    final rootEnv = File(
+      '${Directory.current.path}${Platform.pathSeparator}.env',
+    );
+    if (rootEnv.existsSync()) {
+      envFile = rootEnv;
+    }
+  }
 
   if (!envFile.existsSync()) {
     stderr.writeln(

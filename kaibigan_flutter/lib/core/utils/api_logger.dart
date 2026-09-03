@@ -219,7 +219,7 @@ class ApiLogger {
           'Payload   : ${safePayload is Map || safePayload is List ? _prettyEncoder.convert(safePayload) : safePayload}');
     }
     if (error != null) {
-      buffer.writeln('Error     : [REDACTED; ${error.length} chars]');
+      buffer.writeln('Error     : $error');
     }
     buffer.writeln(
         '====================================================================');

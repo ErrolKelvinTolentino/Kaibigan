@@ -65,7 +65,7 @@ void main() {
         reason: 'An explicit routine sleep log replaces the generic value.');
   });
 
-  test('compact AI prompt contains aggregates but never journal content', () {
+  test('weekly AI prompt includes user writing but not Kai replies', () {
     final snapshot = WeeklyReflectionService.build(
       now: DateTime(2026, 8, 25),
       journals: [
@@ -73,6 +73,7 @@ void main() {
           id: 'j1',
           title: 'Secret title',
           content: 'My highly private journal sentence',
+          aiResponse: 'Kai response that must not be included',
           companionId: 'ann',
           createdAt: DateTime(2026, 8, 24),
         ),
@@ -80,10 +81,10 @@ void main() {
     );
 
     final prompt = snapshot.toCompactPrompt(language: 'english');
-    expect(prompt, contains('Seven-day aggregate'));
+    expect(prompt, contains('User-authored journal entries'));
     expect(prompt, contains('1 journal entries'));
-    expect(prompt, isNot(contains('Secret title')));
-    expect(prompt, isNot(contains('highly private')));
+    expect(prompt, contains('My highly private journal sentence'));
+    expect(prompt, isNot(contains('Kai response that must not be included')));
     expect(prompt, isNot(contains('not logged/5')));
   });
 
@@ -195,8 +196,34 @@ Which part feels important?
     final parsed = WeeklyReflectionNarrative.tryParse(local.toMarkdown());
 
     expect(parsed, isNotNull);
-    expect(parsed!.evidence, contains('1 of 7 active days'));
+    expect(parsed!.evidence, contains('1 mood check-in'));
+    expect(parsed.evidence, isNot(contains('/5')));
     expect(parsed.pattern, contains('not yet enough active days'));
     expect(parsed.experiment, contains('three days next week'));
+  });
+
+  test('device reflection uses the words from weekly journal entries', () {
+    final snapshot = WeeklyReflectionService.build(
+      now: DateTime(2026, 8, 29),
+      journals: [
+        JournalEntry(
+          id: 'journal-context',
+          title: 'A hard afternoon',
+          content: 'I felt overwhelmed, then a short walk helped me breathe.',
+          aiResponse: 'Kai said something separate.',
+          companionId: 'kai',
+          createdAt: DateTime(2026, 8, 28),
+        ),
+      ],
+    );
+
+    final local = WeeklyReflectionService.buildLocalNarrative(
+      snapshot,
+      language: 'english',
+    );
+
+    expect(local.evidence, contains('a short walk helped me breathe'));
+    expect(local.evidence, isNot(contains('Kai said something separate')));
+    expect(local.experiment, contains('What I needed then was'));
   });
 }

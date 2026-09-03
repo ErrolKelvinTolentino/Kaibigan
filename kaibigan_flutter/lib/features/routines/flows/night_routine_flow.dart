@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_typography.dart';
 import '../../journaling/journal_provider.dart';
+import '../../mood_tracking/mood_model.dart';
 import '../../mood_tracking/mood_provider.dart';
 import '../../gratitude_garden/gratitude_provider.dart';
 import '../../settings/user_provider.dart';
@@ -936,20 +937,40 @@ class _NightRoutineFlowState extends State<NightRoutineFlow> {
   }
 
   Widget _buildCompletionStep(bool isDark) {
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(32),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(24),
+            width: 180,
+            height: 180,
             decoration: BoxDecoration(
-              color: AppColors.beePrimary.withValues(alpha: 0.15),
-              shape: BoxShape.circle,
+              color: AppColors.beePrimary.withValues(alpha: isDark ? 0.16 : 0.10),
+              borderRadius: BorderRadius.circular(36),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.beePrimary
+                      .withValues(alpha: isDark ? 0.18 : 0.14),
+                  blurRadius: 28,
+                  offset: const Offset(0, 10),
+                ),
+              ],
             ),
-            child: const Icon(Icons.nights_stay,
-                color: AppColors.beePrimary, size: 54),
-          ).animate().scale(duration: 340.ms, curve: Curves.easeOutCubic),
+            padding: const EdgeInsets.all(16),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(28),
+              child: Image.asset(
+                FeatureIconHelper.nightRoutine,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) => const Icon(
+                  Icons.nights_stay_rounded,
+                  color: AppColors.beePrimary,
+                  size: 74,
+                ),
+              ),
+            ),
+          ).animate().scale(duration: 380.ms, curve: Curves.easeOutBack),
           const SizedBox(height: 24),
           Text(
             'Night Routine Completed!',

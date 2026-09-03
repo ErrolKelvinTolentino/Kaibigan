@@ -11,9 +11,9 @@ class NotificationService {
 
     const DarwinInitializationSettings iosSettings =
         DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
     );
 
     const InitializationSettings settings = InitializationSettings(
@@ -33,6 +33,8 @@ class NotificationService {
     required String title,
     required String body,
   }) async {
+    if (!await _requestPermission()) return;
+
     const AndroidNotificationDetails androidDetails =
         AndroidNotificationDetails(
       'kaibigan_reminders',
@@ -52,6 +54,27 @@ class NotificationService {
       await _notificationsPlugin.show(id, title, body, details);
     } catch (e) {
       debugPrint('Failed to display notification: $e');
+    }
+  }
+
+  static Future<bool> _requestPermission() async {
+    try {
+      final android = _notificationsPlugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      final androidGranted = await android?.requestNotificationsPermission();
+      if (androidGranted == false) return false;
+
+      final ios = _notificationsPlugin.resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin>();
+      final iosGranted = await ios?.requestPermissions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      return iosGranted ?? true;
+    } catch (e) {
+      debugPrint('Notification permission error: $e');
+      return false;
     }
   }
 }

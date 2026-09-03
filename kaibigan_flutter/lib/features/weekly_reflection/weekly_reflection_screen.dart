@@ -46,7 +46,7 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
     final userId = SupabaseService.isInitialized
         ? SupabaseService.client.auth.currentUser?.id ?? 'local'
         : 'local';
-    return 'weekly_reflection_${userId}_${DateFormat('yyyyMMdd').format(snapshot.start)}';
+    return 'weekly_reflection_v4_${userId}_${DateFormat('yyyyMMdd').format(snapshot.start)}';
   }
 
   Future<void> _loadSavedReflection(
@@ -97,7 +97,7 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
           storageKey,
           jsonEncode({
             ...savedPayload,
-            'version': 3,
+            'version': 4,
             'snapshotSignature': snapshot.dataSignature,
           }),
         );
@@ -155,7 +155,7 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
       await preferences.setString(
         _storageKey(snapshot),
         jsonEncode({
-          'version': 3,
+          'version': 4,
           'text': reflection,
           'savedAt': savedAt.toIso8601String(),
           'origin': createdOnDevice ? 'device' : 'companion',
@@ -287,15 +287,15 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
                     childrenPadding: const EdgeInsets.only(top: 4, bottom: 12),
                     leading: const Icon(Icons.insights_outlined),
                     title: Text(
-                      _copy(language, 'See the numbers',
-                          'Tingnan ang mga bilang'),
+                      _copy(language, 'See check-in details',
+                          'Tingnan ang check-in details'),
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                     subtitle: Text(
                       _copy(
                         language,
-                        'Optional context behind these observations',
-                        'Opsyonal na konteksto ng mga obserbasyon',
+                        'Scores are translated into plain language',
+                        'Ipinaliliwanag ang scores sa simpleng salita',
                       ),
                     ),
                     children: [
@@ -308,7 +308,7 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
                             _metricCard(
                                 width,
                                 Icons.sentiment_satisfied_alt_rounded,
-                                _score(snapshot.averageMood),
+                                _plainLevel(snapshot.averageMood, language),
                                 _copy(language, 'Average mood',
                                     'Karaniwang mood'),
                                 AppColors.honeyAmber,
@@ -316,7 +316,7 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
                             _metricCard(
                                 width,
                                 Icons.bedtime_rounded,
-                                _score(snapshot.averageSleep),
+                                _plainLevel(snapshot.averageSleep, language),
                                 _copy(language, 'Rest quality',
                                     'Kalidad ng pahinga'),
                                 AppColors.honeyGold,
@@ -354,8 +354,26 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
     );
   }
 
-  String _score(double? value) =>
-      value == null ? '—' : '${value.toStringAsFixed(1)}/5';
+  String _plainLevel(
+    double? value,
+    String language, {
+    bool highIsHard = false,
+  }) {
+    if (value == null) return _copy(language, 'Not logged', 'Hindi na-log');
+    if (value >= 4.5) {
+      return highIsHard
+          ? _copy(language, 'Very high', 'Napakataas')
+          : _copy(language, 'Very good', 'Napakaganda');
+    }
+    if (value >= 3.5) {
+      return highIsHard
+          ? _copy(language, 'High', 'Mataas')
+          : _copy(language, 'Good', 'Maganda');
+    }
+    if (value >= 2.5) return _copy(language, 'In the middle', 'Nasa gitna');
+    if (value >= 1.5) return _copy(language, 'Low', 'Mababa');
+    return _copy(language, 'Very low', 'Napakababa');
+  }
 
   Widget _metricCard(double width, IconData icon, String value, String label,
       Color accent, bool isDark) {
@@ -403,21 +421,24 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
       ),
     ));
     if (snapshot.averageEnergy != null || snapshot.averageStress != null) {
-      final energy = snapshot.averageEnergy?.toStringAsFixed(1) ?? '—';
-      final stress = snapshot.averageStress?.toStringAsFixed(1) ?? '—';
+      final energy = _plainLevel(snapshot.averageEnergy, language);
+      final stress = _plainLevel(
+        snapshot.averageStress,
+        language,
+        highIsHard: true,
+      );
       items.add(_Observation(
         Icons.balance_rounded,
         _copy(language, 'Energy and demand', 'Lakas at bigat'),
         _copy(
           language,
-          'Logged energy averaged $energy/5 while stress averaged $stress/5. Next week, log one check-in before and after your busiest period to see whether that gap repeats.',
-          'Ang karaniwang energy ay $energy/5 at stress ay $stress/5. Sa susunod na linggo, mag-log bago at pagkatapos ng pinakaabalang oras upang makita kung mauulit ang agwat.',
+          'Your check-ins describe your energy as $energy and stress as $stress. These are broad descriptions of how the week felt, not grades.',
+          'Inilalarawan ng check-ins ang energy mo bilang $energy at stress bilang $stress. Pangkalahatang paglalarawan ito ng linggo, hindi grado.',
         ),
       ));
     }
     if (snapshot.moodTrend != null && snapshot.moodTrend!.abs() >= 0.25) {
       final rising = snapshot.moodTrend! > 0;
-      final difference = snapshot.moodTrend!.abs().toStringAsFixed(1);
       items.add(_Observation(
         Icons.trending_up_rounded,
         _copy(
@@ -429,11 +450,11 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
         _copy(
           language,
           rising
-              ? 'Your later mood check-ins averaged $difference points higher than your earlier ones. The direction is encouraging, though one week cannot explain what caused it.'
-              : 'Your later mood check-ins averaged $difference points lower than your earlier ones. That shift is worth tracking, but one week cannot explain what caused it.',
+              ? 'Your later mood check-ins felt better than your earlier ones. The direction is encouraging, though one week cannot explain what caused it.'
+              : 'Your later mood check-ins felt heavier than your earlier ones. That shift is worth noticing, but one week cannot explain what caused it.',
           rising
-              ? 'Mas mataas ng $difference points ang average ng mga huling mood check-in kaysa sa mga nauna. Magandang direksyon ito, pero hindi pa masasabi ng isang linggo ang sanhi.'
-              : 'Mas mababa ng $difference points ang average ng mga huling mood check-in kaysa sa mga nauna. Mahalagang subaybayan ito, pero hindi pa masasabi ng isang linggo ang sanhi.',
+              ? 'Mas magaan ang mga huling mood check-in kaysa sa mga nauna. Magandang direksyon ito, pero hindi pa masasabi ng isang linggo ang sanhi.'
+              : 'Mas mabigat ang mga huling mood check-in kaysa sa mga nauna. Mahalagang pansinin ito, pero hindi pa masasabi ng isang linggo ang sanhi.',
         ),
       ));
     }
@@ -441,18 +462,17 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
         snapshot.sleepMoodDelta != null &&
         snapshot.sleepMoodDelta!.abs() >= 0.25) {
       final positive = snapshot.sleepMoodDelta! > 0;
-      final difference = snapshot.sleepMoodDelta!.abs().toStringAsFixed(1);
       items.add(_Observation(
         Icons.nights_stay_rounded,
         _copy(language, 'Rest and mood', 'Pahinga at mood'),
         _copy(
           language,
           positive
-              ? 'Mood averaged $difference points higher on better-sleep days than on lower-sleep days. This is an association to test again, not proof that sleep caused the change.'
-              : 'Mood averaged $difference points lower on better-sleep days than on lower-sleep days. That unexpected association is worth retesting before drawing a conclusion.',
+              ? 'Mood tended to feel better on the days when sleep felt better. This is something to notice again, not proof that sleep caused the change.'
+              : 'Mood tended to feel lower even on the days when sleep felt better. That unexpected connection is worth noticing again before drawing a conclusion.',
           positive
-              ? 'Mas mataas ng $difference points ang average mood sa better-sleep days. Ugnayang susubukan muli ito, hindi patunay na tulog ang sanhi.'
-              : 'Mas mababa ng $difference points ang average mood sa better-sleep days. Hindi ito inaasahang ugnayan, kaya mas mabuting subukan muli bago magkonklusyon.',
+              ? 'Mas maganda ang mood sa mga araw na mas maganda rin ang tulog. Dapat itong pansinin muli, hindi ituring na patunay na tulog ang sanhi.'
+              : 'Mas mababa ang mood kahit sa mga araw na mas maganda ang tulog. Hindi ito inaasahang ugnayan, kaya mas mabuting pansinin muli bago magkonklusyon.',
         ),
       ));
     }
@@ -460,18 +480,17 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
         snapshot.routineMoodDelta != null &&
         snapshot.routineMoodDelta!.abs() >= 0.25) {
       final positive = snapshot.routineMoodDelta! > 0;
-      final difference = snapshot.routineMoodDelta!.abs().toStringAsFixed(1);
       items.add(_Observation(
         Icons.hive_rounded,
         _copy(language, 'Daily anchors', 'Araw-araw na sandigan'),
         _copy(
           language,
           positive
-              ? 'Mood averaged $difference points higher on routine days than on non-routine days. This may be a useful signal, but it does not establish cause.'
-              : 'Mood averaged $difference points lower on routine days than on non-routine days. You may use routines on harder days, so the difference should not be treated as an effect of the routine.',
+              ? 'Mood tended to feel better on routine days. This may be a useful signal, but it does not prove that the routine caused the change.'
+              : 'Mood tended to feel lower on routine days. You may use routines on harder days, so this should not be treated as an effect of the routine.',
           positive
-              ? 'Mas mataas ng $difference points ang average mood sa routine days. Posibleng signal ito, pero hindi nito pinatutunayan ang sanhi.'
-              : 'Mas mababa ng $difference points ang average mood sa routine days. Maaaring mas ginagamit ang routine sa mahihirap na araw, kaya huwag muna itong ituring na epekto ng routine.',
+              ? 'Mas maganda ang mood sa routine days. Posibleng signal ito, pero hindi nito pinatutunayan ang sanhi.'
+              : 'Mas mababa ang mood sa routine days. Maaaring mas ginagamit ang routine sa mahihirap na araw, kaya huwag muna itong ituring na epekto ng routine.',
         ),
       ));
     }
@@ -540,8 +559,8 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
               child: Text(
             _copy(
                 language,
-                'These observations are calculated on-device. AI receives only the totals above when you ask it to reflect—never your raw entries.',
-                'Kinakalkula sa device ang mga obserbasyong ito. Mga kabuuang bilang lamang ang matatanggap ng AI kapag humingi ka ng pagninilay—hindi ang mismong mga tala.'),
+                'Nothing is shared until you tap Reflect. Then Kai uses only your entries, gratitude notes, and check-ins from these seven days—not Kai’s previous replies.',
+                'Walang ibinabahagi hanggang pindutin mo ang Reflect. Pagkatapos, ang entries, gratitude notes, at check-ins mo lamang mula sa pitong araw na ito ang gagamitin ni Kai—hindi ang mga dating sagot ni Kai.'),
             style: TextStyle(
                 fontSize: 11.5,
                 height: 1.4,
@@ -622,8 +641,8 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
                       narrative == null || _savedAt == null
                           ? _copy(
                               language,
-                              'Optional analysis using only this week’s totals.',
-                              'Opsyonal na pagsusuri gamit lamang ang kabuuan ng linggong ito.',
+                              'A reflection grounded in what you wrote this week.',
+                              'Pagninilay batay sa mga isinulat mo ngayong linggo.',
                             )
                           : _copy(
                               language,
@@ -837,8 +856,8 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
                         child: Text(
                           _copy(
                             language,
-                            'Created privately on this device from your weekly totals.',
-                            'Pribadong ginawa sa device na ito mula sa weekly totals mo.',
+                            'Created on this device from your own words and check-ins.',
+                            'Ginawa sa device na ito mula sa sarili mong mga salita at check-ins.',
                           ),
                           style: TextStyle(
                             color: secondary,
@@ -855,21 +874,21 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
               ],
               _narrativeBlock(
                 icon: Icons.fact_check_outlined,
-                label: _copy(language, 'Evidence', 'Ebidensya'),
+                label: _copy(language, 'What you shared', 'Ang ibinahagi mo'),
                 markdown: narrative.evidence,
                 isDark: isDark,
               ),
               const SizedBox(height: 10),
               _narrativeBlock(
                 icon: Icons.insights_rounded,
-                label: _copy(language, 'Pattern', 'Pattern'),
+                label: _copy(language, 'What may connect', 'Posibleng ugnayan'),
                 markdown: narrative.pattern,
                 isDark: isDark,
               ),
               const SizedBox(height: 10),
               _narrativeBlock(
                 icon: Icons.science_outlined,
-                label: _copy(language, 'One experiment', 'Isang eksperimento'),
+                label: _copy(language, 'Try this next', 'Subukan ito'),
                 markdown: narrative.experiment,
                 isDark: isDark,
                 emphasized: true,

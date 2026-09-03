@@ -11,11 +11,15 @@ void main() {
   test('every affirmation category contains 30 distinct supportive reminders',
       () {
     final all = <String>{};
+    final allFilipino = <String>{};
 
     expect(AffirmationCatalog.categories.length, 6);
     for (final category in AffirmationCatalog.categories) {
       expect(category.affirmations.length, 30, reason: category.id);
       expect(category.affirmations.toSet().length, 30, reason: category.id);
+      expect(category.filipinoAffirmations.length, 30, reason: category.id);
+      expect(category.filipinoAffirmations.toSet().length, 30,
+          reason: category.id);
       for (final affirmation in category.affirmations) {
         expect(affirmation, affirmation.trim());
         expect(affirmation.length, inInclusiveRange(30, 150));
@@ -28,6 +32,13 @@ void main() {
         );
         expect(all.add(affirmation), isTrue,
             reason: 'Duplicate affirmation: $affirmation');
+      }
+      for (final affirmation in category.filipinoAffirmations) {
+        expect(affirmation, affirmation.trim());
+        expect(affirmation.length, inInclusiveRange(25, 180));
+        expect(affirmation, matches(RegExp(r'[.!?”]$')));
+        expect(allFilipino.add(affirmation), isTrue,
+            reason: 'Duplicate Filipino affirmation: $affirmation');
       }
     }
   });
@@ -46,6 +57,10 @@ void main() {
     expect(
       provider.affirmationForDay(today),
       isNot(provider.affirmationForDay(today.add(const Duration(days: 1)))),
+    );
+    expect(
+      AffirmationCatalog.byId('calm_grounding')!.filipinoAffirmations,
+      contains(provider.affirmationForDay(today, language: 'filipino')),
     );
 
     await provider.selectCategory('self_compassion');
@@ -99,6 +114,44 @@ void main() {
         findsOneWidget);
     expect(find.text('1 / 30'), findsOneWidget);
     expect(find.text('Keep what feels honest. Skip what does not.'),
+        findsOneWidget);
+  });
+
+  testWidgets('Filipino preference uses the complete Filipino affirmation set',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'preferred_language': 'filipino',
+      'affirmation_category_id': 'self_compassion',
+    });
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => UserProvider()),
+          ChangeNotifierProvider(create: (_) => AffirmationsProvider()),
+        ],
+        child: const MaterialApp(home: AffirmationsScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final category = AffirmationCatalog.byId('self_compassion')!;
+    final visibleText = tester
+        .widgetList<Text>(find.byType(Text))
+        .map((widget) => widget.data)
+        .whereType<String>()
+        .toSet();
+
+    expect(find.text('Pag-unawa sa sarili'), findsOneWidget);
+    expect(find.text('1 / 30'), findsOneWidget);
+    expect(
+      category.filipinoAffirmations.any(visibleText.contains),
+      isTrue,
+      reason: 'The visible affirmation should come from the Filipino set.',
+    );
+    expect(find.text('Piliin ang tapat sa iyo. Laktawan ang hindi.'),
         findsOneWidget);
   });
 }

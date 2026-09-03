@@ -288,7 +288,7 @@ class RoutineLog {
       'mood_score': moodScore,
       'mood_note': moodNote,
       'gratitude_content': gratitudeContent,
-      'completed_at': completedAt.toIso8601String(),
+      'completed_at': completedAt.toUtc().toIso8601String(),
     };
     if (userId != null && userId.isNotEmpty) {
       map['user_id'] = userId;

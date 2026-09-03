@@ -11,6 +11,8 @@ class TodayMomentsCard extends StatelessWidget {
   final String affirmation;
   final int arrivedLetterCount;
   final VoidCallback onLettersTap;
+  final bool showAffirmation;
+  final bool showFutureLetter;
 
   const TodayMomentsCard({
     super.key,
@@ -20,6 +22,8 @@ class TodayMomentsCard extends StatelessWidget {
     required this.affirmation,
     required this.arrivedLetterCount,
     required this.onLettersTap,
+    this.showAffirmation = true,
+    this.showFutureLetter = true,
   });
 
   @override
@@ -36,14 +40,167 @@ class TodayMomentsCard extends StatelessWidget {
     final secondary =
         isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
 
-    final radius = BorderRadius.circular(26);
+    final radius = BorderRadius.circular(24);
+
+    if (!showAffirmation) {
+      if (!showFutureLetter || arrivedLetterCount <= 0) {
+        return const SizedBox.shrink();
+      }
+      return Material(
+        key: const ValueKey('today-future-letter-card'),
+        color: Colors.transparent,
+        borderRadius: radius,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          key: const ValueKey('arrived-future-letter-action'),
+          onTap: onLettersTap,
+          borderRadius: radius,
+          child: Ink(
+            key: const ValueKey('today-future-letter-surface'),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: isDark
+                    ? const [Color(0xFF332926), Color(0xFF282325)]
+                    : const [Color(0xFFFFF6F0), Color(0xFFFFF0EA)],
+              ),
+              borderRadius: radius,
+              border: Border.all(
+                color: isDark
+                    ? const Color(0xFF4D3B35)
+                    : AppColors.warmPeach.withValues(alpha: 0.35),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color:
+                      AppColors.warmPeach.withValues(alpha: isDark ? 0.08 : 0.12),
+                  blurRadius: 18,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Stack(
+              children: [
+                Positioned(
+                  right: -10,
+                  top: -10,
+                  child: Icon(
+                    Icons.mail_outline_rounded,
+                    size: 96,
+                    color: AppColors.warmPeach
+                        .withValues(alpha: isDark ? 0.05 : 0.07),
+                  ),
+                ),
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: AppColors.warmPeach
+                              .withValues(alpha: isDark ? 0.22 : 0.16),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color:
+                                AppColors.warmPeach.withValues(alpha: 0.28),
+                            width: 1,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.mark_email_unread_outlined,
+                          color: AppColors.warmPeach,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              arrivedLetterCount == 1
+                                  ? copy(
+                                      'A Future Letter has arrived',
+                                      'Dumating na ang isang Liham',
+                                      'A Future Letter has arrived',
+                                    )
+                                  : copy(
+                                      '$arrivedLetterCount Future Letters have arrived',
+                                      '$arrivedLetterCount Liham ang dumating',
+                                      '$arrivedLetterCount Future Letters have arrived',
+                                    ),
+                              style: TextStyle(
+                                color: foreground,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.2,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              copy(
+                                'Past you left something for today.',
+                                'May iniwan ang dating ikaw para sa araw na ito.',
+                                'Past you left something for today.',
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: secondary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.08)
+                              : Colors.white,
+                          shape: BoxShape.circle,
+                          boxShadow: isDark
+                              ? null
+                              : [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.06),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                        ),
+                        child: const Icon(
+                          Icons.arrow_forward_rounded,
+                          color: AppColors.warmPeach,
+                          size: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Material(
-      key: const ValueKey('today-moments-card'),
+      key: const ValueKey('today-affirmation-card'),
       color: Colors.transparent,
       borderRadius: radius,
       clipBehavior: Clip.antiAlias,
       child: Ink(
-        key: const ValueKey('today-moments-surface'),
+        key: const ValueKey('today-affirmation-surface'),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -142,7 +299,7 @@ class TodayMomentsCard extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 15),
                     child: Text(
-                      category!.title,
+                      category!.titleFor(language),
                       style: const TextStyle(
                         color: AppColors.honeyAmber,
                         fontSize: 10.5,
@@ -150,7 +307,7 @@ class TodayMomentsCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                if (arrivedLetterCount > 0)
+                if (showFutureLetter && arrivedLetterCount > 0)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                     child: InkWell(

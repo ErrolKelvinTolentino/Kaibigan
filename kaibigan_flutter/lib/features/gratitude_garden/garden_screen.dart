@@ -76,6 +76,30 @@ class _GardenScreenState extends State<GardenScreen> {
     }
   }
 
+  Widget _appBarControl({
+    required Key key,
+    required String tooltip,
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
+    return Material(
+      key: key,
+      color: AppColors.pollenGlow.withValues(alpha: .96),
+      shape: const CircleBorder(),
+      elevation: 2,
+      shadowColor: Colors.black26,
+      child: IconButton(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        icon: Icon(icon),
+        color: AppColors.onHoney,
+        iconSize: 22,
+        padding: const EdgeInsets.all(10),
+        constraints: const BoxConstraints.tightFor(width: 42, height: 42),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<GratitudeProvider>();
@@ -115,6 +139,20 @@ class _GardenScreenState extends State<GardenScreen> {
             ? (isDark ? AppColors.darkBackground : AppColors.warmCream)
             : Colors.transparent,
         elevation: 0,
+        leadingWidth: 58,
+        leading: Navigator.of(context).canPop()
+            ? Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: Center(
+                  child: _appBarControl(
+                    key: const ValueKey('garden-back-button'),
+                    tooltip: 'Back',
+                    icon: Icons.arrow_back_rounded,
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ),
+              )
+            : null,
         foregroundColor: _isListView
             ? (isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight)
             : sceneForeground,
@@ -142,14 +180,17 @@ class _GardenScreenState extends State<GardenScreen> {
           ),
         ),
         actions: [
-          IconButton(
-            key: const ValueKey('garden-view-toggle'),
-            tooltip: _isListView ? 'View garden' : 'View gratitude list',
-            onPressed: () => setState(() => _isListView = !_isListView),
-            icon: Icon(
-              _isListView
-                  ? Icons.yard_outlined
-                  : Icons.format_list_bulleted_rounded,
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Center(
+              child: _appBarControl(
+                key: const ValueKey('garden-view-toggle'),
+                tooltip: _isListView ? 'View garden' : 'View gratitude list',
+                onPressed: () => setState(() => _isListView = !_isListView),
+                icon: _isListView
+                    ? Icons.yard_outlined
+                    : Icons.format_list_bulleted_rounded,
+              ),
             ),
           ),
         ],
@@ -521,22 +562,16 @@ class _GardenScreenState extends State<GardenScreen> {
                   children: [
                     Expanded(
                       child: FilledButton.icon(
-                        onPressed: () async {
-                          final saved = await provider.waterFlower(current.id);
-                          if (!rootContext.mounted) return;
-                          ScaffoldMessenger.of(rootContext).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                saved
-                                    ? 'You watered this gratitude flower.'
-                                    : provider.errorMessage ??
-                                        'The flower could not be watered.',
-                              ),
-                            ),
-                          );
+                        onPressed: () {
+                          Navigator.of(sheetContext).pop();
+                          _showEditDialog(rootContext, current, provider);
                         },
-                        icon: const Icon(Icons.water_drop_outlined, size: 18),
-                        label: Text('Watered ${current.waterCount}×'),
+                        icon: const Icon(Icons.edit_outlined, size: 18),
+                        label: Text(LanguageHelper.pick(
+                          language,
+                          english: 'Edit gratitude',
+                          filipino: 'I-edit ang pasasalamat',
+                        )),
                         style: FilledButton.styleFrom(
                           backgroundColor: AppColors.honeyAmber,
                           foregroundColor: AppColors.onHoney,
@@ -544,15 +579,6 @@ class _GardenScreenState extends State<GardenScreen> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    IconButton.filledTonal(
-                      tooltip: 'Edit gratitude',
-                      onPressed: () {
-                        Navigator.of(sheetContext).pop();
-                        _showEditDialog(rootContext, current, provider);
-                      },
-                      icon: const Icon(Icons.edit_outlined),
-                    ),
-                    const SizedBox(width: 5),
                     IconButton.filledTonal(
                       tooltip: 'Remove flower',
                       onPressed: () async {

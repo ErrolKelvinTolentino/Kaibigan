@@ -19,6 +19,7 @@ class AffirmationsScreen extends StatefulWidget {
 
 class _AffirmationsScreenState extends State<AffirmationsScreen> {
   String? _preparedCategoryId;
+  String? _preparedLanguage;
   List<String> _feed = const [];
   bool _choosingCategory = false;
 
@@ -26,23 +27,31 @@ class _AffirmationsScreenState extends State<AffirmationsScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final provider = context.watch<AffirmationsProvider>();
+    final language = context.watch<UserProvider>().language;
     final category = provider.selectedCategory;
-    if (category != null && category.id != _preparedCategoryId) {
-      _prepareFeed(category, provider);
+    if (category != null &&
+        (category.id != _preparedCategoryId || language != _preparedLanguage)) {
+      _prepareFeed(category, provider, language);
     }
   }
 
   void _prepareFeed(
     AffirmationCategory category,
     AffirmationsProvider provider,
+    String language,
   ) {
-    final today = provider.affirmationForDay(DateTime.now());
-    final shuffled = List<String>.of(category.affirmations)..shuffle(Random());
+    final today = provider.affirmationForDay(
+      DateTime.now(),
+      language: language,
+    );
+    final shuffled = List<String>.of(category.affirmationsFor(language))
+      ..shuffle(Random());
     if (today != null) {
       shuffled.remove(today);
       shuffled.insert(0, today);
     }
     _preparedCategoryId = category.id;
+    _preparedLanguage = language;
     _feed = shuffled;
   }
 
@@ -50,9 +59,11 @@ class _AffirmationsScreenState extends State<AffirmationsScreen> {
     final provider = context.read<AffirmationsProvider>();
     final category = provider.selectedCategory;
     if (category == null) return;
+    final language = context.read<UserProvider>().language;
     setState(() {
       _preparedCategoryId = null;
-      _prepareFeed(category, provider);
+      _preparedLanguage = null;
+      _prepareFeed(category, provider, language);
     });
   }
 
@@ -62,6 +73,7 @@ class _AffirmationsScreenState extends State<AffirmationsScreen> {
     setState(() {
       _choosingCategory = false;
       _preparedCategoryId = null;
+      _preparedLanguage = null;
     });
   }
 
@@ -335,30 +347,36 @@ class _AffirmationFeedState extends State<_AffirmationFeed> {
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
           child: Row(
             children: [
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-                decoration: BoxDecoration(
-                  color: visual.color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(99),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(visual.icon, size: 14, color: visual.color),
-                    const SizedBox(width: 6),
-                    Text(
-                      localized.title,
-                      style: TextStyle(
-                        color: visual.color,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
+              Flexible(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: visual.color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(visual.icon, size: 14, color: visual.color),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          localized.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: visual.color,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 12),
               Text(
                 '${_page + 1} / ${widget.affirmations.length}',
                 key: const ValueKey('affirmation-progress'),
@@ -445,12 +463,13 @@ class _AffirmationFeedState extends State<_AffirmationFeed> {
                     ),
                     const SizedBox(height: 18),
                     if (index < widget.affirmations.length - 1)
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 4,
                         children: [
                           Icon(Icons.keyboard_arrow_up_rounded,
                               size: 18, color: visual.color),
-                          const SizedBox(width: 4),
                           Text(
                             copy('Swipe for another', 'Mag-swipe para sa iba',
                                 'Swipe for another'),
@@ -491,58 +510,9 @@ class _AffirmationFeedState extends State<_AffirmationFeed> {
   AffirmationCategory category,
   String language,
 ) {
-  final values = switch (category.id) {
-    'self_worth' => (
-        filipinoTitle: 'Pagpapahalaga sa sarili',
-        taglishTitle: 'Self-worth',
-        filipinoSubtitle:
-            'Halagang hindi sinusukat ng gawa o pagsang-ayon ng iba.',
-        taglishSubtitle: 'Worth beyond productivity or approval.',
-      ),
-    'quiet_confidence' => (
-        filipinoTitle: 'Tahimik na tiwala',
-        taglishTitle: 'Quiet confidence',
-        filipinoSubtitle: 'Tapang na nabubuo sa maliliit na hakbang.',
-        taglishSubtitle: 'Courage through small, believable steps.',
-      ),
-    'self_compassion' => (
-        filipinoTitle: 'Pag-unawa sa sarili',
-        taglishTitle: 'Self-compassion',
-        filipinoSubtitle: 'Mas mabait na tinig sa mahihirap na araw.',
-        taglishSubtitle: 'A kinder inner voice for difficult days.',
-      ),
-    'calm_grounding' => (
-        filipinoTitle: 'Kalmado at kasalukuyan',
-        taglishTitle: 'Calm & grounding',
-        filipinoSubtitle: 'Mga paalala para bumalik sa kasalukuyan.',
-        taglishSubtitle: 'Present-moment reminders when life feels loud.',
-      ),
-    'resilience_growth' => (
-        filipinoTitle: 'Tatag at paglago',
-        taglishTitle: 'Resilience & growth',
-        filipinoSubtitle: 'Pag-asang hindi itinatanggi ang hirap.',
-        taglishSubtitle: 'Hope without denying what has been hard.',
-      ),
-    _ => (
-        filipinoTitle: 'Hangganan at ugnayan',
-        taglishTitle: 'Boundaries & connection',
-        filipinoSubtitle: 'Pagmamalasakit na may puwang din para sa iyo.',
-        taglishSubtitle: 'Caring relationships with room for you, too.',
-      ),
-  };
   return (
-    title: LanguageHelper.pick(
-      language,
-      english: category.title,
-      filipino: values.filipinoTitle,
-      taglish: values.taglishTitle,
-    ),
-    subtitle: LanguageHelper.pick(
-      language,
-      english: category.subtitle,
-      filipino: values.filipinoSubtitle,
-      taglish: values.taglishSubtitle,
-    ),
+    title: category.titleFor(language),
+    subtitle: category.subtitleFor(language),
   );
 }
 

@@ -85,6 +85,8 @@ class WeeklyReflectionSnapshot {
   final int pairedRoutineMoodDays;
   final double? sleepMoodDelta;
   final int pairedSleepMoodDays;
+  final List<String> journalExcerpts;
+  final List<String> gratitudeExcerpts;
 
   const WeeklyReflectionSnapshot({
     required this.start,
@@ -103,6 +105,8 @@ class WeeklyReflectionSnapshot {
     required this.pairedRoutineMoodDays,
     required this.sleepMoodDelta,
     required this.pairedSleepMoodDays,
+    required this.journalExcerpts,
+    required this.gratitudeExcerpts,
   });
 
   bool get hasData => activeDays > 0;
@@ -125,10 +129,20 @@ class WeeklyReflectionSnapshot {
         pairedRoutineMoodDays,
         _signatureValue(sleepMoodDelta),
         pairedSleepMoodDays,
+        _contentSignature(journalExcerpts),
+        _contentSignature(gratitudeExcerpts),
       ].join('|');
 
   static String _signatureValue(double? value) =>
       value == null ? '-' : value.toStringAsFixed(4);
+
+  static int _contentSignature(Iterable<String> values) {
+    var hash = 17;
+    for (final unit in values.join('\u241e').codeUnits) {
+      hash = ((hash * 31) + unit) & 0x7fffffff;
+    }
+    return hash;
+  }
 
   String toCompactPrompt({required String language}) {
     String average(double? value) =>
@@ -147,17 +161,30 @@ class WeeklyReflectionSnapshot {
     final counts = '$activeDays of 7 active days, $moodCheckIns mood '
         'check-ins, $journalEntries journal entries, $gratitudeEntries '
         'gratitude notes, and $completedRoutines completed routines';
-    if (language == 'filipino') {
-      return 'Pinagsama-samang datos lamang sa huling pitong araw. Coverage '
-          'at bilang: $counts. Mga average: $scores. Mga paghahambing: '
-          '$comparisons.';
-    }
-    if (language == 'taglish') {
-      return 'Seven-day aggregates only. Coverage and counts: $counts. '
-          'Average scores: $scores. Within-week comparisons: $comparisons.';
-    }
-    return 'Seven-day aggregates only. Coverage and counts: $counts. '
-        'Average scores: $scores. Within-week comparisons: $comparisons.';
+    String context(String label, List<String> excerpts) => excerpts.isEmpty
+        ? '$label: none.'
+        : '$label:\n${excerpts.map((text) => '- $text').join('\n')}';
+    final journalContext = context(
+      language == 'filipino'
+          ? 'Mga isinulat ng user sa journal ngayong linggo'
+          : 'User-authored journal entries from this week',
+      journalExcerpts,
+    );
+    final gratitudeContext = context(
+      language == 'filipino'
+          ? 'Mga isinulat na pasasalamat ngayong linggo'
+          : 'User-authored gratitude notes from this week',
+      gratitudeExcerpts,
+    );
+    final intro = language == 'filipino'
+        ? 'Gumawa ng malinaw at makataong pagninilay sa huling pitong araw. '
+            'Gawing pangunahing konteksto ang sariling mga salita ng user; '
+            'suporta lamang ang check-in data.'
+        : 'Create a clear, human weekly reflection. Treat the user\'s own '
+            'words as the primary context; use check-in data only as support.';
+    return '$intro\n\n$journalContext\n\n$gratitudeContext\n\n'
+        'Check-in context: $counts. Average scores on five-point scales: '
+        '$scores. Comparisons: $comparisons.';
   }
 }
 
@@ -167,39 +194,78 @@ class WeeklyReflectionService {
     required String language,
   }) {
     final filipino = language == 'filipino';
-    String score(double? value) => value == null
-        ? (filipino ? 'hindi pa sapat ang data' : 'not enough data yet')
-        : '${value.toStringAsFixed(1)}/5';
+    String checkInSummary() {
+      if (snapshot.moodCheckIns == 0) {
+        return filipino
+            ? 'Walang mood check-in ngayong linggo.'
+            : 'There were no mood check-ins this week.';
+      }
+      String level(double? value, {required bool highIsHard}) {
+        if (value == null) return filipino ? 'hindi na-log' : 'not logged';
+        final descriptor = switch (value) {
+          >= 4.5 => highIsHard
+              ? (filipino ? 'napakataas' : 'very high')
+              : (filipino ? 'napakaganda' : 'very positive'),
+          >= 3.5 => highIsHard
+              ? (filipino ? 'mataas' : 'high')
+              : (filipino ? 'maganda' : 'positive'),
+          >= 2.5 => filipino ? 'nasa gitna' : 'around the middle',
+          >= 1.5 => highIsHard
+              ? (filipino ? 'mababa' : 'low')
+              : (filipino ? 'mababa' : 'low'),
+          _ => highIsHard
+              ? (filipino ? 'napakababa' : 'very low')
+              : (filipino ? 'napakababa' : 'very low'),
+        };
+        return descriptor;
+      }
+
+      return filipino
+          ? 'Sa ${snapshot.moodCheckIns} mood check-in, ang mood ay '
+              '${level(snapshot.averageMood, highIsHard: false)}, ang energy ay '
+              '${level(snapshot.averageEnergy, highIsHard: false)}, at ang stress ay '
+              '${level(snapshot.averageStress, highIsHard: true)}.'
+          : 'Across ${snapshot.moodCheckIns} mood check-in${snapshot.moodCheckIns == 1 ? '' : 's'}, '
+              'mood felt ${level(snapshot.averageMood, highIsHard: false)}, energy was '
+              '${level(snapshot.averageEnergy, highIsHard: false)}, and stress was '
+              '${level(snapshot.averageStress, highIsHard: true)}.';
+    }
+
+    final journalEvidence = snapshot.journalExcerpts.take(2).toList();
+    final ownWords = journalEvidence.isEmpty
+        ? (filipino
+            ? 'Walang journal entry na pagbabatayan ngayong linggo.'
+            : 'There was no journal entry to reflect on this week.')
+        : journalEvidence.length == 1
+            ? (filipino
+                ? 'Sa journal mo, isinulat mo: “${journalEvidence.first}”'
+                : 'In your journal, you wrote: “${journalEvidence.first}”')
+            : (filipino
+                ? 'Sa journal mo, isinulat mo ang “${journalEvidence[0]}” at “${journalEvidence[1]}”.'
+                : 'Your journal included “${journalEvidence[0]}” and “${journalEvidence[1]}”.');
 
     final evidence = filipino
-        ? 'May ${snapshot.activeDays} sa 7 active days, '
-            '${snapshot.moodCheckIns} mood check-ins, '
-            '${snapshot.journalEntries} journal entries, '
-            '${snapshot.gratitudeEntries} gratitude notes, at '
-            '${snapshot.completedRoutines} completed routines. '
-            'Average mood: ${score(snapshot.averageMood)}; energy: '
-            '${score(snapshot.averageEnergy)}; stress: '
-            '${score(snapshot.averageStress)}; sleep: '
-            '${score(snapshot.averageSleep)}.'
-        : 'You had ${snapshot.activeDays} of 7 active days, '
-            '${snapshot.moodCheckIns} mood check-ins, '
-            '${snapshot.journalEntries} journal entries, '
-            '${snapshot.gratitudeEntries} gratitude notes, and '
-            '${snapshot.completedRoutines} completed routines. '
-            'Average mood was ${score(snapshot.averageMood)}; energy '
-            '${score(snapshot.averageEnergy)}; stress '
-            '${score(snapshot.averageStress)}; and sleep '
-            '${score(snapshot.averageSleep)}.';
+        ? '$ownWords ${checkInSummary()}'
+        : '$ownWords ${checkInSummary()}';
 
     String pattern;
     String experiment;
     if (snapshot.activeDays < 3) {
-      pattern = filipino
-          ? 'Hindi pa sapat ang ilang active days para sabihing may repeated pattern. Mas tapat na ituring itong starting point kaysa conclusion.'
-          : 'There are not yet enough active days to claim a repeated pattern. It is more honest to treat this as a starting point than a conclusion.';
-      experiment = filipino
-          ? 'Mag-check in sa parehong oras sa tatlong araw sa susunod na linggo. Isama ang mood, energy, stress, at sleep para magkaroon ng mas malinaw na comparison.'
-          : 'Check in at roughly the same time on three days next week. Include mood, energy, stress, and sleep so the comparison becomes clearer.';
+      final anchor = journalEvidence.isEmpty ? null : journalEvidence.last;
+      pattern = anchor == null
+          ? (filipino
+              ? 'Hindi pa sapat ang ilang active days para sabihing may repeated pattern. Mas tapat na ituring itong starting point kaysa conclusion.'
+              : 'There are not yet enough active days to claim a repeated pattern. It is more honest to treat this as a starting point than a conclusion.')
+          : (filipino
+              ? 'Mahalaga ang sandaling isinulat mo, pero hindi pa sapat ang ilang active days para sabihing paulit-ulit itong pattern. Panimulang konteksto ito, hindi konklusyon.'
+              : 'The moment you wrote about matters, but there are not yet enough active days to call it a repeated pattern. Treat it as meaningful context, not a conclusion.');
+      experiment = anchor == null
+          ? (filipino
+              ? 'Mag-check in sa parehong oras sa tatlong araw sa susunod na linggo. Isama ang mood, energy, stress, at sleep para magkaroon ng mas malinaw na comparison.'
+              : 'Check in at roughly the same time on three days next week. Include mood, energy, stress, and sleep so the comparison becomes clearer.')
+          : (filipino
+              ? 'Balikan ang sandaling “$anchor” at tapusin ang isang pangungusap: “Ang kailangan ko noon ay…”'
+              : 'Return to “$anchor” and finish one sentence: “What I needed then was…”');
     } else if (snapshot.sleepMoodDelta != null &&
         snapshot.sleepMoodDelta!.abs() >= 0.5) {
       pattern = filipino
@@ -217,12 +283,21 @@ class WeeklyReflectionService {
           ? 'Ulitin ang isang maikling routine sa tatlong comparable days at mag-check in bago at pagkatapos para masubukan ang pattern.'
           : 'Repeat one short routine on three comparable days and check in before and after it to test the pattern.';
     } else {
-      pattern = filipino
-          ? 'May sapat na activity para mapansin ang linggo, pero wala pang isang malakas na relationship sa routine, sleep, at mood. Hindi ibig sabihin na walang pattern—kailangan lang ng mas consistent na comparison.'
-          : 'There is enough activity to notice the week, but no strong relationship between routine, sleep, and mood stands out yet. That does not mean there is no pattern—only that a more consistent comparison is needed.';
-      experiment = filipino
-          ? 'Pumili ng isang busy period at mag-check in bago at pagkatapos nito sa tatlong araw. Panatilihing maikli para madaling ulitin.'
-          : 'Choose one busy period and check in before and after it on three days. Keep the check-in brief enough to repeat.';
+      pattern = journalEvidence.isNotEmpty
+          ? (filipino
+              ? 'Mas malinaw ang linggo sa mga salitang isinulat mo kaysa sa mga score lamang. Ipinapakita ng mga sandaling ito kung ano ang bumabalik sa isip mo, pero kailangan pa rin ng sariling pagtingin mo para malaman kung ano ang pinakamahalaga.'
+              : 'Your own words give this week more meaning than the scores alone. These moments show what returned to your mind, while leaving you room to decide what mattered most.')
+          : (filipino
+              ? 'May activity ngayong linggo, pero walang journal text na nagbibigay ng sapat na konteksto para sa makabuluhang pattern.'
+              : 'There was activity this week, but no journal text to give it enough context for a meaningful pattern.');
+      final anchor = journalEvidence.isEmpty ? null : journalEvidence.last;
+      experiment = anchor == null
+          ? (filipino
+              ? 'Sa susunod na check-in, magsulat ng isang pangungusap tungkol sa nangyari at isang pangungusap tungkol sa kailangan mo.'
+              : 'At your next check-in, write one sentence about what happened and one sentence about what you needed.')
+          : (filipino
+              ? 'Balikan ang sandaling “$anchor” at tapusin ang isang pangungusap: “Ang kailangan ko noon ay…”'
+              : 'Return to “$anchor” and finish one sentence: “What I needed then was…”');
     }
 
     return WeeklyReflectionNarrative(
@@ -247,10 +322,14 @@ class WeeklyReflectionService {
 
     final recentMoods = moods.where((item) => isRecent(item.createdAt)).toList()
       ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    final recentJournals =
-        journals.where((item) => isRecent(item.createdAt)).toList();
-    final recentGratitudes =
-        gratitudes.where((item) => isRecent(item.createdAt)).toList();
+    final recentJournals = journals
+        .where((item) => isRecent(item.createdAt))
+        .toList()
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    final recentGratitudes = gratitudes
+        .where((item) => isRecent(item.createdAt))
+        .toList()
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     final recentRoutines =
         routines.where((item) => isRecent(item.completedAt)).toList();
 
@@ -333,7 +412,25 @@ class WeeklyReflectionService {
           ? _average(betterSleepMood) - _average(lowerSleepMood)
           : null,
       pairedSleepMoodDays: betterSleepMood.length + lowerSleepMood.length,
+      journalExcerpts: recentJournals
+          .map((entry) => _excerpt(entry.content))
+          .where((text) => text.isNotEmpty)
+          .take(5)
+          .toList(growable: false),
+      gratitudeExcerpts: recentGratitudes
+          .map((entry) => _excerpt(entry.content, maxLength: 180))
+          .where((text) => text.isNotEmpty)
+          .take(7)
+          .toList(growable: false),
     );
+  }
+
+  static String _excerpt(String value, {int maxLength = 320}) {
+    final clean = value.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (clean.length <= maxLength) return clean;
+    final shortened = clean.substring(0, maxLength);
+    final lastSpace = shortened.lastIndexOf(' ');
+    return '${shortened.substring(0, lastSpace > 80 ? lastSpace : maxLength).trim()}…';
   }
 
   static double _averageInts(Iterable<int> values) =>

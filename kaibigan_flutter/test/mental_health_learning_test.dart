@@ -417,6 +417,58 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Ask Kai stays grounded in the current learning lesson',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => UserProvider(),
+        child: MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: LearningLessonScreen(
+            lesson: LearningCatalog.byId('understanding-anxiety'),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('ask-kai-about-learning-idea')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('ask-kai-about-learning-idea')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('learning-ask-kai-sheet')),
+      findsOneWidget,
+    );
+    expect(find.text('Ask Kai about this idea'), findsWidgets);
+    expect(
+        find.textContaining('other lessons, and mental health'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('learning-kai-question-field')),
+      'What is the weather tomorrow?',
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('submit-learning-kai-question')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('learning-kai-answer')),
+      findsOneWidget,
+    );
+    expect(find.text('Staying with this lesson'), findsOneWidget);
+    expect(find.textContaining('outside this lesson'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Philippine support contacts reflow without overflow',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(320, 5000));

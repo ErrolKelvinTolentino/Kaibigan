@@ -1,0 +1,6 @@
+# Copy to key.properties (which is ignored by git) and use the path to your
+# private upload keystore. Keep the real passwords outside version control.
+storePassword=replace-me
+keyPassword=replace-me
+keyAlias=upload
+storeFile=C:\\secure-path\\kaibigan-upload-keystore.jks

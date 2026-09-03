@@ -123,12 +123,19 @@ class _TodaysHighlightScreenState extends State<TodaysHighlightScreen> {
         centerTitle: true,
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
-          child: _isSaved
-              ? _buildSuccessView(context, isDark, mascot)
-              : _buildInputView(context, isDark, mascot, remainingChars),
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
+            child: _isSaved
+                ? ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight - 40,
+                    ),
+                    child: _buildSuccessView(context, isDark, mascot),
+                  )
+                : _buildInputView(context, isDark, mascot, remainingChars),
+          ),
         ),
       ),
     );
@@ -281,22 +288,39 @@ class _TodaysHighlightScreenState extends State<TodaysHighlightScreen> {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: Image.asset(
-            FeatureIconHelper.todaysHighlight,
-            width: 120,
-            height: 120,
-            fit: BoxFit.contain,
-            errorBuilder: (context, error, stackTrace) => const Icon(
-                Icons.wb_sunny_rounded,
-                size: 60,
-                color: AppColors.honeyGold),
+        Container(
+          width: 200,
+          height: 200,
+          decoration: BoxDecoration(
+            color: AppColors.honeyGold.withValues(alpha: isDark ? 0.14 : 0.10),
+            borderRadius: BorderRadius.circular(36),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.honeyAmber
+                    .withValues(alpha: isDark ? 0.18 : 0.14),
+                blurRadius: 28,
+                offset: const Offset(0, 10),
+              ),
+            ],
           ),
-        ).animate().scale(duration: 320.ms, curve: Curves.easeOutCubic),
+          padding: const EdgeInsets.all(12),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(28),
+            child: Image.asset(
+              FeatureIconHelper.todaysHighlight,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) => const Icon(
+                Icons.wb_sunny_rounded,
+                size: 80,
+                color: AppColors.honeyGold,
+              ),
+            ),
+          ),
+        ).animate().scale(duration: 380.ms, curve: Curves.easeOutBack),
         const SizedBox(height: 24),
         Text(
           "A piece of today is safe here",
+          textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.w800,
@@ -304,20 +328,39 @@ class _TodaysHighlightScreenState extends State<TodaysHighlightScreen> {
                 isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
           ),
         ),
-        const SizedBox(height: 12),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
+        const SizedBox(height: 14),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.darkCard : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isDark
+                  ? AppColors.darkCardBorder
+                  : AppColors.honeyAmber.withValues(alpha: 0.22),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
           child: Text(
             '"${_controller.text.trim()}"',
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 16,
               fontStyle: FontStyle.italic,
               color: AppColors.honeyAmber,
               fontWeight: FontWeight.w600,
+              height: 1.4,
             ),
           ),
-        ),
+        ).animate().fadeIn(delay: 100.ms),
         const SizedBox(height: 16),
         Text(
           "You can return to this moment whenever you need it.",
@@ -329,10 +372,10 @@ class _TodaysHighlightScreenState extends State<TodaysHighlightScreen> {
                 : AppColors.textSecondaryLight,
           ),
         ),
-        const SizedBox(height: 36),
+        const SizedBox(height: 32),
         SizedBox(
           width: double.infinity,
-          height: 52,
+          height: 54,
           child: ElevatedButton(
             onPressed: () {
               if (widget.onCompleted != null) {
@@ -345,7 +388,7 @@ class _TodaysHighlightScreenState extends State<TodaysHighlightScreen> {
               backgroundColor: AppColors.sageGreen,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18)),
+                  borderRadius: BorderRadius.circular(20)),
             ),
             child: const Text("Done",
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),

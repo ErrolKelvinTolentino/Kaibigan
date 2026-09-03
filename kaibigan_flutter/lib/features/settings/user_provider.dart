@@ -24,6 +24,7 @@ class UserProvider extends ChangeNotifier {
   Future<void>? _initialLoad;
   StreamSubscription<AuthState>? _authSubscription;
   bool _hasLoadedPreferences = false;
+  bool _hasSeenKaiValueDemo = false;
 
   String _displayName = 'Friend';
   String _selectedCompanion = "kai"; // 'kai', 'ann', 'bee'
@@ -48,6 +49,7 @@ class UserProvider extends ChangeNotifier {
   GardenAppearance get gardenAppearance => _gardenAppearance;
   Future<void> get ready => _ensureLoaded();
   bool get hasLoadedPreferences => _hasLoadedPreferences;
+  bool get hasSeenKaiValueDemo => _hasSeenKaiValueDemo;
   JournalPaperStyle get journalPaperStyle => _journalPaperStyle;
   JournalAccent get journalAccent => _journalAccent;
   AuthMode get authMode => _authMode;
@@ -86,6 +88,7 @@ class UserProvider extends ChangeNotifier {
       prefs.getString('journal_accent'),
     );
     _userEmail = prefs.getString('user_email');
+    _hasSeenKaiValueDemo = prefs.getBool('kai_value_demo_seen_v1') ?? false;
 
     if (SupabaseService.isInitialized) {
       final currentUser = SupabaseService.client.auth.currentUser;
@@ -413,6 +416,53 @@ class UserProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<bool> deleteAccount() async {
+    await _ensureLoaded();
+    _dataError = null;
+    if (!SupabaseService.isInitialized ||
+        SupabaseService.client.auth.currentUser == null) {
+      _dataError = 'Account deletion is unavailable right now.';
+      notifyListeners();
+      return false;
+    }
+
+    try {
+      final response =
+          await SupabaseService.client.functions.invoke('delete-account');
+      if (response.status < 200 || response.status >= 300) {
+        throw StateError('Delete account returned ${response.status}.');
+      }
+      try {
+        await SupabaseService.client.auth.signOut(scope: SignOutScope.local);
+      } catch (_) {
+        // The server has already removed the identity. Continue clearing the
+        // device even if the now-invalid session cannot be signed out remotely.
+      }
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+      _authMode = AuthMode.pending;
+      _userEmail = null;
+      _displayName = 'Friend';
+      _selectedCompanion = 'kai';
+      _preferredLanguage = 'taglish';
+      _isPasswordRecovery = false;
+      _authError = null;
+      _dataError = null;
+      notifyListeners();
+      return true;
+    } catch (error) {
+      ApiLogger.logDatabase(
+        operation: 'DELETE',
+        table: 'account',
+        error: error.toString(),
+      );
+      _dataError =
+          'We could not delete your account. Check your connection and try again.';
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<void> _saveUserState() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('auth_mode', _authMode.name);
@@ -475,6 +525,18 @@ class UserProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('preferred_language', lang);
     return _syncCurrentProfile();
+  }
+
+  void completeKaiValueDemo() {
+    if (_hasSeenKaiValueDemo) return;
+    _hasSeenKaiValueDemo = true;
+    notifyListeners();
+    unawaited(_saveKaiValueDemoPreference());
+  }
+
+  Future<void> _saveKaiValueDemoPreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('kai_value_demo_seen_v1', true);
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {

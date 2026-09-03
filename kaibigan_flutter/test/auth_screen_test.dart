@@ -8,6 +8,7 @@ import 'package:kaibigan_flutter/core/widgets/kaibigan_loading_screen.dart';
 import 'package:kaibigan_flutter/core/widgets/kaibigan_logo.dart';
 import 'package:kaibigan_flutter/core/widgets/kaibigan_state_view.dart';
 import 'package:kaibigan_flutter/features/auth_onboarding/auth_screen.dart';
+import 'package:kaibigan_flutter/features/auth_onboarding/kai_value_demo_screen.dart';
 import 'package:kaibigan_flutter/features/settings/user_provider.dart';
 
 void main() {
@@ -80,6 +81,47 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Please enter a valid email address.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Kai demonstrates value before registration is requested',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    bool? registrationRequested;
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => UserProvider(),
+        child: MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: KaiValueDemoScreen(
+            onContinue: (register) => registrationRequested = register,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('MEET KAI — NO ACCOUNT NEEDED'), findsOneWidget);
+    expect(find.text('Try one private sample. Nothing here is saved or sent.'),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('demo-kai-response')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('demo-feeling-overwhelmed')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('demo-kai-response')), findsOneWidget);
+    expect(find.textContaining('too much to hold at once'), findsOneWidget);
+
+    final createButton = find.byKey(const ValueKey('demo-create-account'));
+    await tester.ensureVisible(createButton);
+    await tester.tap(createButton);
+    await tester.pump();
+
+    expect(registrationRequested, isTrue);
     expect(tester.takeException(), isNull);
   });
 

@@ -53,6 +53,7 @@ Thumbs.db
 /android/app/profile
 /android/app/release
 /android/local.properties
+/android/key.properties
 /android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
 
 # =================================================================

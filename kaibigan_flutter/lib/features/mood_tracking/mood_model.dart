@@ -60,7 +60,7 @@ class MoodLog {
       'sleep_quality': sleepQuality,
       'anxiety_level': anxietyLevel,
       'note': note,
-      'created_at': createdAt.toIso8601String(),
+      'created_at': createdAt.toUtc().toIso8601String(),
     };
     if (userId != null && userId.isNotEmpty) {
       map['user_id'] = userId;

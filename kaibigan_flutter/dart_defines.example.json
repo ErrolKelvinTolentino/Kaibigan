@@ -1,7 +1,7 @@
 {
   "SUPABASE_URL": "https://your-supabase-project.supabase.co",
   "SUPABASE_ANON_KEY": "your_public_supabase_anon_key",
-  "PASSWORD_RESET_REDIRECT_URL": "https://your-app.example.com/password-reset",
-  "OAUTH_REDIRECT_URL": "https://your-app.example.com",
+  "PASSWORD_RESET_REDIRECT_URL": "com.kaibigan.app://auth-callback",
+  "OAUTH_REDIRECT_URL": "com.kaibigan.app://auth-callback",
   "ENABLE_GOOGLE_AUTH": false
 }

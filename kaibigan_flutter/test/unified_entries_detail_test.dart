@@ -160,6 +160,13 @@ void main() {
       expect(find.byKey(ValueKey(detailCase.key)), findsOneWidget);
       expect(find.text(detailCase.marker), findsOneWidget);
       expect(find.byType(BottomSheet), findsNothing);
+      if (detailCase.key == 'entry-detail-gratitude') {
+        expect(find.text('“The warm meal my family shared.”'), findsOneWidget);
+        expect(find.byKey(const ValueKey('entry-detail-water-flower')),
+            findsNothing);
+        expect(find.byIcon(Icons.water_drop_outlined), findsNothing);
+        expect(find.textContaining('Revisited'), findsNothing);
+      }
 
       await tester.tap(find.byTooltip('Back to all entries'));
       await tester.pumpAndSettle();

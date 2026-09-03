@@ -14,11 +14,13 @@ dependencies:
 
   # Database & Environment
   supabase_flutter: ^2.8.0
+  supabase: ^2.16.1
 
   # State Management
   provider: ^6.1.2
 
   # UI, Fonts & Icons
+  cupertino_icons: ^1.0.8
   google_fonts: ^6.2.1
   flutter_animate: ^4.5.2
   fl_chart: ^0.70.0
@@ -36,6 +38,7 @@ dependencies:
   pdf: ^3.11.1
   printing: ^5.13.2
   flutter_local_notifications: ^18.0.1
+  flutter_dotenv: ^6.0.1
 
 dev_dependencies:
   flutter_test:
@@ -74,6 +77,7 @@ flutter_native_splash:
 flutter:
   uses-material-design: true
   assets:
+    - .env
     - assets/Kaibigan Logo.png
     - assets/feature icons/
     - assets/mood tracker/

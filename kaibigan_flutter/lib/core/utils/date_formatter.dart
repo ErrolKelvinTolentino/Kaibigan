@@ -31,6 +31,20 @@ class DateFormatter {
     return DateFormat('MMM d, yyyy').format(date);
   }
 
+  static String formatJournalDate(DateTime date, {String language = 'taglish'}) {
+    final localDate = date.toLocal();
+    final now = DateTime.now();
+    final isToday = localDate.year == now.year &&
+        localDate.month == now.month &&
+        localDate.day == now.day;
+    final timeStr = DateFormat('h:mm a').format(localDate);
+    if (isToday) {
+      final todayLabel = language == 'filipino' ? 'Ngayon' : 'Today';
+      return '$todayLabel • $timeStr';
+    }
+    return '${DateFormat('MMM d, yyyy').format(localDate)} • $timeStr';
+  }
+
   static String formatTimeOnly(DateTime date) {
     return DateFormat('h:mm a').format(date);
   }

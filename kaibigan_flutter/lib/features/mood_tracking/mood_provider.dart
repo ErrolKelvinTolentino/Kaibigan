@@ -10,7 +10,10 @@ class MoodProvider extends ChangeNotifier {
   String? _errorMessage;
   String? _activeUserId;
 
-  List<MoodLog> get logs => List.unmodifiable(_logs);
+  List<MoodLog> get logs => List.unmodifiable(
+      List<MoodLog>.of(_logs)
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt)),
+  );
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
@@ -63,6 +66,7 @@ class MoodProvider extends ChangeNotifier {
       final List data = response as List;
       _logs.clear();
       _logs.addAll(data.map((e) => MoodLog.fromMap(e)).toList());
+      _logs.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
       ApiLogger.logDatabase(
         operation: 'SELECT',
@@ -146,7 +150,11 @@ class MoodProvider extends ChangeNotifier {
           'Your mood check-in could not be saved because sync is unavailable.';
     }
 
-    if (saved) _logs.insert(0, newLog);
+    if (saved) {
+      _logs.removeWhere((l) => l.id == newLog.id);
+      _logs.insert(0, newLog);
+      _logs.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }
 
     _isLoading = false;
     notifyListeners();
@@ -173,6 +181,7 @@ class MoodProvider extends ChangeNotifier {
     if (index != -1) {
       final previous = _logs[index];
       _logs[index] = updated;
+      _logs.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       notifyListeners();
 
       if (SupabaseService.isInitialized && UuidHelper.isValidUuid(updated.id)) {

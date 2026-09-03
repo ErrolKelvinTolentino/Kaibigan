@@ -10,6 +10,7 @@ import '../../core/widgets/kaibigan_logo.dart';
 import '../../core/widgets/kaibigan_surface.dart';
 import '../../core/widgets/mobile_layout.dart';
 import '../../core/widgets/sync_status_banner.dart';
+import '../affirmations/affirmation_model.dart';
 import '../affirmations/affirmations_provider.dart';
 import '../affirmations/affirmations_screen.dart';
 import '../future_letters/future_letters_screen.dart';
@@ -31,15 +32,16 @@ import '../routines/screens/daily_reflection_screen.dart';
 import '../routines/screens/grounding_session_screen.dart';
 import '../routines/screens/mindfulness_meditation_screen.dart';
 import '../routines/screens/sleep_analytics_screen.dart';
-import '../routines/screens/sleep_log_flow_screen.dart';
 import '../routines/screens/todays_focus_screen.dart';
 import '../routines/screens/todays_highlight_screen.dart';
 import '../settings/settings_screen.dart';
 import '../settings/user_provider.dart';
 import '../unified_entries/unified_entries_screen.dart';
 import '../weekly_reflection/weekly_reflection_screen.dart';
-import 'adaptive_support_recommendation.dart';
-import 'widgets/adaptive_support_card.dart';
+import 'activity_feedback_store.dart';
+import 'activity_usage_store.dart';
+import 'widgets/home_favorites_carousel.dart';
+import 'widgets/home_streak_greeting_card.dart';
 import 'widgets/today_moments_card.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -50,21 +52,78 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  Set<DateTime> _loginDates = {};
+  Map<String, int> _activityCounts = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadActivityStats();
+  }
+
+  Future<void> _loadActivityStats() async {
+    await ActivityUsageStore.recordTodayLogin();
+    final dates = await ActivityUsageStore.loadLoginDates();
+    final counts = await ActivityUsageStore.loadActivityCounts();
+    if (mounted) {
+      setState(() {
+        _loginDates = dates;
+        _activityCounts = counts;
+      });
+    }
+  }
+
+  int _calculateStreak(Set<DateTime> dates) {
+    if (dates.isEmpty) return 1;
+    final now = DateTime.now();
+    var cursor = DateTime(now.year, now.month, now.day);
+    if (!dates.contains(cursor)) {
+      cursor = cursor.subtract(const Duration(days: 1));
+    }
+    var streak = 0;
+    while (dates.contains(cursor)) {
+      streak++;
+      cursor = cursor.subtract(const Duration(days: 1));
+    }
+    return streak > 0 ? streak : 1;
+  }
+
+  T? _maybeRead<T extends ChangeNotifier>(BuildContext context) {
+    try {
+      return context.read<T>();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  T? _maybeWatch<T extends ChangeNotifier>(BuildContext context) {
+    try {
+      return context.watch<T>();
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _refreshHome() async {
-    await Future.wait([
-      context.read<RoutinesProvider>().fetchRoutineLogs(),
-      context.read<MoodProvider>().fetchMoodLogs(),
-      context.read<JournalProvider>().fetchJournalEntries(),
-      context.read<GratitudeProvider>().fetchGratitudeEntries(),
-      context.read<LettersProvider>().fetchLetters(),
-    ]);
+    final futures = <Future<void>>[_loadActivityStats()];
+    final routines = _maybeRead<RoutinesProvider>(context);
+    if (routines != null) futures.add(routines.fetchRoutineLogs());
+    final mood = _maybeRead<MoodProvider>(context);
+    if (mood != null) futures.add(mood.fetchMoodLogs());
+    final journal = _maybeRead<JournalProvider>(context);
+    if (journal != null) futures.add(journal.fetchJournalEntries());
+    final garden = _maybeRead<GratitudeProvider>(context);
+    if (garden != null) futures.add(garden.fetchGratitudeEntries());
+    final letters = _maybeRead<LettersProvider>(context);
+    if (letters != null) futures.add(letters.fetchLetters());
+    await Future.wait(futures);
   }
 
   Future<void> _openRoutine(
     RoutineConfig routine, {
     required bool resume,
   }) async {
-    await Navigator.of(context).push<bool>(
+    final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => ProgressiveRoutineRunner(
           routineType: routine.type,
@@ -75,18 +134,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (!mounted) return;
     await context.read<RoutinesProvider>().fetchRoutineLogs();
-  }
-
-  void _openAdaptiveSupport(AdaptiveSupportKind kind) {
-    final screen = switch (kind) {
-      AdaptiveSupportKind.checkIn => const MoodTrackerScreen(),
-      AdaptiveSupportKind.grounding => const GroundingSessionScreen(),
-      AdaptiveSupportKind.breathing => const MindfulnessMeditationScreen(),
-      AdaptiveSupportKind.reflection => const DailyReflectionScreen(),
-      AdaptiveSupportKind.gratitude => const GardenScreen(),
-      AdaptiveSupportKind.focus => const TodaysFocusScreen(),
-    };
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+    if (mounted && result == true) {
+      await _askActivityFeedback(
+        activityId: 'routine:${routine.type.name}',
+        activityLabel: routine.title,
+      );
+    }
   }
 
   void _openAffirmations() {
@@ -101,15 +154,211 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _openHighlight(RoutineLog? highlight) async {
+    final before = highlight?.focusOrHighlight ?? '';
+    final routines = context.read<RoutinesProvider>();
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => TodaysHighlightScreen(existingHighlight: highlight),
+      ),
+    );
+    if (!mounted) return;
+    await routines.fetchRoutineLogs();
+    if (!mounted) return;
+    final changed = (routines.todayHighlight?.focusOrHighlight ?? '') != before;
+    if (result == true || changed) {
+      await _askActivityFeedback(
+        activityId: 'highlight',
+        activityLabel: 'moment you saved',
+      );
+    }
+  }
+
+  Future<void> _askActivityFeedback({
+    required String activityId,
+    required String activityLabel,
+  }) async {
+    if (!mounted) return;
+    final language = context.read<UserProvider>().language;
+    final result = await showModalBottomSheet<ActivityHelpfulness>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        final isDark = Theme.of(sheetContext).brightness == Brightness.dark;
+        return SafeArea(
+          child: Container(
+            key: const ValueKey('activity-feedback-sheet'),
+            margin: const EdgeInsets.all(12),
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.darkCard : Colors.white,
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(
+                color:
+                    isDark ? AppColors.darkCardBorder : AppColors.honeyBorder,
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'KAI CHECKS BACK IN',
+                  style: TextStyle(
+                    color: AppColors.honeyAmber,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  LanguageHelper.pick(
+                    language,
+                    english: 'Did that help?',
+                    filipino: 'Nakatulong ba iyon?',
+                    taglish: 'Did that help?',
+                  ),
+                  style: TextStyle(
+                    color: isDark
+                        ? AppColors.textPrimaryDark
+                        : AppColors.textPrimaryLight,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  LanguageHelper.pick(
+                    language,
+                    english:
+                        'Your answer helps Kai choose what to offer next. No journal text is saved with it.',
+                    filipino:
+                        'Tutulong ang sagot mo kay Kai na pumili ng susunod na alok. Walang journal text na ise-save rito.',
+                    taglish:
+                        'Your answer helps Kai choose what to offer next. Walang journal text na ise-save.',
+                  ),
+                  style: TextStyle(
+                    color: isDark
+                        ? AppColors.textSecondaryDark
+                        : AppColors.textSecondaryLight,
+                    fontSize: 12.5,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _FeedbackChoice(
+                  key: const ValueKey('activity-helped'),
+                  icon: Icons.sentiment_satisfied_alt_rounded,
+                  label: LanguageHelper.pick(
+                    language,
+                    english: 'Yes, a little',
+                    filipino: 'Oo, kahit kaunti',
+                  ),
+                  onTap: () => Navigator.pop(
+                    sheetContext,
+                    ActivityHelpfulness.helped,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _FeedbackChoice(
+                  key: const ValueKey('activity-unsure'),
+                  icon: Icons.remove_rounded,
+                  label: LanguageHelper.pick(
+                    language,
+                    english: 'Not sure yet',
+                    filipino: 'Hindi pa sigurado',
+                  ),
+                  onTap: () => Navigator.pop(
+                    sheetContext,
+                    ActivityHelpfulness.unsure,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _FeedbackChoice(
+                  key: const ValueKey('activity-not-helpful'),
+                  icon: Icons.swap_horiz_rounded,
+                  label: LanguageHelper.pick(
+                    language,
+                    english: 'No—try something else',
+                    filipino: 'Hindi—subukan ang iba',
+                  ),
+                  onTap: () => Navigator.pop(
+                    sheetContext,
+                    ActivityHelpfulness.notHelpful,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (result == null || !mounted) return;
+    await ActivityFeedbackStore.add(
+      ActivityFeedbackRecord(
+        activityId: activityId,
+        helpfulness: result,
+        createdAt: DateTime.now(),
+      ),
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          result == ActivityHelpfulness.notHelpful
+              ? LanguageHelper.pick(
+                  language,
+                  english: 'Thanks. Kai will try a different kind of support.',
+                  filipino:
+                      'Salamat. Susubukan ni Kai ang ibang uri ng suporta.',
+                )
+              : LanguageHelper.pick(
+                  language,
+                  english: 'Thanks. Kai will remember what felt useful.',
+                  filipino: 'Salamat. Tatandaan ni Kai ang nakatulong.',
+                ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final user = context.watch<UserProvider>();
     final language = user.language;
-    final affirmations = context.watch<AffirmationsProvider>();
-    final letters = context.watch<LettersProvider>();
-    final mood = context.watch<MoodProvider>();
+    final affirmations = _maybeWatch<AffirmationsProvider>(context);
+    final letters = _maybeWatch<LettersProvider>(context);
     final routines = context.watch<RoutinesProvider>();
+    final journal = _maybeWatch<JournalProvider>(context);
+    final garden = _maybeWatch<GratitudeProvider>(context);
+    final mood = _maybeWatch<MoodProvider>(context);
+
+    final activityDates = <DateTime>{
+      if (journal != null)
+        ...journal.entries.map((entry) {
+          final d = entry.createdAt.toLocal();
+          return DateTime(d.year, d.month, d.day);
+        }),
+      if (garden != null)
+        ...garden.entries.map((entry) {
+          final d = entry.createdAt.toLocal();
+          return DateTime(d.year, d.month, d.day);
+        }),
+      if (mood != null)
+        ...mood.logs.map((entry) {
+          final d = entry.createdAt.toLocal();
+          return DateTime(d.year, d.month, d.day);
+        }),
+      ...routines.logs.map((entry) {
+        final d = entry.completedAt.toLocal();
+        return DateTime(d.year, d.month, d.day);
+      }),
+      ..._loginDates,
+    };
+    final streakCount = _calculateStreak(activityDates);
+
     final activeSession = routines.activeSession;
     final activeRoutine = activeSession == null
         ? null
@@ -121,14 +370,15 @@ class _HomeScreenState extends State<HomeScreen> {
         routine != null && routines.isRoutineCompletedTodayById(routine.id);
     final isResuming = activeRoutine != null && !routineCompleted;
     final highlight = routines.todayHighlight;
-    final adaptiveSupport = AdaptiveSupportEngine.recommend(
-      logs: mood.logs,
-      now: DateTime.now(),
-    );
-    final affirmation = affirmations.homeAffirmationForDay(DateTime.now());
-    final arrivedLetterCount = letters.letters
-        .where((letter) => letter.isReadyToUnlock && !letter.isOpened)
-        .length;
+    final affirmation = affirmations?.homeAffirmationForDay(
+          DateTime.now(),
+          language: language,
+        ) ??
+        '';
+    final arrivedLetterCount = letters?.letters
+            .where((letter) => letter.isReadyToUnlock && !letter.isOpened)
+            .length ??
+        0;
     final pagePadding = MobileLayout.horizontalPadding(context);
 
     return Scaffold(
@@ -154,6 +404,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               slivers: [
                 SliverPadding(
+                  key: const ValueKey('home-greeting-block'),
                   padding: EdgeInsets.fromLTRB(
                     pagePadding,
                     8,
@@ -161,7 +412,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     8,
                   ),
                   sliver: SliverToBoxAdapter(
-                    child: _buildHeader(context, user, isDark),
+                    child: _buildHeader(
+                      context,
+                      user,
+                      isDark,
+                      streakCount,
+                      activityDates,
+                      garden,
+                    ),
                   ),
                 ),
                 if (routines.errorMessage != null)
@@ -176,26 +434,156 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                 SliverPadding(
-                  padding: EdgeInsets.fromLTRB(pagePadding, 8, pagePadding, 6),
+                  padding: EdgeInsets.fromLTRB(
+                    pagePadding + 2,
+                    16,
+                    pagePadding + 2,
+                    8,
+                  ),
                   sliver: SliverToBoxAdapter(
-                    child: TodayMomentsCard(
-                      language: language,
-                      isDark: isDark,
-                      category: affirmations.selectedCategory,
-                      affirmation: affirmation,
-                      arrivedLetterCount: arrivedLetterCount,
-                      onLettersTap: _openFutureLetters,
+                    child: _sectionHeading(
+                      title: LanguageHelper.pick(
+                        language,
+                        english: 'My Favorites',
+                        filipino: 'Aking mga Paborito',
+                      ),
+                      subtitle: LanguageHelper.pick(
+                        language,
+                        english: 'Your most used spaces and daily companions',
+                        filipino: 'Iyong mga pinakaginagamit na espasyo',
+                      ),
+                      action: TextButton(
+                        key: const ValueKey('see-all-favorites'),
+                        onPressed: () => _openActivitiesMenu(context),
+                        child: Text(
+                          LanguageHelper.pick(
+                            language,
+                            english: 'See all',
+                            filipino: 'Tingnan lahat',
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  key: const ValueKey('home-favorites-block'),
+                  child: HomeFavoritesCarousel(
+                    favorites: _buildFavoritesList(context, language),
+                    isDark: isDark,
+                    language: language,
+                  ),
+                ),
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(
+                    pagePadding + 2,
+                    16,
+                    pagePadding + 2,
+                    8,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: _sectionHeading(
+                      title: LanguageHelper.pick(
+                        language,
+                        english: 'Today’s highlight',
+                        filipino: 'Mahalagang sandali ngayon',
+                      ),
+                      subtitle: LanguageHelper.pick(
+                        language,
+                        english: 'One moment worth keeping',
+                        filipino: 'Isang sandaling nais mong itabi',
+                      ),
                     ),
                   ),
                 ),
                 SliverPadding(
-                  padding: EdgeInsets.fromLTRB(pagePadding, 6, pagePadding, 6),
+                  key: const ValueKey('home-highlight-block'),
+                  padding: EdgeInsets.fromLTRB(pagePadding, 4, pagePadding, 8),
                   sliver: SliverToBoxAdapter(
-                    child: AdaptiveSupportCard(
-                      recommendation: adaptiveSupport,
+                    child: _buildHighlightCard(
+                      context: context,
+                      isDark: isDark,
+                      highlight: highlight,
+                    ),
+                  ),
+                ),
+                if (arrivedLetterCount > 0) ...[
+                  SliverPadding(
+                    padding: EdgeInsets.fromLTRB(
+                      pagePadding + 2,
+                      18,
+                      pagePadding + 2,
+                      8,
+                    ),
+                    sliver: SliverToBoxAdapter(
+                      child: _sectionHeading(
+                        title: LanguageHelper.pick(
+                          language,
+                          english: 'A note from your future self',
+                          filipino: 'Tala mula sa iyong future self',
+                        ),
+                        subtitle: LanguageHelper.pick(
+                          language,
+                          english: 'A message waiting for today',
+                          filipino: 'Mensahe para sa araw na ito',
+                        ),
+                      ),
+                    ),
+                  ),
+                  SliverPadding(
+                    key: const ValueKey('home-future-self-block'),
+                    padding:
+                        EdgeInsets.fromLTRB(pagePadding, 0, pagePadding, 6),
+                    sliver: SliverToBoxAdapter(
+                      child: TodayMomentsCard(
+                        key: const ValueKey('home-future-self-note'),
+                        language: language,
+                        isDark: isDark,
+                        category: affirmations?.selectedCategory ??
+                            AffirmationCatalog.categories.first,
+                        affirmation: affirmation,
+                        arrivedLetterCount: arrivedLetterCount,
+                        onLettersTap: _openFutureLetters,
+                        showAffirmation: false,
+                      ),
+                    ),
+                  ),
+                ],
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(
+                    pagePadding + 2,
+                    18,
+                    pagePadding + 2,
+                    8,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: _sectionHeading(
+                      title: LanguageHelper.pick(
+                        language,
+                        english: 'Today’s affirmation',
+                        filipino: 'Pagpapatibay ngayong araw',
+                      ),
+                      subtitle: LanguageHelper.pick(
+                        language,
+                        english: 'A few words to carry with you',
+                        filipino: 'Mga salitang dadalhin mo ngayon',
+                      ),
+                    ),
+                  ),
+                ),
+                SliverPadding(
+                  key: const ValueKey('home-affirmation-block'),
+                  padding: EdgeInsets.fromLTRB(pagePadding, 0, pagePadding, 6),
+                  sliver: SliverToBoxAdapter(
+                    child: TodayMomentsCard(
                       language: language,
                       isDark: isDark,
-                      onTap: () => _openAdaptiveSupport(adaptiveSupport.kind),
+                      category: affirmations?.selectedCategory ??
+                          AffirmationCatalog.categories.first,
+                      affirmation: affirmation,
+                      arrivedLetterCount: arrivedLetterCount,
+                      onLettersTap: _openFutureLetters,
+                      showFutureLetter: false,
                     ),
                   ),
                 ),
@@ -210,19 +598,20 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: _sectionHeading(
                       title: LanguageHelper.pick(
                         language,
-                        english: 'Your day',
-                        filipino: 'Ang araw mo',
+                        english: 'Your routine',
+                        filipino: 'Iyong routine',
                       ),
                       subtitle: LanguageHelper.pick(
                         language,
-                        english: 'Two small anchors for today',
-                        filipino: 'Dalawang munting gabay para ngayon',
+                        english: 'Your daily anchor',
+                        filipino: 'Araw-araw mong sandigan',
                       ),
                     ),
                   ),
                 ),
                 SliverPadding(
-                  padding: EdgeInsets.fromLTRB(pagePadding, 4, pagePadding, 6),
+                  key: const ValueKey('home-routine-block'),
+                  padding: EdgeInsets.fromLTRB(pagePadding, 0, pagePadding, 6),
                   sliver: SliverToBoxAdapter(
                     child: _buildRoutineCard(
                       context: context,
@@ -237,16 +626,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 SliverPadding(
-                  padding: EdgeInsets.fromLTRB(pagePadding, 6, pagePadding, 6),
-                  sliver: SliverToBoxAdapter(
-                    child: _buildHighlightCard(
-                      context: context,
-                      isDark: isDark,
-                      highlight: highlight,
-                    ),
-                  ),
-                ),
-                SliverPadding(
                   padding: EdgeInsets.fromLTRB(
                     pagePadding + 2,
                     20,
@@ -257,13 +636,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: _sectionHeading(
                       title: LanguageHelper.pick(
                         language,
-                        english: 'Wellness Activities',
-                        filipino: 'Mga gawain para sa kalusugan',
+                        english: 'Activities',
+                        filipino: 'Mga activity',
                       ),
                       subtitle: LanguageHelper.pick(
                         language,
                         english: 'Choose what feels useful right now',
-                        filipino: 'Piliin ang makakatulong sa sandaling ito',
+                        filipino: 'Piliin ang makakatulong ngayon',
                       ),
                       action: TextButton(
                         key: const ValueKey('see-all-activities'),
@@ -280,9 +659,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 SliverToBoxAdapter(
+                  key: const ValueKey('home-activities-block'),
                   child: _buildActivitiesCarousel(context, isDark),
                 ),
                 SliverPadding(
+                  key: const ValueKey('home-learn-block'),
                   padding: EdgeInsets.fromLTRB(
                     pagePadding + 2,
                     22,
@@ -340,15 +721,13 @@ class _HomeScreenState extends State<HomeScreen> {
     BuildContext context,
     UserProvider user,
     bool isDark,
+    int streakCount,
+    Set<DateTime> activeDates,
+    GratitudeProvider? gratitude,
   ) {
     final name =
         user.displayName.trim().isEmpty ? 'Kaibigan' : user.displayName;
     final language = user.language;
-
-    final primary =
-        isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight;
-    final secondary =
-        isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
 
     return Column(
       children: [
@@ -396,98 +775,389 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         const SizedBox(height: 14),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(18, 16, 18, 17),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: isDark
-                  ? const [Color(0xFF292A23), Color(0xFF22251F)]
-                  : const [Color(0xFFFFF7E5), Color(0xFFFFFCF6)],
-            ),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: isDark
-                  ? AppColors.darkCardBorder
-                  : AppColors.honeyBorder.withValues(alpha: 0.85),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.honeyAmber.withValues(
-                  alpha: isDark ? 0.05 : 0.07,
-                ),
-                blurRadius: 20,
-                offset: const Offset(0, 7),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: AppColors.honeyAmber.withValues(alpha: 0.11),
-                  borderRadius: BorderRadius.circular(99),
-                ),
-                child: Text(
-                  DateFormat('EEEE, MMMM d').format(DateTime.now()),
-                  style: const TextStyle(
-                    color: AppColors.honeyAmber,
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text.rich(
-                TextSpan(
-                  text: LanguageHelper.pick(
-                    language,
-                    english: 'Hi, ',
-                    filipino: 'Kumusta, ',
-                    taglish: 'Kamusta, ',
-                  ),
-                  children: [
-                    TextSpan(
-                      text: name,
-                      style: const TextStyle(color: AppColors.honeyAmber),
-                    ),
-                  ],
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: primary,
-                  fontSize: 27,
-                  height: 1.08,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.8,
-                ),
-              ),
-              const SizedBox(height: 7),
-              Text(
-                LanguageHelper.pick(
-                  language,
-                  english: 'What would feel supportive today?',
-                  filipino: 'Ano ang makakatulong sa iyo ngayon?',
-                  taglish: 'Ano ang makakatulong sa iyo today?',
-                ),
-                style: TextStyle(
-                  color: secondary,
-                  fontSize: 13,
-                  height: 1.35,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
+        HomeStreakGreetingCard(
+          name: name,
+          language: language,
+          isDark: isDark,
+          streakCount: streakCount,
+          activeDates: activeDates,
+          onStreakTap: gratitude == null
+              ? null
+              : () => _showStreakModal(context, gratitude, streakCount),
         ),
       ],
     );
+  }
+
+  void _showStreakModal(
+    BuildContext context,
+    GratitudeProvider gratitudeProvider,
+    int streakCount,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final language = context.read<UserProvider>().language;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? AppColors.darkCard : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(28, 28, 28, 36),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white24 : Colors.black12,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.local_fire_department_rounded,
+                    color: Color(0xFFFF6B00),
+                    size: 28,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    LanguageHelper.pick(
+                      language,
+                      english: '$streakCount Day Streak!',
+                      filipino: '$streakCount Araw na Streak!',
+                    ),
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: isDark
+                          ? AppColors.textPrimaryDark
+                          : const Color(0xFF2C2C2C),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                LanguageHelper.pick(
+                  language,
+                  english:
+                      'You showed up today! Keep returning daily to nurture your garden and peace of mind.',
+                  filipino:
+                      'Naglaan ka ng oras ngayon! Magpatuloy araw-araw upang alagaan ang iyong sarili.',
+                ),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.4,
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : Colors.grey.shade600,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.darkHoneySurface : const Color(0xFFF6F4ED),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isDark ? AppColors.darkCardBorder : AppColors.honeyBorder,
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    Column(
+                      children: [
+                        Text(
+                          LanguageHelper.pick(
+                            language,
+                            english: '🌱 Garden Level',
+                            filipino: '🌱 Antas ng Hardin',
+                          ),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: isDark
+                                ? AppColors.textSecondaryDark
+                                : Colors.grey.shade700,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${gratitudeProvider.gardenLevel}',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.sageGreen,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Container(
+                      width: 1,
+                      height: 36,
+                      color: isDark ? Colors.white12 : Colors.black12,
+                    ),
+                    Column(
+                      children: [
+                        Text(
+                          LanguageHelper.pick(
+                            language,
+                            english: '🌸 Garden Blooms',
+                            filipino: '🌸 Mga Bulaklak',
+                          ),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: isDark
+                                ? AppColors.textSecondaryDark
+                                : Colors.grey.shade700,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${gratitudeProvider.flowerCount}',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.honeyAmber,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.honeyAmber,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    elevation: 0,
+                  ),
+                  icon: const Icon(Icons.local_florist_rounded, color: Colors.white),
+                  label: Text(
+                    LanguageHelper.pick(
+                      language,
+                      english: 'Visit Gratitude Garden',
+                      filipino: 'Bisitahin ang Hardin',
+                    ),
+                    style: const TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const GardenScreen()),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  List<FavoriteActivityData> _buildFavoritesList(
+    BuildContext context,
+    String language,
+  ) {
+    final allCandidates = [
+      FavoriteActivityData(
+        id: 'mood',
+        title: LanguageHelper.pick(
+          language,
+          english: 'Mood Tracker',
+          filipino: 'Tala ng Mood',
+        ),
+        subtitle: LanguageHelper.pick(
+          language,
+          english: 'Daily check-in',
+          filipino: 'Pang-araw-araw na check-in',
+        ),
+        accent: AppColors.honeyAmber,
+        assetPath: FeatureIconHelper.moodTracker,
+        placeholderIcon: Icons.sentiment_satisfied_alt_outlined,
+        onTap: () {
+          ActivityUsageStore.incrementActivityUsage('mood');
+          _loadActivityStats();
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const MoodTrackerScreen()),
+          );
+        },
+        usageCount: _activityCounts['mood'] ?? 10,
+      ),
+      FavoriteActivityData(
+        id: 'gratitude',
+        title: LanguageHelper.pick(
+          language,
+          english: 'Gratitude Garden',
+          filipino: 'Hardin ng Pasasalamat',
+        ),
+        subtitle: LanguageHelper.pick(
+          language,
+          english: 'Plant a flower',
+          filipino: 'Magtanim ng bulaklak',
+        ),
+        accent: AppColors.softRose,
+        assetPath: FeatureIconHelper.gratitudeGarden,
+        placeholderIcon: Icons.local_florist_outlined,
+        onTap: () {
+          ActivityUsageStore.incrementActivityUsage('gratitude');
+          _loadActivityStats();
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const GardenScreen()),
+          );
+        },
+        usageCount: _activityCounts['gratitude'] ?? 8,
+      ),
+      FavoriteActivityData(
+        id: 'journal',
+        title: LanguageHelper.pick(
+          language,
+          english: 'AI Journal',
+          filipino: 'AI Talaarawan',
+        ),
+        subtitle: LanguageHelper.pick(
+          language,
+          english: 'Reflect freely',
+          filipino: 'Malayang magmuni-muni',
+        ),
+        accent: AppColors.sageGreen,
+        assetPath: FeatureIconHelper.journal,
+        placeholderIcon: Icons.auto_stories_outlined,
+        onTap: () {
+          ActivityUsageStore.incrementActivityUsage('journal');
+          _loadActivityStats();
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const JournalListScreen()),
+          );
+        },
+        usageCount: _activityCounts['journal'] ?? 5,
+      ),
+      FavoriteActivityData(
+        id: 'grounding',
+        title: LanguageHelper.pick(
+          language,
+          english: 'Comfort Corner',
+          filipino: 'Sulok ng Kapanatagan',
+        ),
+        subtitle: LanguageHelper.pick(
+          language,
+          english: 'Calm & grounding',
+          filipino: 'Huminahon at mag-ground',
+        ),
+        accent: AppColors.warmPeach,
+        assetPath: FeatureIconHelper.grounding,
+        placeholderIcon: Icons.spa_outlined,
+        onTap: () {
+          ActivityUsageStore.incrementActivityUsage('grounding');
+          _loadActivityStats();
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const GroundingSessionScreen()),
+          );
+        },
+        usageCount: _activityCounts['grounding'] ?? 0,
+      ),
+      FavoriteActivityData(
+        id: 'letters',
+        title: LanguageHelper.pick(
+          language,
+          english: 'Future Letters',
+          filipino: 'Liham sa Hinaharap',
+        ),
+        subtitle: LanguageHelper.pick(
+          language,
+          english: 'Sealed notes',
+          filipino: 'Nakatagong mga liham',
+        ),
+        accent: AppColors.lavenderMist,
+        assetPath: FeatureIconHelper.entries,
+        placeholderIcon: Icons.mail_outline_rounded,
+        onTap: () {
+          ActivityUsageStore.incrementActivityUsage('letters');
+          _loadActivityStats();
+          _openFutureLetters();
+        },
+        usageCount: _activityCounts['letters'] ?? 0,
+      ),
+      FavoriteActivityData(
+        id: 'routines',
+        title: LanguageHelper.pick(
+          language,
+          english: 'Routines',
+          filipino: 'Mga Routine',
+        ),
+        subtitle: LanguageHelper.pick(
+          language,
+          english: 'Daily anchors',
+          filipino: 'Araw-araw na gabay',
+        ),
+        accent: AppColors.honeyGold,
+        assetPath: FeatureIconHelper.routines,
+        placeholderIcon: Icons.schedule_rounded,
+        onTap: () {
+          ActivityUsageStore.incrementActivityUsage('routines');
+          _loadActivityStats();
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const RoutinesHubScreen()),
+          );
+        },
+        usageCount: _activityCounts['routines'] ?? 0,
+      ),
+      FavoriteActivityData(
+        id: 'sleep',
+        title: LanguageHelper.pick(
+          language,
+          english: 'Sleep Log',
+          filipino: 'Tala ng Tulog',
+        ),
+        subtitle: LanguageHelper.pick(
+          language,
+          english: 'Night rest',
+          filipino: 'Pahinga sa gabi',
+        ),
+        accent: AppColors.periwinkle,
+        assetPath: FeatureIconHelper.sleepLog,
+        placeholderIcon: Icons.nights_stay_rounded,
+        onTap: () {
+          ActivityUsageStore.incrementActivityUsage('sleep');
+          _loadActivityStats();
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const SleepAnalyticsScreen()),
+          );
+        },
+        usageCount: _activityCounts['sleep'] ?? 0,
+      ),
+    ];
+
+    allCandidates.sort((a, b) => b.usageCount.compareTo(a.usageCount));
+    return allCandidates.take(3).toList();
   }
 
   Widget _sectionHeading({
@@ -782,19 +1452,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final hasHighlight = highlight != null;
     return InkWell(
       key: const ValueKey('home-highlight-card'),
-      onTap: () async {
-        final routinesProvider = context.read<RoutinesProvider>();
-        await Navigator.push<bool>(
-          context,
-          MaterialPageRoute(
-            builder: (_) => TodaysHighlightScreen(
-              existingHighlight: highlight,
-            ),
-          ),
-        );
-        if (!mounted) return;
-        await routinesProvider.fetchRoutineLogs();
-      },
+      onTap: () => _openHighlight(highlight),
       borderRadius: BorderRadius.circular(26),
       child: Container(
         key: const ValueKey('home-highlight-surface'),
@@ -1067,80 +1725,109 @@ class _HomeScreenState extends State<HomeScreen> {
         assetPath: FeatureIconHelper.weeklyInsights,
         placeholderIcon: Icons.auto_graph_rounded,
         placeholderColor: AppColors.honeyAmber,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const WeeklyReflectionScreen()),
-        ),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const WeeklyReflectionScreen()),
+          );
+        },
       ),
       _ActivityItem(
         title: copy('Gratitude', 'Pasasalamat'),
         subtitle: copy('Plant a flower', 'Magtanim ng bulaklak'),
         accent: AppColors.softOlive,
         assetPath: FeatureIconHelper.gratitudeGarden,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const GardenScreen()),
-        ),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const GardenScreen()),
+          );
+        },
       ),
       _ActivityItem(
         title: copy('Mood', 'Damdamin'),
         subtitle: copy('Daily check-in', 'Araw-araw na check-in'),
         accent: AppColors.warmPeach,
         assetPath: FeatureIconHelper.moodTracker,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const MoodTrackerScreen()),
-        ),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const MoodTrackerScreen()),
+          );
+        },
+      ),
+      _ActivityItem(
+        title: copy('Today\'s highlight', 'Mahalagang sandali ngayon'),
+        subtitle: copy('Keep one moment', 'Itabi ang isang sandali'),
+        accent: AppColors.softYellow,
+        assetPath: FeatureIconHelper.todaysHighlight,
+        placeholderIcon: Icons.auto_awesome_outlined,
+        placeholderColor: AppColors.honeyAmber,
+        onTap: () {
+          _openHighlight(
+            context.read<RoutinesProvider>().todayHighlight,
+          );
+        },
       ),
       _ActivityItem(
         title: copy('AI Journal', 'AI Talaarawan'),
         subtitle: copy('Reflect freely', 'Malayang magnilay'),
         accent: AppColors.honeyAmber,
         assetPath: FeatureIconHelper.journal,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const JournalListScreen()),
-        ),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const JournalListScreen()),
+          );
+        },
       ),
       _ActivityItem(
         title: copy('Sleep log', 'Tala ng tulog'),
         subtitle: copy('Rest & energy', 'Pahinga at lakas'),
         accent: AppColors.periwinkle,
         assetPath: FeatureIconHelper.sleepLog,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const SleepAnalyticsScreen()),
-        ),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const SleepAnalyticsScreen()),
+          );
+        },
       ),
       _ActivityItem(
         title: copy('Reflection', 'Pagninilay'),
         subtitle: copy('Evening review', 'Balik-tanaw sa gabi'),
         accent: AppColors.lavenderMist,
         assetPath: FeatureIconHelper.dailyReflection,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const DailyReflectionScreen()),
-        ),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const DailyReflectionScreen()),
+          );
+        },
       ),
       _ActivityItem(
         title: copy('Focus', 'Pokus'),
         subtitle: copy('Mindful priority', 'Mahalagang unahin'),
         accent: AppColors.softYellow,
         assetPath: FeatureIconHelper.todaysFocus,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const TodaysFocusScreen()),
-        ),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const TodaysFocusScreen()),
+          );
+        },
       ),
       _ActivityItem(
         title: copy('Future letters', 'Mga liham sa hinaharap'),
         subtitle: copy('Sealed notes', 'Mga selyadong tala'),
         accent: AppColors.warmPeach,
         assetPath: FeatureIconHelper.entries,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const FutureLettersScreen()),
-        ),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const FutureLettersScreen()),
+          );
+        },
       ),
       _ActivityItem(
         title: copy('Affirmations', 'Mga pagpapatibay'),
@@ -1149,7 +1836,9 @@ class _HomeScreenState extends State<HomeScreen> {
         assetPath: FeatureIconHelper.affirmations,
         placeholderIcon: Icons.format_quote_rounded,
         placeholderColor: AppColors.honeyAmber,
-        onTap: _openAffirmations,
+        onTap: () {
+          _openAffirmations();
+        },
       ),
       _ActivityItem(
         title: copy('Grounding', 'Pagpapakalma'),
@@ -1158,10 +1847,12 @@ class _HomeScreenState extends State<HomeScreen> {
         assetPath: FeatureIconHelper.grounding,
         placeholderIcon: Icons.spa_outlined,
         placeholderColor: AppColors.honeyAmber,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const GroundingSessionScreen()),
-        ),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const GroundingSessionScreen()),
+          );
+        },
       ),
       _ActivityItem(
         title: copy('Breathe', 'Huminga'),
@@ -1170,22 +1861,26 @@ class _HomeScreenState extends State<HomeScreen> {
         assetPath: FeatureIconHelper.breathing,
         placeholderIcon: Icons.air_rounded,
         placeholderColor: AppColors.honeyGold,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const MindfulnessMeditationScreen(),
-          ),
-        ),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const MindfulnessMeditationScreen(),
+            ),
+          );
+        },
       ),
       _ActivityItem(
         title: copy('Routines', 'Mga gawain'),
         subtitle: copy('Daily anchors', 'Araw-araw na gabay'),
         accent: AppColors.honeyGold,
         assetPath: FeatureIconHelper.routines,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const RoutinesHubScreen()),
-        ),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const RoutinesHubScreen()),
+          );
+        },
       ),
     ];
   }
@@ -1545,6 +2240,69 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _FeedbackChoice extends StatelessWidget {
+  const _FeedbackChoice({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final foreground =
+        isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight;
+    return Material(
+      color: AppColors.honeyAmber.withValues(alpha: isDark ? 0.12 : 0.08),
+      borderRadius: BorderRadius.circular(17),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(17),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 52),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: AppColors.honeyAmber.withValues(alpha: 0.16),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: AppColors.honeyAmber, size: 19),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: foreground,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                const Icon(
+                  Icons.arrow_forward_rounded,
+                  color: AppColors.honeyAmber,
+                  size: 18,
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

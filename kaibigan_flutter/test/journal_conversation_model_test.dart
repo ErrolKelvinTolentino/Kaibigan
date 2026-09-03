@@ -3,9 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kaibigan_flutter/features/journaling/journal_model.dart';
 
 void main() {
-  test(
-      'structured journal turns round-trip through the existing response field',
-      () {
+  test('structured journal turns round-trip through their JSON column', () {
     final entry = JournalEntry(
       id: 'entry',
       title: 'Conversation',
@@ -28,7 +26,9 @@ void main() {
     );
 
     final stored = entry.toMap();
-    expect(stored['ai_response'], startsWith('__KAIBIGAN_TURNS_V1__'));
+    expect(stored['ai_response'], 'Reply one\n\n---\n\nReply two');
+    expect(stored['conversation_turns'], hasLength(2));
+    expect(stored, isNot(contains('reflection_seed_stage')));
     final restored = JournalEntry.fromMap(stored);
 
     expect(restored.turnsForDisplay, hasLength(2));
@@ -38,6 +38,24 @@ void main() {
     expect(restored.turnsForDisplay[1].aiResponse, 'Reply two');
     expect(restored.turnsForDisplay[1].companionId, 'ann');
     expect(restored.aiResponse, 'Reply one\n\n---\n\nReply two');
+  });
+
+  test(
+      'encoded legacy conversations remain readable before and after migration',
+      () {
+    const legacyResponse =
+        '__KAIBIGAN_TURNS_V1__[{"user":"Old note","assistant":"Old reply","companion":"kai"}]';
+    final legacy = JournalEntry.fromMap({
+      'id': 'legacy',
+      'ai_response': legacyResponse,
+      'conversation_turns': [],
+      'reflection_seed_stage': 3,
+    });
+    expect(legacy.turnsForDisplay.single.userText, 'Old note');
+    expect(legacy.aiResponse, 'Old reply');
+    final updated = legacy.toMap();
+    expect(updated['ai_response'], 'Old reply');
+    expect(updated['conversation_turns'], hasLength(1));
   });
 
   test('legacy records are interleaved when message and reply counts match',

@@ -310,7 +310,6 @@ class _JournalListScreenState extends State<JournalListScreen> {
                           child: Container(
                             margin: const EdgeInsets.only(bottom: 12),
                             decoration: BoxDecoration(
-                              color: isDark ? AppColors.darkCard : Colors.white,
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
                                 color: isDark
@@ -326,7 +325,11 @@ class _JournalListScreenState extends State<JournalListScreen> {
                                 ),
                               ],
                             ),
-                            child: ListTile(
+                            child: Material(
+                              color: isDark ? AppColors.darkCard : Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              clipBehavior: Clip.antiAlias,
+                              child: ListTile(
                               contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 16, vertical: 10),
                               onTap: () {
@@ -421,8 +424,10 @@ class _JournalListScreenState extends State<JournalListScreen> {
                                       ),
                                       const Spacer(),
                                       Text(
-                                        DateFormatter.formatShortDate(
-                                            entry.createdAt),
+                                        DateFormatter.formatJournalDate(
+                                          entry.createdAt,
+                                          language: language,
+                                        ),
                                         style: TextStyle(
                                           fontSize: 11,
                                           color: isDark
@@ -436,8 +441,9 @@ class _JournalListScreenState extends State<JournalListScreen> {
                               ),
                             ),
                           ),
-                        );
-                      },
+                        ),
+                      );
+                    },
                     ),
             ),
           ],

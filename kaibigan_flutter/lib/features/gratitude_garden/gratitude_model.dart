@@ -5,7 +5,6 @@ class GratitudeEntry {
   final String id;
   final String content;
   final String flowerType;
-  final int waterCount;
   final int gardenIndex;
   final int plotIndex;
   final DateTime createdAt;
@@ -14,7 +13,6 @@ class GratitudeEntry {
     required this.id,
     required this.content,
     this.flowerType = 'anemone',
-    this.waterCount = 1,
     this.gardenIndex = 0,
     this.plotIndex = 0,
     required this.createdAt,
@@ -24,7 +22,6 @@ class GratitudeEntry {
     String? id,
     String? content,
     String? flowerType,
-    int? waterCount,
     int? gardenIndex,
     int? plotIndex,
     DateTime? createdAt,
@@ -33,7 +30,6 @@ class GratitudeEntry {
       id: id ?? this.id,
       content: content ?? this.content,
       flowerType: flowerType ?? this.flowerType,
-      waterCount: waterCount ?? this.waterCount,
       gardenIndex: gardenIndex ?? this.gardenIndex,
       plotIndex: plotIndex ?? this.plotIndex,
       createdAt: createdAt ?? this.createdAt,
@@ -46,10 +42,9 @@ class GratitudeEntry {
       'id': validId,
       'content': content,
       'flower_type': flowerType,
-      'water_count': waterCount,
       'garden_index': gardenIndex,
       'plot_index': plotIndex,
-      'created_at': createdAt.toIso8601String(),
+      'created_at': createdAt.toUtc().toIso8601String(),
     };
     if (userId != null && userId.isNotEmpty) {
       map['user_id'] = userId;
@@ -62,7 +57,6 @@ class GratitudeEntry {
       id: map['id'] ?? '',
       content: map['content'] ?? '',
       flowerType: map['flower_type'] ?? 'anemone',
-      waterCount: map['water_count'] ?? 1,
       gardenIndex: map['garden_index'] ?? 0,
       plotIndex: map['plot_index'] ?? 0,
       createdAt: map['created_at'] != null

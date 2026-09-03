@@ -104,12 +104,19 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
         centerTitle: true,
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
-          child: _isSubmitted
-              ? _buildAiInsightView(context, isDark, mascot)
-              : _buildGuidedInputView(context, isDark),
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
+            child: _isSubmitted
+                ? ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight - 40,
+                    ),
+                    child: _buildAiInsightView(context, isDark, mascot),
+                  )
+                : _buildGuidedInputView(context, isDark),
+          ),
         ),
       ),
     );
@@ -263,51 +270,83 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
   Widget _buildAiInsightView(
       BuildContext context, bool isDark, MascotInfo mascot) {
     return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        const SizedBox(height: 26),
         Container(
-          padding: const EdgeInsets.all(18),
+          width: 200,
+          height: 200,
           decoration: BoxDecoration(
-            color: mascot.primaryColor.withValues(alpha: 0.16),
-            shape: BoxShape.circle,
+            color: AppColors.sageGreen.withValues(alpha: isDark ? 0.14 : 0.10),
+            borderRadius: BorderRadius.circular(36),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.sageGreen
+                    .withValues(alpha: isDark ? 0.18 : 0.14),
+                blurRadius: 28,
+                offset: const Offset(0, 10),
+              ),
+            ],
           ),
-          child: Icon(
-            mascot.materialIcon,
-            size: 48,
-            color: mascot.primaryColor,
+          padding: const EdgeInsets.all(12),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(28),
+            child: Image.asset(
+              FeatureIconHelper.todaysFocus,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) => Icon(
+                mascot.materialIcon,
+                size: 80,
+                color: mascot.primaryColor,
+              ),
+            ),
           ),
-        ).animate().scale(duration: 320.ms, curve: Curves.easeOutCubic),
-        const SizedBox(height: 20),
+        ).animate().scale(duration: 380.ms, curve: Curves.easeOutBack),
+        const SizedBox(height: 24),
         Text(
           "Your focus is set",
+          textAlign: TextAlign.center,
           style: TextStyle(
-            fontSize: 22,
+            fontSize: 24,
             fontWeight: FontWeight.w800,
             color:
                 isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         Container(
-          padding: const EdgeInsets.all(14),
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           decoration: BoxDecoration(
-            color:
-                isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.04),
-            borderRadius: BorderRadius.circular(14),
+            color: isDark ? AppColors.darkCard : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isDark
+                  ? AppColors.darkCardBorder
+                  : AppColors.sageGreen.withValues(alpha: 0.22),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
           child: Text(
             '"${_focusController.text.trim()}"',
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 15,
+              fontSize: 16,
               fontWeight: FontWeight.w600,
               fontStyle: FontStyle.italic,
               color: mascot.primaryColor,
+              height: 1.4,
             ),
           ),
-        ),
-        const SizedBox(height: 20),
+        ).animate().fadeIn(delay: 100.ms),
+        const SizedBox(height: 16),
         Text(
           'One thing is enough. ${mascot.name} will keep this intention close without turning it into another list.',
           textAlign: TextAlign.center,
@@ -319,10 +358,10 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
                 : AppColors.textSecondaryLight,
           ),
         ).animate().fadeIn(delay: 160.ms),
-        const SizedBox(height: 36),
+        const SizedBox(height: 32),
         SizedBox(
           width: double.infinity,
-          height: 52,
+          height: 54,
           child: ElevatedButton(
             onPressed: () {
               if (widget.onCompleted != null) {
@@ -335,7 +374,7 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
               backgroundColor: AppColors.sageGreen,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18)),
+                  borderRadius: BorderRadius.circular(20)),
             ),
             child: const Text("Return to my day",
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),

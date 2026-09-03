@@ -12,14 +12,21 @@ import '../companion/companion_model.dart';
 import '../settings/user_provider.dart';
 
 class AuthScreen extends StatefulWidget {
-  const AuthScreen({super.key});
+  const AuthScreen({
+    super.key,
+    this.initialTabIndex = 0,
+    this.onShowDemo,
+  });
+
+  final int initialTabIndex;
+  final VoidCallback? onShowDemo;
 
   @override
   State<AuthScreen> createState() => _AuthScreenState();
 }
 
 class _AuthScreenState extends State<AuthScreen> {
-  int _activeTabIndex = 0;
+  late int _activeTabIndex;
   final _loginEmailController = TextEditingController();
   final _loginPasswordController = TextEditingController();
   final _regNameController = TextEditingController();
@@ -34,6 +41,12 @@ class _AuthScreenState extends State<AuthScreen> {
   String? _pendingConfirmationEmail;
 
   bool get _isRegistering => _activeTabIndex == 1;
+
+  @override
+  void initState() {
+    super.initState();
+    _activeTabIndex = widget.initialTabIndex.clamp(0, 1);
+  }
 
   String _copy(String language, String english, String filipino) =>
       LanguageHelper.pick(
@@ -124,8 +137,11 @@ class _AuthScreenState extends State<AuthScreen> {
         if (message.startsWith('Account created!')) {
           _errorMessage = null;
           _pendingConfirmationEmail = email;
-          _confirmationMessage =
-              'Account created. Check your inbox or spam folder, then open the confirmation link while Kaibigan is running on localhost:3000.';
+          _confirmationMessage = _copy(
+            provider.language,
+            'Account created. Check your inbox or spam folder, then open the confirmation link to return to Kaibigan.',
+            'Nagawa na ang account. Tingnan ang inbox o spam folder, pagkatapos ay buksan ang confirmation link para bumalik sa Kaibigan.',
+          );
         } else {
           _errorMessage = message;
         }
@@ -628,6 +644,23 @@ class _AuthScreenState extends State<AuthScreen> {
             ],
             const SizedBox(height: 14),
             _buildAccountSwitch(language, secondary),
+            if (widget.onShowDemo != null) ...[
+              const SizedBox(height: 4),
+              Center(
+                child: TextButton.icon(
+                  key: const ValueKey('show-kai-demo'),
+                  onPressed: _isLoading ? null : widget.onShowDemo,
+                  icon: const Icon(Icons.auto_awesome_outlined, size: 16),
+                  label: Text(
+                    _copy(
+                      language,
+                      'See Kai in action',
+                      'Makita kung paano tumutulong si Kai',
+                    ),
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,

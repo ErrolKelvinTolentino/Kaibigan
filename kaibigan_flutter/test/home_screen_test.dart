@@ -7,12 +7,10 @@ import 'package:kaibigan_flutter/features/home/home_screen.dart';
 import 'package:kaibigan_flutter/core/theme/app_theme.dart';
 import 'package:kaibigan_flutter/core/widgets/kaibigan_logo.dart';
 import 'package:kaibigan_flutter/features/journaling/journal_provider.dart';
-import 'package:kaibigan_flutter/features/mood_tracking/mood_model.dart';
 import 'package:kaibigan_flutter/features/mood_tracking/mood_provider.dart';
 import 'package:kaibigan_flutter/features/routines/flows/progressive_routine_runner.dart';
 import 'package:kaibigan_flutter/features/routines/routines_provider.dart';
 import 'package:kaibigan_flutter/features/routines/routine_model.dart';
-import 'package:kaibigan_flutter/features/routines/screens/grounding_session_screen.dart';
 import 'package:kaibigan_flutter/features/routines/screens/todays_highlight_screen.dart';
 import 'package:kaibigan_flutter/features/settings/settings_screen.dart';
 import 'package:kaibigan_flutter/features/settings/user_provider.dart';
@@ -47,6 +45,13 @@ void main() {
           routineType: RoutineType.night,
           completedAt: now.subtract(const Duration(minutes: 2)),
           focusOrHighlight: 'A quiet dinner together.',
+        ),
+        RoutineLog(
+          id: 'placeholder-highlight',
+          routineId: 'highlight_placeholder',
+          routineType: RoutineType.night,
+          completedAt: now.subtract(const Duration(minutes: 1)),
+          focusOrHighlight: 'Sample',
         ),
         RoutineLog(
           id: 'today-routine',
@@ -122,6 +127,17 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('home-routine-card')),
+      180,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const ValueKey('home-scroll-view')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
     expect(find.text('RESUME ROUTINE'), findsOneWidget);
     expect(find.textContaining('Second activity'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('home-routine-card')));
@@ -181,11 +197,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Latest bright moment'), findsOneWidget);
-    expect(find.textContaining('Older moment'), findsNothing);
+    expect(find.byKey(const ValueKey('daily-path-details')), findsNothing);
     await tester.scrollUntilVisible(
-      find.byKey(const ValueKey('home-highlight-card')),
-      180,
+      find.byKey(const ValueKey('see-all-activities')),
+      500,
       scrollable: find
           .descendant(
             of: find.byKey(const ValueKey('home-scroll-view')),
@@ -193,12 +208,11 @@ void main() {
           )
           .first,
     );
-    await tester.drag(
-      find.byKey(const ValueKey('home-scroll-view')),
-      const Offset(0, -100),
-    );
+    await tester.ensureVisible(find.byKey(const ValueKey('see-all-activities')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('home-highlight-card')));
+    await tester.tap(find.byKey(const ValueKey('see-all-activities')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Today\'s highlight'));
     await tester.pumpAndSettle();
 
     expect(find.byType(TodaysHighlightScreen), findsOneWidget);
@@ -232,9 +246,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Kamusta, Errol', findRichText: true), findsOneWidget);
-    expect(find.text('Highlight of the day'), findsOneWidget);
-    expect(find.text('A NOTE FOR TODAY'), findsOneWidget);
-    expect(find.text('Kai'), findsNothing);
+    expect(find.text('Today with Kai'), findsNothing);
+    expect(find.byKey(const ValueKey('companion-loop-overview')), findsNothing);
+    expect(find.byKey(const ValueKey('daily-path-details')), findsNothing);
+    expect(find.text('Today’s highlight'), findsOneWidget);
     expect(find.byType(ProgressiveRoutineRunner), findsNothing);
     expect(find.byKey(const ValueKey('home-settings-button')), findsOneWidget);
 
@@ -246,29 +261,17 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.arrow_back_ios_new_rounded));
     await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('adaptive-support-card')), findsNothing);
+
     await tester.scrollUntilVisible(
-      find.byKey(const ValueKey('adaptive-support-card')),
-      160,
+      find.byKey(const ValueKey('wellness-activities-carousel')),
+      240,
       scrollable: find
           .descendant(
             of: find.byKey(const ValueKey('home-scroll-view')),
             matching: find.byType(Scrollable),
           )
           .first,
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Ano kaya ang makakatulong?'), findsOneWidget);
-    expect(find.text('Mag-check in muna'), findsOneWidget);
-    expect(
-      tester
-          .getSize(find.byKey(const ValueKey('adaptive-support-card')))
-          .height,
-      lessThanOrEqualTo(150),
-    );
-
-    await tester.drag(
-      find.byType(CustomScrollView),
-      const Offset(0, -700),
     );
     await tester.pumpAndSettle();
 
@@ -315,16 +318,22 @@ void main() {
     expect(find.text('Hi, Errol', findRichText: true), findsOneWidget);
     expect(find.text('Kamusta, Errol', findRichText: true), findsNothing);
 
-    await tester.drag(
-      find.byType(CustomScrollView),
-      const Offset(0, -700),
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('wellness-activities-carousel')),
+      240,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const ValueKey('home-scroll-view')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Wellness Activities'), findsOneWidget);
+    expect(find.text('Activities'), findsOneWidget);
   });
 
-  testWidgets('adaptive card opens grounding for a high-stress check-in',
+  testWidgets('mood data does not replace the requested home hierarchy',
       (tester) async {
     SharedPreferences.setMockInitialValues({
       'display_name': 'Errol',
@@ -334,16 +343,34 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(360, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    final latest = MoodLog(
-      id: 'recent-high-stress',
-      moodScore: 3,
-      moodLabel: 'Okay',
-      stressLevel: 5,
-      energyLevel: 3,
-      sleepQuality: 3,
-      anxietyLevel: 4,
-      createdAt: DateTime.now(),
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => UserProvider()),
+          ChangeNotifierProvider(create: (_) => AffirmationsProvider()),
+          ChangeNotifierProvider(create: (_) => JournalProvider()),
+          ChangeNotifierProvider(create: (_) => LettersProvider()),
+          ChangeNotifierProvider(create: (_) => MoodProvider()),
+          ChangeNotifierProvider(create: (_) => RoutinesProvider()),
+        ],
+        child: const MaterialApp(home: HomeScreen()),
+      ),
     );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('adaptive-support-card')), findsNothing);
+    expect(find.text('Today’s highlight'), findsOneWidget);
+    expect(find.text('Today with Kai'), findsNothing);
+  });
+  testWidgets('home does not surface a saved journal as a Kai workflow',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'display_name': 'Errol',
+      'selected_companion': 'kai',
+      'preferred_language': 'english',
+    });
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(
       MultiProvider(
@@ -352,9 +379,7 @@ void main() {
           ChangeNotifierProvider(create: (_) => AffirmationsProvider()),
           ChangeNotifierProvider(create: (_) => JournalProvider()),
           ChangeNotifierProvider(create: (_) => LettersProvider()),
-          ChangeNotifierProvider<MoodProvider>(
-            create: (_) => _FakeMoodProvider([latest]),
-          ),
+          ChangeNotifierProvider(create: (_) => MoodProvider()),
           ChangeNotifierProvider(create: (_) => RoutinesProvider()),
         ],
         child: const MaterialApp(home: HomeScreen()),
@@ -362,15 +387,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Come back to the present'), findsOneWidget);
-    expect(find.textContaining('Mood 3/5'), findsOneWidget);
-
-    await tester.tap(find.byKey(const ValueKey('adaptive-support-action')));
-    await tester.pumpAndSettle();
-
-    expect(find.byType(GroundingSessionScreen), findsOneWidget);
+    expect(find.text('Talk with Kai'), findsNothing);
+    expect(find.text('Continue with Kai'), findsNothing);
+    expect(find.byKey(const ValueKey('daily-path-details')), findsNothing);
   });
-
   testWidgets('home surfaces an arrived Future Letter without a navbar',
       (tester) async {
     SharedPreferences.setMockInitialValues({
@@ -407,7 +427,44 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Today’s affirmation'), findsNothing);
+    final home = tester.widget<CustomScrollView>(
+      find.byKey(const ValueKey('home-scroll-view')),
+    );
+    final orderedBlocks = home.slivers
+        .map((sliver) => sliver.key)
+        .whereType<ValueKey<String>>()
+        .map((key) => key.value)
+        .where((key) => key.endsWith('-block'))
+        .toList();
+    expect(
+      orderedBlocks,
+      [
+        'home-greeting-block',
+        'home-favorites-block',
+        'home-highlight-block',
+        'home-future-self-block',
+        'home-affirmation-block',
+        'home-routine-block',
+        'home-activities-block',
+        'home-learn-block',
+      ],
+    );
+
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('home-future-self-note')),
+      220,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const ValueKey('home-scroll-view')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('home-future-self-note')),
+      findsOneWidget,
+    );
     expect(
         find.byKey(const ValueKey('today-affirmation-quote')), findsOneWidget);
     expect(
@@ -497,15 +554,6 @@ void main() {
     expect(find.byType(NavigationBar), findsNothing);
     expect(tester.takeException(), isNull);
   });
-}
-
-class _FakeMoodProvider extends MoodProvider {
-  final List<MoodLog> _fakeLogs;
-
-  _FakeMoodProvider(this._fakeLogs);
-
-  @override
-  List<MoodLog> get logs => List.unmodifiable(_fakeLogs);
 }
 
 class _FakeLettersProvider extends LettersProvider {

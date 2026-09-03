@@ -1,512 +1,813 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_animate/flutter_animate.dart';
-import '../../../core/constants/app_colors.dart';
+
 import '../../../core/constants/app_typography.dart';
-import '../../settings/user_provider.dart';
+import '../../../core/theme/kaibigan_tokens.dart';
+import '../../../core/widgets/kaibigan_surface.dart';
+import '../../../core/widgets/mobile_layout.dart';
 import '../../companion/companion_model.dart';
-import '../routines_provider.dart';
+import '../../settings/user_provider.dart';
 import '../routine_model.dart';
+import '../routines_provider.dart';
 
 class SleepLogFlowScreen extends StatefulWidget {
-  final VoidCallback? onCompleted;
-
   const SleepLogFlowScreen({super.key, this.onCompleted});
+
+  final VoidCallback? onCompleted;
 
   @override
   State<SleepLogFlowScreen> createState() => _SleepLogFlowScreenState();
 }
 
 class _SleepLogFlowScreenState extends State<SleepLogFlowScreen> {
-  static const _sleepFeelingOptions = [
+  static const feelings = [
     SleepFeeling.energized,
     SleepFeeling.wellRested,
     SleepFeeling.moderate,
     SleepFeeling.groggy,
     SleepFeeling.restless,
   ];
+  static const quickDurations = [6.0, 7.0, 8.0, 9.0];
 
-  int _currentStep =
-      0; // 0: Quality/Feeling, 1: Hours Spinner, 2: Completed Recap
-  SleepFeeling _selectedFeeling = SleepFeeling.moderate;
-  int _selectedHoursIndex = 7; // Default to '7' hours
+  int _step = 0;
+  SleepFeeling _feeling = SleepFeeling.moderate;
+  double _hours = 7;
+  bool _isSaving = false;
 
-  final List<String> _sleepHoursOptions = [
-    'Less than 1',
-    '1',
-    '2',
-    '3',
-    '4',
-    '5',
-    '6',
-    '7',
-    '8',
-    '9',
-    '10',
-    '10+',
-  ];
-
-  late final FixedExtentScrollController _scrollController;
-
-  @override
-  void initState() {
-    super.initState();
-    _scrollController =
-        FixedExtentScrollController(initialItem: _selectedHoursIndex);
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _saveSleepLog() async {
-    final routinesProvider =
-        Provider.of<RoutinesProvider>(context, listen: false);
-    final hoursString = _sleepHoursOptions[_selectedHoursIndex];
-
-    await routinesProvider.addLog(
+  Future<void> _save() async {
+    if (_isSaving) return;
+    setState(() => _isSaving = true);
+    final provider = context.read<RoutinesProvider>();
+    final duration = _storageDuration(_hours);
+    await provider.addLog(
       RoutineLog(
         id: '',
         routineId: 'sleep_${DateTime.now().millisecondsSinceEpoch}',
         routineType: RoutineType.morning,
-        sleepFeeling: _selectedFeeling,
-        focusOrHighlight:
-            "Slept $hoursString hrs: ${_selectedFeeling.description}",
+        sleepFeeling: _feeling,
+        focusOrHighlight: 'Slept $duration hrs: ${_feeling.description}',
         completedAt: DateTime.now(),
       ),
     );
-
+    if (!mounted) return;
+    if (provider.errorMessage != null) {
+      setState(() => _isSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('We could not save this sleep log. Try again.'),
+          action: SnackBarAction(label: 'Retry', onPressed: _save),
+        ),
+      );
+      return;
+    }
     setState(() {
-      _currentStep = 2;
+      _isSaving = false;
+      _step = 2;
     });
+  }
+
+  String _storageDuration(double value) {
+    if (value < 1) return 'Less than 1';
+    if (value >= 10) return '10+';
+    return value == value.roundToDouble()
+        ? value.toInt().toString()
+        : value.toStringAsFixed(1);
+  }
+
+  String _durationLabel(double value) {
+    if (value < 1) return 'Under 1 hour';
+    if (value >= 10) return '10+ hours';
+    final number = value == value.roundToDouble()
+        ? value.toInt().toString()
+        : value.toStringAsFixed(1);
+    return '$number ${value == 1 ? 'hour' : 'hours'}';
+  }
+
+  void _close() {
+    if (widget.onCompleted != null && _step == 2) {
+      widget.onCompleted!();
+    } else {
+      Navigator.of(context).pop();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final userProvider = Provider.of<UserProvider>(context);
-    final mascot = MascotInfo.getById(userProvider.selectedCompanion);
-
+    final palette = context.kaibigan;
+    final mascot = MascotInfo.getById(
+      context.watch<UserProvider>().selectedCompanion,
+    );
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBackground : AppColors.warmCream,
+      backgroundColor: palette.background,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
         leading: IconButton(
+          tooltip: _step == 1 ? 'Back to sleep quality' : 'Close',
+          onPressed: _step == 1 ? () => setState(() => _step = 0) : _close,
           icon: Icon(
-            _currentStep == 0
-                ? Icons.close_rounded
-                : Icons.arrow_back_ios_new_rounded,
-            color:
-                isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+            _step == 1 ? Icons.arrow_back_ios_new_rounded : Icons.close_rounded,
           ),
-          onPressed: () {
-            if (_currentStep > 0 && _currentStep < 2) {
-              setState(() => _currentStep--);
-            } else {
-              Navigator.of(context).pop();
-            }
-          },
         ),
         title: Text(
-          "Sleep Log",
-          style: AppTypography.heading3(context, isDark: isDark),
+          _step == 2 ? 'Sleep saved' : 'Sleep log',
+          style: AppTypography.heading3(context),
         ),
         centerTitle: true,
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          child: _buildCurrentStep(context, isDark, mascot),
+        child: MobileContent(
+          child: AnimatedSwitcher(
+            duration: KaibiganMotion.standard,
+            switchInCurve: KaibiganMotion.enter,
+            switchOutCurve: KaibiganMotion.exit,
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0.025, 0.015),
+                  end: Offset.zero,
+                ).animate(animation),
+                child: child,
+              ),
+            ),
+            child: switch (_step) {
+              0 => _QualityStep(
+                  key: const ValueKey('sleep-quality-step'),
+                  selected: _feeling,
+                  onSelected: (value) => setState(() => _feeling = value),
+                  onContinue: () => setState(() => _step = 1),
+                ),
+              1 => _DurationStep(
+                  key: const ValueKey('sleep-duration-step'),
+                  hours: _hours,
+                  feeling: _feeling,
+                  saving: _isSaving,
+                  durationLabel: _durationLabel(_hours),
+                  onChanged: (value) => setState(() => _hours = value),
+                  onSave: _save,
+                ),
+              _ => _SuccessStep(
+                  key: const ValueKey('sleep-success-step'),
+                  mascot: mascot,
+                  feeling: _feeling,
+                  durationLabel: _durationLabel(_hours),
+                  onDone: _close,
+                ),
+            },
+          ),
         ),
       ),
     );
   }
+}
 
-  Widget _buildCurrentStep(
-      BuildContext context, bool isDark, MascotInfo mascot) {
-    if (_currentStep == 0) {
-      return _buildQualityStep(context, isDark);
-    } else if (_currentStep == 1) {
-      return _buildHoursStep(context, isDark);
-    } else {
-      return _buildRecapStep(context, isDark, mascot);
-    }
-  }
+class _QualityStep extends StatelessWidget {
+  const _QualityStep({
+    super.key,
+    required this.selected,
+    required this.onSelected,
+    required this.onContinue,
+  });
 
-  Widget _buildQualityStep(BuildContext context, bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Step Indicator
-        _buildProgressBar(1, 2, isDark),
-        const SizedBox(height: 24),
+  final SleepFeeling selected;
+  final ValueChanged<SleepFeeling> onSelected;
+  final VoidCallback onContinue;
 
-        Text(
-          "How was your sleep last night?",
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-            color:
-                isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
-            letterSpacing: -0.5,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          "Pick the bee energy that matches how rested you feel.",
-          style: TextStyle(
-              fontSize: 14,
-              color: isDark
-                  ? AppColors.textSecondaryDark
-                  : AppColors.textSecondaryLight),
-        ),
-        const SizedBox(height: 20),
-
-        Expanded(
-          child: ListView.builder(
-            itemCount: _sleepFeelingOptions.length,
-            itemBuilder: (context, index) {
-              final feeling = _sleepFeelingOptions[index];
-              final isSelected = _selectedFeeling == feeling;
-
-              return GestureDetector(
-                onTap: () => setState(() => _selectedFeeling = feeling),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? AppColors.honeyGold
-                            .withValues(alpha: isDark ? 0.25 : 0.15)
-                        : (isDark ? AppColors.darkCard : Colors.white),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: isSelected
-                          ? AppColors.honeyGold
-                          : (isDark
-                              ? AppColors.darkCardBorder
-                              : Colors.black.withValues(alpha: 0.06)),
-                      width: isSelected ? 2 : 1,
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(18),
-                        child: Image.asset(
-                          feeling.assetPath,
-                          width: 80,
-                          height: 80,
-                          fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) => Icon(
-                              feeling.icon,
-                              color: AppColors.honeyAmber,
-                              size: 52),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              feeling.label,
-                              style: TextStyle(
-                                fontSize: 16.5,
-                                fontWeight: FontWeight.w800,
-                                color: isDark
-                                    ? AppColors.textPrimaryDark
-                                    : AppColors.textPrimaryLight,
-                              ),
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              feeling.description,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: isDark
-                                    ? AppColors.textSecondaryDark
-                                    : AppColors.textSecondaryLight,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (isSelected)
-                        const Icon(Icons.check_circle_rounded,
-                            color: AppColors.honeyGold, size: 24),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
-        SizedBox(
-          width: double.infinity,
-          height: 56,
-          child: ElevatedButton(
-            onPressed: () => setState(() => _currentStep = 1),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.sageGreen,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20)),
-            ),
-            child: const Text("Next: Sleep Duration",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildHoursStep(BuildContext context, bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildProgressBar(2, 2, isDark),
-        const SizedBox(height: 24),
-
-        Text(
-          "About how many hours did you sleep?",
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-            color:
-                isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
-            letterSpacing: -0.5,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          "Scroll to select your total hours of sleep.",
-          style: TextStyle(
-              fontSize: 14,
-              color: isDark
-                  ? AppColors.textSecondaryDark
-                  : AppColors.textSecondaryLight),
-        ),
-
-        const SizedBox(height: 30),
-
-        // Rolling number spinner
-        Expanded(
-          child: Center(
-            child: SizedBox(
-              height: 220,
-              child: Stack(
-                children: [
-                  // Center selection indicator box
-                  Center(
-                    child: Container(
-                      height: 54,
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: AppColors.honeyGold.withValues(alpha: 0.16),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                            color: AppColors.honeyGold.withValues(alpha: 0.4),
-                            width: 1.5),
-                      ),
-                    ),
-                  ),
-
-                  ListWheelScrollView.useDelegate(
-                    controller: _scrollController,
-                    itemExtent: 54,
-                    perspective: 0.004,
-                    diameterRatio: 1.6,
-                    physics: const FixedExtentScrollPhysics(),
-                    onSelectedItemChanged: (index) {
-                      setState(() => _selectedHoursIndex = index);
-                    },
-                    childDelegate: ListWheelChildBuilderDelegate(
-                      childCount: _sleepHoursOptions.length,
-                      builder: (context, index) {
-                        final isSelected = index == _selectedHoursIndex;
-                        final label = _sleepHoursOptions[index];
-
-                        return Center(
-                          child: Text(
-                            '$label ${label.contains('than') ? 'hour' : (label == '1' ? 'hour' : 'hours')}',
-                            style: TextStyle(
-                              fontSize: isSelected ? 22 : 16,
-                              fontWeight: isSelected
-                                  ? FontWeight.w800
-                                  : FontWeight.w500,
-                              color: isSelected
-                                  ? AppColors.honeyAmber
-                                  : (isDark ? Colors.white38 : Colors.black38),
-                            ),
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.kaibigan;
+    final text = Theme.of(context).textTheme;
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        padding: MobileLayout.pageInsets(context, top: 10, bottom: 20),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight - 30),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const _StepHeader(current: 1),
+              const SizedBox(height: 24),
+              const _NightHeader(
+                eyebrow: 'LAST NIGHT',
+                title: 'How was your sleep last night?',
+                subtitle:
+                    'Choose the feeling closest to how your body feels now.',
+                icon: Icons.nightlight_round,
+              ),
+              const SizedBox(height: 24),
+              Semantics(
+                label: 'Choose sleep quality',
+                child: LayoutBuilder(
+                  builder: (context, grid) {
+                    const gap = 10.0;
+                    final width = (grid.maxWidth - gap * 2) / 3;
+                    Widget tile(SleepFeeling feeling) => SizedBox(
+                          width: width,
+                          child: _FeelingTile(
+                            feeling: feeling,
+                            selected: selected == feeling,
+                            onTap: () => onSelected(feeling),
                           ),
                         );
-                      },
+                    return Column(
+                      children: [
+                        Row(
+                          children: [
+                            tile(_SleepLogFlowScreenState.feelings[0]),
+                            const SizedBox(width: gap),
+                            tile(_SleepLogFlowScreenState.feelings[1]),
+                            const SizedBox(width: gap),
+                            tile(_SleepLogFlowScreenState.feelings[2]),
+                          ],
+                        ),
+                        const SizedBox(height: gap),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            tile(_SleepLogFlowScreenState.feelings[3]),
+                            const SizedBox(width: gap),
+                            tile(_SleepLogFlowScreenState.feelings[4]),
+                          ],
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 18),
+              KaibiganSurface(
+                tone: KaibiganSurfaceTone.botanical,
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: palette.surfaceElevated,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(selected.icon, color: palette.botanical),
                     ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(selected.label, style: text.titleSmall),
+                          const SizedBox(height: 2),
+                          Text(
+                            selected.description,
+                            style: text.bodySmall?.copyWith(
+                              color: palette.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 22),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: onContinue,
+                  icon: const Icon(Icons.arrow_forward_rounded),
+                  label: const Text('Continue'),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Center(
+                child: Text(
+                  'A quick check-in—not a test.',
+                  style: text.bodySmall?.copyWith(color: palette.textMuted),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FeelingTile extends StatelessWidget {
+  const _FeelingTile({
+    required this.feeling,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final SleepFeeling feeling;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.kaibigan;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '${feeling.label}. ${feeling.description}',
+      child: AnimatedContainer(
+        duration: KaibiganMotion.quick,
+        decoration: BoxDecoration(
+          color: selected ? palette.accentSubtle : palette.surfaceElevated,
+          borderRadius: BorderRadius.circular(KaibiganRadius.card),
+          border: Border.all(
+            color: selected ? palette.accent : palette.border,
+            width: selected ? 2 : 1,
+          ),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: palette.shadow,
+                    blurRadius: 14,
+                    offset: const Offset(0, 5),
+                  ),
+                ]
+              : null,
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(KaibiganRadius.card),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 10, 8, 11),
+              child: Column(
+                children: [
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Image.asset(
+                        feeling.assetPath,
+                        width: 66,
+                        height: 66,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => Icon(
+                          feeling.icon,
+                          size: 48,
+                          color: palette.accent,
+                        ),
+                      ),
+                      if (selected)
+                        Positioned(
+                          right: -2,
+                          top: -1,
+                          child: Icon(
+                            Icons.check_circle_rounded,
+                            color: palette.accent,
+                            size: 21,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    feeling.label,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          color: selected
+                              ? palette.accentStrong
+                              : palette.textPrimary,
+                          fontWeight: FontWeight.w800,
+                          height: 1.1,
+                        ),
                   ),
                 ],
               ),
             ),
           ),
         ),
-
-        const SizedBox(height: 20),
-
-        SizedBox(
-          width: double.infinity,
-          height: 56,
-          child: ElevatedButton(
-            onPressed: _saveSleepLog,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.honeyGold,
-              foregroundColor: AppColors.onHoney,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20)),
-            ),
-            child: const Text("Save Sleep Log",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-          ),
-        ),
-      ],
+      ),
     );
   }
+}
 
-  Widget _buildRecapStep(BuildContext context, bool isDark, MascotInfo mascot) {
-    final hours = _sleepHoursOptions[_selectedHoursIndex];
+class _DurationStep extends StatelessWidget {
+  const _DurationStep({
+    super.key,
+    required this.hours,
+    required this.feeling,
+    required this.saving,
+    required this.durationLabel,
+    required this.onChanged,
+    required this.onSave,
+  });
 
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(28),
-          child: Image.asset(
-            _selectedFeeling.assetPath,
-            width: 140,
-            height: 140,
-            fit: BoxFit.contain,
-            errorBuilder: (context, error, stackTrace) => const Icon(
-                Icons.bedtime_rounded,
-                size: 72,
-                color: AppColors.honeyGold),
-          ),
-        ).animate().scale(duration: 320.ms, curve: Curves.easeOutCubic),
-        const SizedBox(height: 24),
-        Text(
-          "Sleep Recorded!",
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w800,
-            color:
-                isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.darkCard : Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-                color: isDark
-                    ? AppColors.darkCardBorder
-                    : Colors.black.withValues(alpha: 0.08)),
-          ),
+  final double hours;
+  final SleepFeeling feeling;
+  final bool saving;
+  final String durationLabel;
+  final ValueChanged<double> onChanged;
+  final VoidCallback onSave;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.kaibigan;
+    final text = Theme.of(context).textTheme;
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        padding: MobileLayout.pageInsets(context, top: 10, bottom: 20),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight - 30),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                "Logged $hours hours • ${_selectedFeeling.label}",
-                style:
-                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              const _StepHeader(current: 2),
+              const SizedBox(height: 24),
+              const _NightHeader(
+                eyebrow: 'SLEEP DURATION',
+                title: 'About how long did you sleep?',
+                subtitle:
+                    'An estimate is completely fine. Choose what feels closest.',
+                icon: Icons.bedtime_outlined,
               ),
-              const SizedBox(height: 6),
-              Text(
-                _selectedFeeling.description,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 13.5,
-                    color: isDark
-                        ? AppColors.textSecondaryDark
-                        : AppColors.textSecondaryLight),
+              const SizedBox(height: 24),
+              KaibiganSurface(
+                tone: KaibiganSurfaceTone.elevated,
+                padding: const EdgeInsets.fromLTRB(18, 22, 18, 18),
+                showShadow: true,
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 9,
+                      ),
+                      decoration: BoxDecoration(
+                        color: palette.accentSubtle,
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: Text(
+                        durationLabel,
+                        key: const ValueKey('selected-sleep-duration'),
+                        style: text.headlineSmall?.copyWith(
+                          color: palette.accentStrong,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Semantics(
+                      label: 'Sleep duration, $durationLabel',
+                      slider: true,
+                      child: Slider(
+                        value: hours,
+                        min: .5,
+                        max: 10,
+                        divisions: 19,
+                        label: durationLabel,
+                        onChanged: saving ? null : onChanged,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Under 1h', style: text.bodySmall),
+                          Text('10h+', style: text.bodySmall),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _SleepLogFlowScreenState.quickDurations
+                          .map(
+                            (value) => ChoiceChip(
+                              label: Text('${value.toInt()} h'),
+                              selected: hours == value,
+                              onSelected:
+                                  saving ? null : (_) => onChanged(value),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ],
+                ),
               ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 20),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.honeyGold.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: Row(
-            children: [
-              Icon(mascot.materialIcon, size: 24, color: mascot.primaryColor),
-              const SizedBox(width: 12),
-              Expanded(
+              const SizedBox(height: 16),
+              KaibiganSurface(
+                tone: KaibiganSurfaceTone.botanical,
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  children: [
+                    Image.asset(
+                      feeling.assetPath,
+                      width: 48,
+                      height: 48,
+                      errorBuilder: (_, __, ___) => Icon(
+                        feeling.icon,
+                        color: palette.botanical,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Your check-in', style: text.labelMedium),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${feeling.label}  •  $durationLabel',
+                            style: text.titleSmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(Icons.check_rounded, color: palette.botanical),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: saving ? null : onSave,
+                  icon: saving
+                      ? SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: palette.onAccent,
+                          ),
+                        )
+                      : const Icon(Icons.nightlight_round),
+                  label: Text(saving ? 'Saving…' : 'Save sleep log'),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Center(
                 child: Text(
-                  "${mascot.name}: Staying mindful of your rest habits builds consistent daily energy. Let's make today gentle!",
-                  style: TextStyle(
-                      fontSize: 13,
-                      color: isDark
-                          ? AppColors.textPrimaryDark
-                          : AppColors.textPrimaryLight),
+                  'You can remove this entry later from History.',
+                  textAlign: TextAlign.center,
+                  style: text.bodySmall?.copyWith(color: palette.textMuted),
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 36),
-        SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: ElevatedButton(
-            onPressed: () {
-              if (widget.onCompleted != null) {
-                widget.onCompleted!();
-              } else {
-                Navigator.of(context).pop();
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.sageGreen,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18)),
+      ),
+    );
+  }
+}
+
+class _SuccessStep extends StatelessWidget {
+  const _SuccessStep({
+    super.key,
+    required this.mascot,
+    required this.feeling,
+    required this.durationLabel,
+    required this.onDone,
+  });
+
+  final MascotInfo mascot;
+  final SleepFeeling feeling;
+  final String durationLabel;
+  final VoidCallback onDone;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.kaibigan;
+    final text = Theme.of(context).textTheme;
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        padding: MobileLayout.pageInsets(context, top: 16, bottom: 24),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight - 40),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 190,
+                height: 190,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: palette.accentSubtle,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: palette.shadow,
+                      blurRadius: 28,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Image.asset(
+                  feeling.assetPath,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => Icon(
+                    feeling.icon,
+                    size: 90,
+                    color: palette.accent,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Sleep recorded',
+                style: text.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 7),
+              Text(
+                'One gentle check-in at a time builds a clearer picture of your rest.',
+                textAlign: TextAlign.center,
+                style: text.bodyMedium?.copyWith(color: palette.textSecondary),
+              ),
+              const SizedBox(height: 22),
+              KaibiganSurface(
+                tone: KaibiganSurfaceTone.elevated,
+                padding: const EdgeInsets.all(18),
+                child: Row(
+                  children: [
+                    _SuccessMetric(label: 'QUALITY', value: feeling.label),
+                    Container(width: 1, height: 44, color: palette.border),
+                    _SuccessMetric(label: 'DURATION', value: durationLabel),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              KaibiganSurface(
+                tone: KaibiganSurfaceTone.botanical,
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: palette.surfaceElevated,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        mascot.materialIcon,
+                        color: mascot.primaryColor,
+                        size: 23,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        '${mascot.name}: Let this guide your pace today. Rest is information, never a score.',
+                        style: text.bodyMedium?.copyWith(height: 1.45),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 28),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: onDone,
+                  icon: const Icon(Icons.check_rounded),
+                  label: const Text('Done'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SuccessMetric extends StatelessWidget {
+  const _SuccessMetric({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.kaibigan;
+    final text = Theme.of(context).textTheme;
+    return Expanded(
+      child: Column(
+        children: [
+          Text(
+            label,
+            style: text.labelSmall?.copyWith(
+              color: palette.textMuted,
+              letterSpacing: 0.8,
             ),
-            child: const Text("Done",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            value,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: text.titleSmall,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StepHeader extends StatelessWidget {
+  const _StepHeader({required this.current});
+  final int current;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.kaibigan;
+    return Semantics(
+      label: 'Step $current of 2',
+      child: Row(
+        children: [
+          Text(
+            'STEP $current OF 2',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: palette.textMuted,
+                  letterSpacing: 1,
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+          const SizedBox(width: 12),
+          for (var index = 1; index <= 2; index++) ...[
+            Expanded(
+              child: AnimatedContainer(
+                duration: KaibiganMotion.quick,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: index <= current ? palette.accent : palette.border,
+                  borderRadius: BorderRadius.circular(5),
+                ),
+              ),
+            ),
+            if (index == 1) const SizedBox(width: 6),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _NightHeader extends StatelessWidget {
+  const _NightHeader({
+    required this.eyebrow,
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+  });
+  final String eyebrow;
+  final String title;
+  final String subtitle;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.kaibigan;
+    final text = Theme.of(context).textTheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 50,
+          height: 50,
+          decoration: BoxDecoration(
+            color: palette.accentSubtle,
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Icon(icon, color: palette.accentStrong),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                eyebrow,
+                style: text.labelSmall?.copyWith(
+                  color: palette.accentStrong,
+                  letterSpacing: 0.8,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(title, style: text.headlineSmall),
+              const SizedBox(height: 5),
+              Text(
+                subtitle,
+                style: text.bodyMedium?.copyWith(
+                  color: palette.textSecondary,
+                  height: 1.4,
+                ),
+              ),
+            ],
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildProgressBar(int current, int total, bool isDark) {
-    return Row(
-      children: List.generate(total, (index) {
-        final isFilled = index < current;
-        return Expanded(
-          child: Container(
-            margin: EdgeInsets.only(right: index < total - 1 ? 8 : 0),
-            height: 6,
-            decoration: BoxDecoration(
-              color: isFilled
-                  ? AppColors.honeyGold
-                  : (isDark
-                      ? Colors.white12
-                      : Colors.black.withValues(alpha: 0.08)),
-              borderRadius: BorderRadius.circular(4),
-            ),
-          ),
-        );
-      }),
     );
   }
 }

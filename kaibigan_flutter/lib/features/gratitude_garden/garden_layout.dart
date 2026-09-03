@@ -18,7 +18,7 @@ class GardenPlot {
 }
 
 class GardenLayout {
-  static const int capacity = 15;
+  static const int capacity = 10;
   static const double sourceWidth = 1091;
   static const double sourceHeight = 2000;
 
@@ -29,17 +29,12 @@ class GardenLayout {
     GardenPlot(x: 545, groundY: 760, perspectiveScale: 0.6, rotation: 0.018),
     GardenPlot(x: 755, groundY: 800, perspectiveScale: 0.66, rotation: 0.03),
     GardenPlot(x: 235, groundY: 1015, perspectiveScale: 0.76, rotation: -0.04),
-    GardenPlot(x: 430, groundY: 990, perspectiveScale: 0.74, rotation: 0.025),
     GardenPlot(x: 640, groundY: 1030, perspectiveScale: 0.79, rotation: -0.02),
     GardenPlot(x: 835, groundY: 1000, perspectiveScale: 0.76, rotation: 0.035),
     GardenPlot(x: 315, groundY: 1320, perspectiveScale: 0.92, rotation: -0.025),
     GardenPlot(x: 550, groundY: 1370, perspectiveScale: 1, rotation: 0.018),
     GardenPlot(x: 770, groundY: 1310, perspectiveScale: 0.9, rotation: 0.03),
-    GardenPlot(x: 230, groundY: 1535, perspectiveScale: 0.96, rotation: -0.035),
-    GardenPlot(x: 390, groundY: 1660, perspectiveScale: 1.04, rotation: 0.025),
     GardenPlot(x: 545, groundY: 1510, perspectiveScale: 0.94, rotation: -0.015),
-    GardenPlot(x: 700, groundY: 1650, perspectiveScale: 1.03, rotation: 0.03),
-    GardenPlot(x: 850, groundY: 1540, perspectiveScale: 0.97, rotation: -0.025),
   ];
 
   static GardenScenePeriod periodFor(

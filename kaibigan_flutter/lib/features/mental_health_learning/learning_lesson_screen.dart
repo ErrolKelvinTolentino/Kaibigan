@@ -12,6 +12,7 @@ import '../../core/widgets/kaibigan_state_view.dart';
 import '../../core/widgets/kaibigan_surface.dart';
 import '../../core/widgets/mobile_layout.dart';
 import '../settings/user_provider.dart';
+import 'learning_ask_kai_sheet.dart';
 import 'learning_catalog.dart';
 import 'learning_model.dart';
 import 'learning_progress_store.dart';
@@ -726,6 +727,91 @@ class _LearningLessonScreenState extends State<LearningLessonScreen> {
                 helpful: _helpfulIdeas.contains(_currentIdea),
                 onHelpful: () => _toggleIdeaHelpful(_currentIdea),
               ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            key: const ValueKey('ask-kai-about-learning-idea'),
+            onPressed: () {
+              HapticFeedback.selectionClick();
+              LearningAskKaiSheet.show(
+                context,
+                lesson: lesson,
+                currentSection: section,
+                language: language,
+              );
+            },
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+              alignment: Alignment.centerLeft,
+              side: BorderSide(color: palette.border, width: 1.2),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: AppColors.honeyAmber,
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  alignment: Alignment.center,
+                  child: const Text(
+                    'K',
+                    style: TextStyle(
+                      color: AppColors.onHoney,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        LanguageHelper.pick(
+                          language,
+                          english: 'Ask Kai about this idea',
+                          filipino: 'Tanungin si Kai tungkol dito',
+                          taglish: 'Ask Kai about this idea',
+                        ),
+                        style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w800,
+                          color: palette.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        LanguageHelper.pick(
+                          language,
+                          english:
+                              'Ask about this slide, other lessons & mental health',
+                          filipino:
+                              'Magtanong tungkol sa slide, mga aralin, at mental health',
+                          taglish:
+                              'Ask about this slide, other lessons, and mental health',
+                        ),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: palette.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(Icons.arrow_forward_rounded, color: palette.accent),
+              ],
             ),
           ),
         ),

@@ -28,8 +28,6 @@ class GratitudeProvider extends ChangeNotifier {
       GardenLayout.flowerCountInGarden(_entries, gardenIndex);
   bool isGardenFull(int gardenIndex) =>
       GardenLayout.isFull(_entries, gardenIndex);
-  int get waterDrops =>
-      _entries.fold(0, (sum, e) => sum + (e.waterCount * 3)) + 10;
 
   // Unlocked garden features based on count
   bool get hasButterflies => _entries.length >= 3;
@@ -139,7 +137,6 @@ class GratitudeProvider extends ChangeNotifier {
       id: UuidHelper.generateV4(),
       content: cleanContent,
       flowerType: chosenType,
-      waterCount: 1,
       gardenIndex: targetGarden,
       plotIndex: plotIndex,
       createdAt: DateTime.now(),
@@ -179,58 +176,6 @@ class GratitudeProvider extends ChangeNotifier {
     _isLoading = false;
     notifyListeners();
     return saved ? newEntry : null;
-  }
-
-  Future<bool> waterFlower(String id) async {
-    _errorMessage = null;
-    if (!SupabaseService.isInitialized ||
-        SupabaseService.client.auth.currentUser == null) {
-      _errorMessage =
-          'This flower could not be watered because sync is unavailable.';
-      notifyListeners();
-      return false;
-    }
-    final index = _entries.indexWhere((e) => e.id == id);
-    if (index != -1) {
-      final previous = _entries[index];
-      final updated =
-          _entries[index].copyWith(waterCount: _entries[index].waterCount + 1);
-      _entries[index] = updated;
-      notifyListeners();
-
-      if (SupabaseService.isInitialized && UuidHelper.isValidUuid(id)) {
-        try {
-          final userId = SupabaseService.client.auth.currentUser!.id;
-          await SupabaseService.client
-              .from('gratitude_entries')
-              .update({'water_count': updated.waterCount})
-              .eq('id', id)
-              .eq('user_id', userId)
-              .select()
-              .single();
-
-          ApiLogger.logDatabase(
-            operation: 'UPDATE',
-            table: 'gratitude_entries (water)',
-            payload: {'id': id, 'water_count': updated.waterCount},
-            result: {'status': 'success'},
-          );
-        } catch (e) {
-          _entries[index] = previous;
-          _errorMessage = 'This flower could not be watered. Please try again.';
-          ApiLogger.logDatabase(
-            operation: 'UPDATE',
-            table: 'gratitude_entries (water)',
-            error: e.toString(),
-          );
-        }
-      }
-      notifyListeners();
-      return _errorMessage == null;
-    }
-    _errorMessage = 'This flower is no longer available.';
-    notifyListeners();
-    return false;
   }
 
   Future<bool> updateGratitudeEntry(String id, String newContent) async {
