@@ -422,9 +422,11 @@ class _AffirmationFeedState extends State<_AffirmationFeed> {
                     color: visual.color.withValues(alpha: 0.25),
                   ),
                 ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
                     Icon(
                       Icons.format_quote_rounded,
                       color: visual.color.withValues(alpha: 0.7),
@@ -501,8 +503,9 @@ class _AffirmationFeedState extends State<_AffirmationFeed> {
             ),
           ),
         ),
-      ],
-    );
+      ),
+    ],
+  );
   }
 }
 

@@ -46,9 +46,11 @@ class CozyActionSheet {
               ),
             ],
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
               Container(
                 width: 42,
                 height: 4,
@@ -221,7 +223,8 @@ class CozyActionSheet {
           ),
         ),
       ),
-    );
+    ),
+  );
 
     return result ?? false;
   }

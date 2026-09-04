@@ -112,7 +112,8 @@ class _JournalSaveReflectionScreenState
     final mascot = MascotInfo.getById(widget.companionId);
     return Center(
       key: const ValueKey('journal-summary-loading'),
-      child: Padding(
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -251,7 +252,7 @@ class _JournalSaveReflectionScreenState
       key: const ValueKey('journal-summary-success'),
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(26, 12, 26, 10),
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
           child: Column(
             children: [
               Text(
@@ -259,15 +260,15 @@ class _JournalSaveReflectionScreenState
                     'Munting espasyo para sa mga mahalaga'),
                 textAlign: TextAlign.center,
                 style:
-                    const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                    const TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
               ),
-              const SizedBox(height: 5),
+              const SizedBox(height: 4),
               Text(
                 _copy('Not a verdict—just a gentle reflection of your words.',
                     'Hindi ito hatol—banayad na pagninilay lamang sa iyong mga salita.'),
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 12.5,
+                  fontSize: 12,
                   color: isDark
                       ? AppColors.textSecondaryDark
                       : AppColors.textSecondaryLight,
@@ -282,7 +283,7 @@ class _JournalSaveReflectionScreenState
             itemCount: slides.length,
             onPageChanged: (page) => setState(() => _page = page),
             itemBuilder: (_, index) => Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
               child: slides[index],
             ),
           ),
@@ -306,7 +307,7 @@ class _JournalSaveReflectionScreenState
           ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(24, 18, 24, 22),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
           child: SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
@@ -341,7 +342,7 @@ class _JournalSaveReflectionScreenState
     required bool isDark,
   }) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(24, 26, 24, 22),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -350,64 +351,67 @@ class _JournalSaveReflectionScreenState
               ? [AppColors.darkHoneySurface, AppColors.darkCard]
               : [Colors.white, AppColors.honeyLight],
         ),
-        borderRadius: BorderRadius.circular(30),
+        borderRadius: BorderRadius.circular(28),
         border: Border.all(color: AppColors.honeyGold.withValues(alpha: 0.22)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.05),
-            blurRadius: 26,
-            offset: const Offset(0, 12),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(11),
-            decoration: BoxDecoration(
-              color: AppColors.honeyGold.withValues(alpha: 0.13),
-              borderRadius: BorderRadius.circular(16),
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.honeyGold.withValues(alpha: 0.13),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(icon, color: AppColors.honeyAmber, size: 20),
             ),
-            child: Icon(icon, color: AppColors.honeyAmber, size: 22),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            eyebrow,
-            style: const TextStyle(
-              color: AppColors.honeyAmber,
-              fontSize: 10,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 1.15,
+            const SizedBox(height: 18),
+            Text(
+              eyebrow,
+              style: const TextStyle(
+                color: AppColors.honeyAmber,
+                fontSize: 10,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.15,
+              ),
             ),
-          ),
-          const SizedBox(height: 9),
-          Text(
-            title,
-            style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 13),
-          Text(
-            body,
-            style: TextStyle(
-              fontSize: 15,
-              height: 1.6,
-              color: isDark
-                  ? AppColors.textPrimaryDark
-                  : AppColors.textPrimaryLight,
+            const SizedBox(height: 8),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900),
             ),
-          ),
-          if (emotions.isNotEmpty) ...[
-            const SizedBox(height: 20),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: emotions
-                  .map((emotion) => _emotionChip(emotion, isDark))
-                  .toList(),
+            const SizedBox(height: 12),
+            Text(
+              body,
+              style: TextStyle(
+                fontSize: 14.5,
+                height: 1.55,
+                color: isDark
+                    ? AppColors.textPrimaryDark
+                    : AppColors.textPrimaryLight,
+              ),
             ),
+            if (emotions.isNotEmpty) ...[
+              const SizedBox(height: 18),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: emotions
+                    .map((emotion) => _emotionChip(emotion, isDark))
+                    .toList(),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     ).animate().fadeIn(duration: 320.ms).slideY(begin: 0.04);
   }

@@ -37,10 +37,12 @@ class AkbaySafetySheet extends StatelessWidget {
         right: 24,
         bottom: MediaQuery.of(context).viewInsets.bottom + 32,
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           Center(
             child: Container(
               width: 48,
@@ -179,7 +181,8 @@ class AkbaySafetySheet extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildHotlineCard(

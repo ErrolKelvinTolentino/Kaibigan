@@ -7,8 +7,12 @@ import '../../core/widgets/kaibigan_state_view.dart';
 import '../journaling/journal_provider.dart';
 import '../gratitude_garden/gratitude_provider.dart';
 import '../gratitude_garden/gratitude_model.dart';
+import '../gratitude_garden/flower_detail_sheet.dart';
+import '../journaling/journal_model.dart';
+import '../journaling/journal_editor_screen.dart';
 import '../mood_tracking/mood_provider.dart';
 import '../mood_tracking/mood_model.dart';
+import '../mood_tracking/mood_detail_sheet.dart';
 import '../routines/routines_provider.dart';
 import '../routines/routine_model.dart';
 import '../settings/user_provider.dart';
@@ -437,6 +441,53 @@ class _UnifiedEntriesScreenState extends State<UnifiedEntriesScreen> {
               ),
             ),
 
+            // Feature-specific chips (Mood metrics, Gratitude garden plot, Sleep feeling)
+            if (item.rawData is MoodLog) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  _chip('Stress ${(item.rawData as MoodLog).stressLevel}/5', isDark),
+                  _chip('Energy ${(item.rawData as MoodLog).energyLevel}/5', isDark),
+                ],
+              ),
+            ] else if (item.rawData is GratitudeEntry) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
+                decoration: BoxDecoration(
+                  color: AppColors.honeyGold.withValues(alpha: isDark ? 0.18 : 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '${GratitudeEntry.getFlowerMeaning((item.rawData as GratitudeEntry).flowerType)} • Garden ${(item.rawData as GratitudeEntry).gardenIndex + 1}',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? AppColors.honeyGold : AppColors.honeyAmber,
+                  ),
+                ),
+              ),
+            ] else if (item.rawData is RoutineLog && (item.rawData as RoutineLog).sleepFeeling != null) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
+                decoration: BoxDecoration(
+                  color: AppColors.skyBlue.withValues(alpha: isDark ? 0.18 : 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  (item.rawData as RoutineLog).sleepFeeling!.description,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? AppColors.skyBlue : const Color(0xFF2A70A0),
+                  ),
+                ),
+              ),
+            ],
+
             // AI Reflection pill if available
             if (item.aiInsight != null && item.aiInsight!.isNotEmpty) ...[
               const SizedBox(height: 12),
@@ -490,10 +541,73 @@ class _UnifiedEntriesScreenState extends State<UnifiedEntriesScreen> {
     );
   }
 
+  Widget _chip(String label, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+        ),
+      ),
+    );
+  }
+
   Future<void> _openEntryDetail(
     BuildContext context,
     UnifiedFeedItem item,
   ) async {
+    if (item.category == EntryCategory.gratitude && item.rawData is GratitudeEntry) {
+      final user = Provider.of<UserProvider>(context, listen: false);
+      await FlowerDetailSheet.show(
+        context,
+        entry: item.rawData as GratitudeEntry,
+        language: user.language,
+        onDeleted: () {
+          if (mounted) setState(() {});
+        },
+        onUpdated: () {
+          if (mounted) setState(() {});
+        },
+      );
+      if (mounted) setState(() {});
+      return;
+    }
+
+    if (item.category == EntryCategory.mood && item.rawData is MoodLog) {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      await MoodDetailSheet.show(
+        context,
+        log: item.rawData as MoodLog,
+        isDark: isDark,
+        onDeleted: () {
+          if (mounted) setState(() {});
+        },
+        onUpdated: () {
+          if (mounted) setState(() {});
+        },
+      );
+      if (mounted) setState(() {});
+      return;
+    }
+
+    if ((item.category == EntryCategory.journal || item.category == EntryCategory.reflection) &&
+        item.rawData is JournalEntry) {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => JournalEditorScreen(entry: item.rawData as JournalEntry),
+        ),
+      );
+      if (mounted) setState(() {});
+      return;
+    }
+
     final deleted = await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
         builder: (_) => UnifiedEntryDetailScreen(item: item),

@@ -37,9 +37,11 @@ class CozyConfirmSheet {
                 ),
               ],
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
                 // Handle bar
                 Container(
                   width: 40,
@@ -149,7 +151,8 @@ class CozyConfirmSheet {
                 const SizedBox(height: 10),
               ],
             ),
-          );
+          ),
+        );
         }),
       ),
     );

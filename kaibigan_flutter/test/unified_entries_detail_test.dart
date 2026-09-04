@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:kaibigan_flutter/features/gratitude_garden/gratitude_model.dart';
 import 'package:kaibigan_flutter/features/gratitude_garden/gratitude_provider.dart';
+import 'package:kaibigan_flutter/features/journaling/journal_editor_screen.dart';
 import 'package:kaibigan_flutter/features/journaling/journal_model.dart';
 import 'package:kaibigan_flutter/features/journaling/journal_provider.dart';
 import 'package:kaibigan_flutter/features/mood_tracking/mood_model.dart';
@@ -17,7 +18,7 @@ import 'package:kaibigan_flutter/features/unified_entries/unified_entries_screen
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('every entry category opens its own fullscreen viewer',
+  testWidgets('every entry category opens its unique feature viewer',
       (tester) async {
     SharedPreferences.setMockInitialValues({'preferred_language': 'english'});
     tester.view.devicePixelRatio = 1;
@@ -106,71 +107,92 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final cases = <({String query, String title, String key, String marker})>[
-      (
-        query: 'quiet realization',
-        title: 'A quiet realization',
-        key: 'entry-detail-journal',
-        marker: 'JOURNAL CONVERSATION',
-      ),
-      (
-        query: 'evening reflection',
-        title: 'Evening reflection',
-        key: 'entry-detail-reflection',
-        marker: 'YOUR REFLECTION',
-      ),
-      (
-        query: 'warm meal',
-        title: 'Gratitude: Sunflower',
-        key: 'entry-detail-gratitude',
-        marker: 'A MEMORY IN BLOOM',
-      ),
-      (
-        query: 'steady day',
-        title: 'Mood: Good',
-        key: 'entry-detail-mood',
-        marker: 'CHECK-IN DETAILS',
-      ),
-      (
-        query: 'meaningful task',
-        title: "Today's Focus",
-        key: 'entry-detail-focus',
-        marker: 'THE DIRECTION YOU CHOSE',
-      ),
-      (
-        query: 'laughing together',
-        title: "Today's Highlight",
-        key: 'entry-detail-highlight',
-        marker: 'THE MOMENT YOU KEPT',
-      ),
-      (
-        query: 'sleep status',
-        title: 'Sleep Status: Well Rested',
-        key: 'entry-detail-sleep',
-        marker: 'REST & ENERGY',
-      ),
-    ];
+    // 1. Gratitude entry opens the FlowerDetailSheet with edit & delete
+    await tester.enterText(find.byType(TextField).first, 'warm meal');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Gratitude: Sunflower').last);
+    await tester.pumpAndSettle();
 
-    for (final detailCase in cases) {
-      await tester.enterText(find.byType(TextField).first, detailCase.query);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text(detailCase.title).last);
-      await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('flower-detail-sheet')), findsOneWidget);
+    expect(find.text('“The warm meal my family shared.”'), findsOneWidget);
+    expect(find.byKey(const ValueKey('edit-gratitude-button')), findsOneWidget);
+    expect(find.byKey(const ValueKey('delete-gratitude-button')), findsOneWidget);
 
-      expect(find.byKey(ValueKey(detailCase.key)), findsOneWidget);
-      expect(find.text(detailCase.marker), findsOneWidget);
-      expect(find.byType(BottomSheet), findsNothing);
-      if (detailCase.key == 'entry-detail-gratitude') {
-        expect(find.text('“The warm meal my family shared.”'), findsOneWidget);
-        expect(find.byKey(const ValueKey('entry-detail-water-flower')),
-            findsNothing);
-        expect(find.byIcon(Icons.water_drop_outlined), findsNothing);
-        expect(find.textContaining('Revisited'), findsNothing);
-      }
+    Navigator.of(tester.element(find.byKey(const ValueKey('flower-detail-sheet')))).pop();
+    await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('Back to all entries'));
-      await tester.pumpAndSettle();
-    }
+    // 2. Mood entry opens the MoodDetailSheet with mascot avatar, metrics, edit & delete
+    await tester.enterText(find.byType(TextField).first, 'steady day');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mood: Good').last);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('mood-detail-sheet')), findsOneWidget);
+    expect(
+        find.descendant(
+            of: find.byKey(const ValueKey('mood-detail-sheet')),
+            matching: find.text('Mood: Good')),
+        findsOneWidget);
+    expect(find.text('Stress: 2/5'), findsOneWidget);
+    expect(find.text('Energy: 4/5'), findsOneWidget);
+    expect(find.byKey(const ValueKey('edit-mood-note-button')), findsOneWidget);
+    expect(find.byKey(const ValueKey('delete-mood-button')), findsOneWidget);
+
+    Navigator.of(tester.element(find.byKey(const ValueKey('mood-detail-sheet')))).pop();
+    await tester.pumpAndSettle();
+
+    // 3. Journal entry opens the JournalEditorScreen
+    await tester.enterText(find.byType(TextField).first, 'quiet realization');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('A quiet realization').last);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(JournalEditorScreen), findsOneWidget);
+    Navigator.of(tester.element(find.byType(JournalEditorScreen))).pop();
+    await tester.pumpAndSettle();
+
+    // 4. Reflection entry opens the JournalEditorScreen
+    await tester.enterText(find.byType(TextField).first, 'evening reflection');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Evening reflection').last);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(JournalEditorScreen), findsOneWidget);
+    Navigator.of(tester.element(find.byType(JournalEditorScreen))).pop();
+    await tester.pumpAndSettle();
+
+    // 5. Routine focus opens the focus detail view
+    await tester.enterText(find.byType(TextField).first, 'meaningful task');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Today's Focus").last);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('entry-detail-focus')), findsOneWidget);
+    expect(find.text('THE DIRECTION YOU CHOSE'), findsOneWidget);
+    await tester.tap(find.byTooltip('Back to all entries'));
+    await tester.pumpAndSettle();
+
+    // 6. Routine highlight opens the highlight detail view
+    await tester.enterText(find.byType(TextField).first, 'laughing together');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Today's Highlight").last);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('entry-detail-highlight')), findsOneWidget);
+    expect(find.text('THE MOMENT YOU KEPT'), findsOneWidget);
+    await tester.tap(find.byTooltip('Back to all entries'));
+    await tester.pumpAndSettle();
+
+    // 7. Sleep routine log opens the sleep detail view
+    await tester.enterText(find.byType(TextField).first, 'sleep status');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sleep Status: Well Rested').last);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('entry-detail-sleep')), findsOneWidget);
+    expect(find.text('REST & ENERGY'), findsOneWidget);
+    await tester.tap(find.byTooltip('Back to all entries'));
+    await tester.pumpAndSettle();
   });
 }
 

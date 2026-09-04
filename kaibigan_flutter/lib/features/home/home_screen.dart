@@ -198,10 +198,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     isDark ? AppColors.darkCardBorder : AppColors.honeyBorder,
               ),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                 const Text(
                   'KAI CHECKS BACK IN',
                   style: TextStyle(
@@ -291,7 +293,8 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
-        );
+        ),
+      );
       },
     );
     if (result == null || !mounted) return;
@@ -806,9 +809,11 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context) {
         return Padding(
           padding: const EdgeInsets.fromLTRB(28, 28, 28, 36),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
               Container(
                 width: 40,
                 height: 4,
@@ -972,7 +977,8 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
           ),
-        );
+        ),
+      );
       },
     );
   }

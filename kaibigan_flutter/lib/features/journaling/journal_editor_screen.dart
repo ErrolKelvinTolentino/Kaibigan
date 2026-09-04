@@ -516,10 +516,12 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
           ),
           child: SafeArea(
             top: false,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                 Center(
                   child: Container(
                     width: 42,
@@ -576,7 +578,8 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
               ],
             ),
           ),
-        );
+        ),
+      );
       },
     );
     if (reason == null || !mounted) return;

@@ -77,6 +77,56 @@ void main() {
     expect(find.text('Grateful'), findsNothing);
   });
 
+  testWidgets('long AI summary does not overflow on small mobile screens',
+      (tester) async {
+    // Standard compact mobile viewport
+    await tester.binding.setSurfaceSize(const Size(360, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    const longSummary = AIJournalSaveSummary(
+      summary:
+          'Today brought a heavy wave of pressure with competing priorities and lots of background noise. Even though you felt like you had very little left to give, you still paused to acknowledge what mattered and gave yourself grace for making it through each small challenge one step at a time.',
+      emotions: [
+        'overwhelmed',
+        'tired',
+        'grateful',
+        'hopeful',
+        'anxious',
+        'relieved'
+      ],
+      moments: [
+        AIJournalMoment(
+          title: 'Holding on through the afternoon fog',
+          reflection:
+              'The moment where you decided to step away and catch your breath was crucial. It allowed your nervous system to reset even when everything else felt chaotic.',
+          emotions: ['tired', 'calm', 'hopeful'],
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      home: JournalSaveReflectionScreen(
+        entry: entry(title: 'A long and overwhelming day that needed reflection'),
+        language: 'english',
+        companionId: 'kai',
+        summaryLoader: () async => longSummary,
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const ValueKey('journal-summary-success')), findsOneWidget);
+    expect(find.text('Overwhelmed'), findsOneWidget);
+    expect(find.text('Relieved'), findsOneWidget);
+
+    // Can continue to moments slide without overflow
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Holding on through the afternoon fog'), findsOneWidget);
+  });
+
   test('legacy untitled values receive the warmer display title', () {
     expect(entry(title: 'Untitled Entry').displayTitle('english'),
         'A moment in your life');

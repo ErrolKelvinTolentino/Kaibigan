@@ -525,10 +525,12 @@ class _DailyReflectionScreenState extends State<DailyReflectionScreen> {
             color: isDark ? AppColors.darkCard : const Color(0xFFFFFDF8),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               Center(
                 child: Container(
                   width: 42,
@@ -649,7 +651,8 @@ class _DailyReflectionScreenState extends State<DailyReflectionScreen> {
               }),
             ],
           ),
-        ).animate().fadeIn(duration: 220.ms).slideY(begin: 0.07),
+        ),
+      ).animate().fadeIn(duration: 220.ms).slideY(begin: 0.07),
       ),
     );
 
