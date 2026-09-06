@@ -31,6 +31,10 @@ void main() {
       expect(dates.contains(today), isTrue);
     });
 
+    test('reading login history does not invent a visit today', () async {
+      expect(await ActivityUsageStore.loadLoginDates(), isEmpty);
+    });
+
     test('increments activity clicks and retrieves count', () async {
       expect(await ActivityUsageStore.loadActivityCounts(), isEmpty);
       await ActivityUsageStore.incrementActivityUsage('mood');

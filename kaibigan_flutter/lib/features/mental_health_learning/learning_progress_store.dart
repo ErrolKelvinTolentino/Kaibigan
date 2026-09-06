@@ -181,4 +181,26 @@ class LearningProgressStore {
       preferences.setInt('$_ideaPositionPrefix$lessonId', ideaIndex),
     ]);
   }
+
+  static const _quizScorePrefix = 'friend_support_quiz_score_';
+  static const _quizTotalPrefix = 'friend_support_quiz_total_';
+
+  Future<({int score, int total})?> loadQuizScore(String lessonId) async {
+    final preferences = await SharedPreferences.getInstance();
+    final score = preferences.getInt('$_quizScorePrefix$lessonId');
+    final total = preferences.getInt('$_quizTotalPrefix$lessonId');
+    if (score == null || total == null) return null;
+    return (score: score, total: total);
+  }
+
+  Future<void> saveQuizScore(String lessonId, int score, int total) async {
+    final preferences = await SharedPreferences.getInstance();
+    final current = preferences.getInt('$_quizScorePrefix$lessonId');
+    if (current == null || score >= current) {
+      await Future.wait([
+        preferences.setInt('$_quizScorePrefix$lessonId', score),
+        preferences.setInt('$_quizTotalPrefix$lessonId', total),
+      ]);
+    }
+  }
 }

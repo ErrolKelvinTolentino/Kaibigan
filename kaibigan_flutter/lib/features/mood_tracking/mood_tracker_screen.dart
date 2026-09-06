@@ -8,6 +8,7 @@ import '../../core/widgets/mobile_layout.dart';
 import '../../core/widgets/sync_status_banner.dart';
 import '../settings/user_provider.dart';
 import '../companion/companion_model.dart';
+import '../insights/wellness_insights_button.dart';
 import 'mood_provider.dart';
 import 'mood_model.dart';
 import 'mood_detail_sheet.dart';
@@ -195,6 +196,7 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
         ),
         centerTitle: true,
         actions: [
+          const WellnessInsightsButton(feature: 'mood'),
           if (!_showHistory && _currentStep < 3)
             IconButton(
               tooltip: 'View mood history',

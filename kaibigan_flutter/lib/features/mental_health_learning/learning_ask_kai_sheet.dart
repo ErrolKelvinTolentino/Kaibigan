@@ -48,15 +48,19 @@ class LearningAskKaiSheet extends StatefulWidget {
 class _LearningAskKaiSheetState extends State<LearningAskKaiSheet> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
+  final _scrollController = ScrollController();
+  bool _failed = false;
   final _service = const LearningAskKaiService();
   AIRequestCancellationToken? _cancellationToken;
   LearningAskKaiResult? _result;
   bool _loading = false;
+  String? _submittedQuestion;
 
   @override
   void dispose() {
     _cancellationToken?.cancel();
     _controller.dispose();
+    _scrollController.dispose();
     _focusNode.dispose();
     super.dispose();
   }
@@ -92,11 +96,15 @@ class _LearningAskKaiSheetState extends State<LearningAskKaiSheet> {
       _focusNode.requestFocus();
       return;
     }
+    _controller.clear();
+    _focusNode.unfocus();
     final token = AIRequestCancellationToken();
     _cancellationToken = token;
     setState(() {
+      _submittedQuestion = question;
       _loading = true;
       _result = null;
+      _failed = false;
     });
     try {
       final result = await _service.answer(
@@ -108,8 +116,25 @@ class _LearningAskKaiSheetState extends State<LearningAskKaiSheet> {
       );
       if (!mounted || token.isCancelled) return;
       setState(() => _result = result);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_scrollController.hasClients) return;
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: (MediaQuery.maybeOf(context)?.disableAnimations ?? false)
+              ? Duration.zero
+              : KaibiganMotion.standard,
+          curve: KaibiganMotion.enter,
+        );
+      });
     } on AIRequestCancelledException {
       // Closing the sheet intentionally cancels the request.
+    } catch (_) {
+      if (mounted && !token.isCancelled) {
+        setState(() {
+          _failed = true;
+          _controller.text = question;
+        });
+      }
     } finally {
       if (mounted && identical(_cancellationToken, token)) {
         setState(() => _loading = false);
@@ -117,10 +142,114 @@ class _LearningAskKaiSheetState extends State<LearningAskKaiSheet> {
     }
   }
 
+  Widget _buildUserBubble(
+    BuildContext context, {
+    required KaibiganPalette palette,
+    required String text,
+  }) {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.78,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: palette.accent,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(4),
+            bottomLeft: Radius.circular(20),
+            bottomRight: Radius.circular(20),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: palette.accent.withValues(alpha: 0.2),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            color: palette.onAccent,
+            fontSize: 14.5,
+            fontWeight: FontWeight.w600,
+            height: 1.35,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildKaiBubble(
+    BuildContext context, {
+    required KaibiganPalette palette,
+    required Widget child,
+    bool isAnswer = false,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: AppColors.honeyAmber,
+            borderRadius: BorderRadius.circular(11),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.honeyAmber.withValues(alpha: 0.25),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          alignment: Alignment.center,
+          child: const Text(
+            '🐝',
+            style: TextStyle(fontSize: 17),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: isAnswer
+              ? child
+              : Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: palette.surface,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(4),
+                      topRight: Radius.circular(20),
+                      bottomLeft: Radius.circular(20),
+                      bottomRight: Radius.circular(20),
+                    ),
+                    border: Border.all(
+                      color: palette.border.withValues(alpha: 0.5),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: palette.shadow.withValues(alpha: 0.04),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: child,
+                ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = context.kaibigan;
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+
     return AnimatedPadding(
       duration: const Duration(milliseconds: 180),
       padding: EdgeInsets.only(bottom: bottomInset),
@@ -135,6 +264,7 @@ class _LearningAskKaiSheetState extends State<LearningAskKaiSheet> {
           ),
           child: Column(
             children: [
+              // Drag Handle
               const SizedBox(height: 10),
               Container(
                 width: 42,
@@ -144,25 +274,32 @@ class _LearningAskKaiSheetState extends State<LearningAskKaiSheet> {
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
+
+              // Chat Header
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 14, 12, 8),
+                padding: const EdgeInsets.fromLTRB(16, 12, 12, 10),
                 child: Row(
                   children: [
                     Container(
-                      width: 44,
-                      height: 44,
+                      width: 42,
+                      height: 42,
                       decoration: BoxDecoration(
-                        color: AppColors.honeyAmber,
-                        borderRadius: BorderRadius.circular(15),
+                        gradient: const LinearGradient(
+                          colors: [AppColors.honeyGold, AppColors.honeyAmber],
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.honeyAmber.withValues(alpha: 0.25),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
                       alignment: Alignment.center,
                       child: const Text(
-                        'K',
-                        style: TextStyle(
-                          color: AppColors.onHoney,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w900,
-                        ),
+                        '🐝',
+                        style: TextStyle(fontSize: 22),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -170,25 +307,59 @@ class _LearningAskKaiSheetState extends State<LearningAskKaiSheet> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            LanguageHelper.pick(
-                              widget.language,
-                              english: 'Ask Kai about this idea',
-                              filipino:
-                                  'Tanungin si Kai tungkol sa ideyang ito',
-                              taglish: 'Ask Kai about this idea',
-                            ),
-                            style: Theme.of(context).textTheme.titleMedium,
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  LanguageHelper.pick(
+                                    widget.language,
+                                    english: 'Ask Kai about this idea',
+                                    filipino:
+                                        'Tanungin si Kai tungkol sa ideyang ito',
+                                    taglish: 'Ask Kai about this idea',
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleSmall
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: palette.accentSubtle,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  'AI',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w900,
+                                    color: palette.accentStrong,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
+                          const SizedBox(height: 2),
                           Text(
                             widget.currentSection.heading
                                 .resolve(widget.language),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(color: palette.textSecondary),
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: palette.textSecondary,
+                                      fontSize: 12,
+                                    ),
                           ),
                         ],
                       ),
@@ -206,84 +377,247 @@ class _LearningAskKaiSheetState extends State<LearningAskKaiSheet> {
                 ),
               ),
               const Divider(height: 1),
+
+              // Chat Message Stream
               Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      KaibiganSurface(
-                        tone: KaibiganSurfaceTone.accent,
-                        padding: const EdgeInsets.all(13),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(
-                              Icons.shield_outlined,
-                              color: palette.accentStrong,
-                              size: 19,
+                child: ListView(
+                  controller: _scrollController,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                  children: [
+                    // Safety/Grounding Banner Note
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: palette.surfaceSubtle,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: palette.border.withValues(alpha: 0.5),
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.shield_outlined,
+                            color: palette.accentStrong,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              LanguageHelper.pick(
+                                widget.language,
+                                english:
+                                    'Ask about this idea, other lessons, and mental health. Kai is an AI guide, not a clinician. Your questions are not added to your journal or memory.',
+                                filipino:
+                                    'Magtanong tungkol sa ideyang ito, iba pang aralin, at kalusugang pangkaisipan. AI na gabay si Kai, hindi propesyonal na tagapangalaga. Hindi itinatabi sa talaarawan o memorya ang mga tanong mo.',
+                                taglish:
+                                    'Ask about this idea, other lessons, and mental health. AI guide si Kai, hindi clinician. Hindi idinadagdag sa journal or memory ang questions mo.',
+                              ),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: palette.textSecondary,
+                                    fontSize: 11.5,
+                                    height: 1.4,
+                                  ),
                             ),
-                            const SizedBox(width: 9),
-                            Expanded(
-                              child: Text(
-                                LanguageHelper.pick(
-                                  widget.language,
-                                  english:
-                                      'Kai answers questions about this slide, other lessons, and mental health. Questions are not added to your journal or memory, and this cannot diagnose or replace professional care.',
-                                  filipino:
-                                      'Sumasagot si Kai tungkol sa slide na ito, iba pang aralin, at kalusugang pangkaisipan. Hindi idaragdag sa journal o memory ang tanong, at hindi ito diagnosis o kapalit ng professional care.',
-                                  taglish:
-                                      'Kai answers about this slide, other lessons, and mental health. Hindi mase-save sa journal or memory ang question, at hindi ito diagnosis or replacement for professional care.',
-                                ),
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                      color: palette.textSecondary,
-                                      height: 1.45,
-                                    ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Kai Initial Greeting Message
+                    _buildKaiBubble(
+                      context,
+                      palette: palette,
+                      child: Text(
+                        LanguageHelper.pick(
+                          widget.language,
+                          english:
+                              'Hello! I\'m Kai, your learning companion. Ask me anything to clarify this concept, or explore how to apply it in your life.',
+                          filipino:
+                              'Kumusta! Ako si Kai, ang kasama mo sa pag-aaral. Magtanong ng kahit ano upang mas luminao ang ideyang ito o kung paano ito maisasabuhay.',
+                          taglish:
+                              'Hello! I\'m Kai, your learning companion. Ask me anything to clarify this concept, or explore how to apply it in your life.',
+                        ),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: palette.textPrimary,
+                              height: 1.45,
+                            ),
+                      ),
+                    ),
+
+                    // User Submitted Question
+                    if (_submittedQuestion != null) ...[
+                      const SizedBox(height: 16),
+                      _buildUserBubble(
+                        context,
+                        palette: palette,
+                        text: _submittedQuestion!,
+                      ),
+                    ],
+
+                    // Loading Indicator Bubble
+                    if (_loading) ...[
+                      const SizedBox(height: 16),
+                      _buildKaiBubble(
+                        context,
+                        palette: palette,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: palette.accent,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              LanguageHelper.pick(
+                                widget.language,
+                                english: 'Finding a helpful explanation…',
+                                filipino: 'Naghahanap ng malinaw na paliwanag…',
+                              ),
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontStyle: FontStyle.italic,
+                                color: palette.textSecondary,
                               ),
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 14),
-                      Text(
-                        LanguageHelper.pick(
-                          widget.language,
-                          english: 'Try asking',
-                          filipino: 'Subukang itanong',
+                    ],
+
+                    // Failed Error Notice
+                    if (_failed) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: palette.danger.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: palette.danger.withValues(alpha: 0.3),
+                          ),
                         ),
-                        style: Theme.of(context).textTheme.labelLarge,
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: _suggestions
-                            .map(
-                              (suggestion) => ActionChip(
-                                key: ValueKey(
-                                  'learning-kai-suggestion-${_suggestions.indexOf(suggestion)}',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.error_outline_rounded,
+                              color: palette.danger,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                LanguageHelper.pick(
+                                  widget.language,
+                                  english:
+                                      'That answer could not load. Tap Ask Kai to try again.',
+                                  filipino:
+                                      'Hindi mabuksan ang sagot. Pindutin ang Tanungin si Kai para subukan muli.',
                                 ),
-                                avatar: const Icon(
-                                  Icons.auto_awesome_rounded,
-                                  size: 16,
+                                style: TextStyle(
+                                  color: palette.danger,
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
                                 ),
-                                label: Text(suggestion),
-                                onPressed:
-                                    _loading ? null : () => _ask(suggestion),
                               ),
-                            )
-                            .toList(growable: false),
+                            ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 14),
-                      TextField(
+                    ],
+
+                    // Kai Answer Bubble
+                    if (_result != null) ...[
+                      const SizedBox(height: 16),
+                      _buildKaiBubble(
+                        context,
+                        palette: palette,
+                        isAnswer: true,
+                        child: _LearningKaiAnswer(
+                          result: _result!,
+                          language: widget.language,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                  ],
+                ),
+              ),
+
+              // Suggestions Strip
+              if (!_loading) ...[
+                Container(
+                  height: 38,
+                  margin: const EdgeInsets.only(bottom: 6),
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: _suggestions.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, index) {
+                      final suggestion = _suggestions[index];
+                      return ActionChip(
+                        key: ValueKey('learning-kai-suggestion-$index'),
+                        label: Text(
+                          suggestion,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: palette.textPrimary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        avatar: Icon(
+                          Icons.lightbulb_outline_rounded,
+                          size: 14,
+                          color: palette.accent,
+                        ),
+                        backgroundColor: palette.surfaceSubtle,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          side: BorderSide(
+                            color: palette.border.withValues(alpha: 0.6),
+                          ),
+                        ),
+                        onPressed: () => _ask(suggestion),
+                      );
+                    },
+                  ),
+                ),
+              ],
+
+              // Sticky Bottom Chat Input Bar
+              Container(
+                padding: const EdgeInsets.fromLTRB(14, 8, 12, 12),
+                decoration: BoxDecoration(
+                  color: palette.surface,
+                  border: Border(
+                    top: BorderSide(
+                      color: palette.border.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: TextField(
                         key: const ValueKey('learning-kai-question-field'),
                         controller: _controller,
                         focusNode: _focusNode,
                         enabled: !_loading,
-                        minLines: 2,
+                        minLines: 1,
                         maxLines: 4,
                         maxLength: LearningAskKaiService.maxQuestionCharacters,
                         textCapitalization: TextCapitalization.sentences,
@@ -292,53 +626,71 @@ class _LearningAskKaiSheetState extends State<LearningAskKaiSheet> {
                         decoration: InputDecoration(
                           hintText: LanguageHelper.pick(
                             widget.language,
-                            english: 'What would you like clarified?',
-                            filipino: 'Ano ang gusto mong malinawan?',
-                            taglish: 'What would you like clarified?',
+                            english: 'Ask a question about this idea…',
+                            filipino: 'Magtanong tungkol sa ideyang ito…',
+                            taglish: 'Ask a question about this idea…',
                           ),
-                          prefixIcon: const Icon(Icons.chat_bubble_outline),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          key: const ValueKey('submit-learning-kai-question'),
-                          onPressed: _loading ? null : _ask,
-                          icon: _loading
-                              ? SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: palette.onAccent,
-                                  ),
-                                )
-                              : const Icon(Icons.arrow_upward_rounded),
-                          label: Text(
-                            _loading
-                                ? LanguageHelper.pick(
-                                    widget.language,
-                                    english: 'Checking the lesson…',
-                                    filipino: 'Sinusuri ang lesson…',
-                                  )
-                                : LanguageHelper.pick(
-                                    widget.language,
-                                    english: 'Ask from this lesson',
-                                    filipino: 'Magtanong mula sa lesson',
-                                  ),
+                          counterText: '',
+                          filled: true,
+                          fillColor: palette.surfaceSubtle,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(22),
+                            borderSide: BorderSide.none,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(22),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(22),
+                            borderSide: BorderSide(
+                              color: palette.accent,
+                              width: 1.5,
+                            ),
                           ),
                         ),
                       ),
-                      if (_result != null) ...[
-                        const SizedBox(height: 16),
-                        _LearningKaiAnswer(
-                          result: _result!,
-                          language: widget.language,
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 2),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [AppColors.honeyGold, AppColors.honeyAmber],
                         ),
-                      ],
-                    ],
-                  ),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.honeyAmber.withValues(alpha: 0.3),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: IconButton(
+                        key: const ValueKey('submit-learning-kai-question'),
+                        onPressed: _loading ? null : () => _ask(),
+                        icon: _loading
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.onHoney,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.arrow_upward_rounded,
+                                color: AppColors.onHoney,
+                                size: 20,
+                              ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -363,6 +715,7 @@ class _LearningKaiAnswer extends StatelessWidget {
     final palette = context.kaibigan;
     final isRedirect = result.kind != LearningAskKaiResultKind.answer &&
         result.kind != LearningAskKaiResultKind.crisis;
+
     return Semantics(
       liveRegion: true,
       child: KaibiganSurface(
@@ -402,14 +755,16 @@ class _LearningKaiAnswer extends StatelessWidget {
                             ? LanguageHelper.pick(
                                 language,
                                 english: 'Staying with this lesson',
-                                filipino: 'Nananatili sa lesson na ito',
+                                filipino: 'Tungkol sa araling ito',
                               )
                             : LanguageHelper.pick(
                                 language,
                                 english: 'Kai, grounded in this lesson',
-                                filipino: 'Kai, nakabatay sa lesson na ito',
+                                filipino: 'Kai, batay sa araling ito',
                               ),
-                    style: Theme.of(context).textTheme.labelLarge,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
                   ),
                 ),
               ],
@@ -453,11 +808,39 @@ class _LearningKaiAnswer extends StatelessWidget {
                   LanguageHelper.pick(
                     language,
                     english: 'View all safety lines',
-                    filipino: 'Tingnan ang safety lines',
+                    filipino: 'Tingnan ang mga matatawagan',
                   ),
                 ),
               ),
             ],
+            // Subtle AI Disclaimer
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(
+                  Icons.auto_awesome_rounded,
+                  size: 11,
+                  color: palette.textMuted,
+                ),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(
+                    LanguageHelper.pick(
+                      language,
+                      english:
+                          '✦ AI-generated response. For guidance only, not professional medical advice.',
+                      filipino:
+                          '✦ Binuo ng AI. Para sa gabay lamang, hindi medikal na payo.',
+                    ),
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: palette.textMuted,
+                          fontSize: 10,
+                          fontStyle: FontStyle.italic,
+                        ),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),

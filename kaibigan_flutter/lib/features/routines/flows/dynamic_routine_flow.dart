@@ -10,6 +10,7 @@ import '../../mood_tracking/mood_tracker_screen.dart';
 import '../../settings/user_provider.dart';
 import '../routine_model.dart';
 import '../routines_provider.dart';
+import '../widgets/routine_activity_frame.dart';
 import '../screens/gratitude_planting_screen.dart';
 import '../screens/grounding_session_screen.dart';
 import '../screens/mindfulness_meditation_screen.dart';
@@ -82,12 +83,12 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
           void skipActivity() => Navigator.of(activityContext).pop(
                 _RoutineActivityOutcome.skipped,
               );
-          return _RoutineActivityFrame(
-            routineTitle: widget.config.title,
-            stepTitle: step.title,
+          return RoutineActivityFrame(
+            routine: widget.config,
+            steps: steps,
+            skippedStepIds: Set.unmodifiable(_skippedStepIds),
+            onPause: () => Navigator.of(activityContext).pop(),
             currentIndex: _currentStepIndex,
-            totalSteps: steps.length,
-            accent: widget.config.primaryColor,
             onSkip: skipActivity,
             child: _activityFor(
               step,
@@ -181,6 +182,11 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
 
   Future<void> _finishRoutine() async {
     if (_isFinishing) return;
+    if (_activeSteps.every((step) => _skippedStepIds.contains(step.id))) {
+      context.read<RoutinesProvider>().clearRoutineSession(widget.config.id);
+      Navigator.pop(context);
+      return;
+    }
     setState(() => _isFinishing = true);
     final provider = context.read<RoutinesProvider>();
     final saved = await provider.addLog(
@@ -213,7 +219,6 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final steps = _activeSteps;
     final onCompletion = _currentStepIndex >= steps.length;
-    final progressIndex = onCompletion ? steps.length : _currentStepIndex;
     final currentStep =
         onCompletion || steps.isEmpty ? null : steps[_currentStepIndex];
 
@@ -225,20 +230,26 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
           onPressed: () => Navigator.pop(context),
           icon: const Icon(Icons.close_rounded),
         ),
-        title: Text(widget.config.title),
+        title: Text(widget.config.title,
+            maxLines: 1, overflow: TextOverflow.ellipsis),
+        actions: [
+          if (steps.isNotEmpty)
+            IconButton(
+              tooltip: routineText(context, 'View routine', 'Tingnan ang mga gawain'),
+              onPressed: () => showRoutinePlan(
+                context,
+                routine: widget.config,
+                steps: steps,
+                currentIndex: _currentStepIndex,
+                skippedStepIds: _skippedStepIds,
+              ),
+              icon: const Icon(Icons.format_list_bulleted_rounded),
+            ),
+        ],
       ),
       body: SafeArea(
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-              child: _RoutineProgress(
-                stepCount: steps.length,
-                activeIndex: progressIndex,
-                accent: widget.config.primaryColor,
-                isDark: isDark,
-              ),
-            ),
             Expanded(
               child: steps.isEmpty
                   ? _buildEmptyState(isDark)
@@ -275,15 +286,17 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
               ),
               const SizedBox(height: 24),
               Text(
-                _isPaused ? 'Routine paused' : 'Opening your activity…',
+                _isPaused
+                    ? routineText(context, 'Routine paused', 'Pahinga muna', 'Naka-pause ang routine')
+                    : routineText(context, 'A little time for you', 'Sandaling para sa iyo'),
                 style: AppTypography.titleLarge(context, isDark: isDark),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 9),
               Text(
                 _isPaused
-                    ? 'Your progress is safe. Resume when you feel ready.'
-                    : 'Autoplay uses the full ${step.title} experience.',
+                    ? routineText(context, 'Completed activities are saved. Continue when you feel ready.', 'Naka-save ang mga natapos mong gawain. Magpatuloy kapag handa ka na.', 'Saved na ang mga natapos mong activity. Continue kapag ready ka na.')
+                    : routineText(context, 'Take this at your own pace.', 'Gawin ito sa sarili mong bilis.'),
                 style: AppTypography.bodyMedium(context, isDark: isDark),
                 textAlign: TextAlign.center,
               ),
@@ -337,9 +350,10 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
                     key: const ValueKey('resume-routine-activity'),
                     onPressed: _launchCurrentActivity,
                     icon: const Icon(Icons.play_arrow_rounded),
-                    label: Text('Resume ${step.title}'),
+                    label: Text(routineText(context, 'Continue activity', 'Ipagpatuloy ang gawain')), 
                     style: FilledButton.styleFrom(
                       backgroundColor: widget.config.primaryColor,
+                      foregroundColor: AppColors.readableOn(widget.config.primaryColor),
                     ),
                   ),
                 ),
@@ -358,12 +372,14 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
   Widget _buildCompletion(bool isDark) {
     final user = context.watch<UserProvider>();
     final language = user.language;
+    final completedCount = _activeSteps.length - _skippedStepIds.length;
+    final allSkipped = completedCount == 0;
     return LayoutBuilder(
       builder: (context, constraints) => SingleChildScrollView(
         padding: const EdgeInsets.all(30),
         child: ConstrainedBox(
           constraints: BoxConstraints(
-            minHeight: constraints.maxHeight - 40,
+            minHeight: (constraints.maxHeight - 60).clamp(0, double.infinity),
             maxWidth: 460,
           ),
           child: Column(
@@ -403,8 +419,9 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
               Text(
                 LanguageHelper.pick(
                   language,
-                  english: 'Routine completed! ✨',
-                  filipino: 'Tapos na ang routine! ✨',
+                  english: allSkipped ? 'A pause is okay, too' : 'Routine completed! ✨',
+                  filipino: allSkipped ? 'Ayos lang magpahinga muna' : 'Natapos mo ang mga gawain! ✨',
+                  taglish: allSkipped ? 'Okay lang mag-pause' : 'Tapos na ang routine! ✨',
                 ),
                 style: AppTypography.heroHeader(context, isDark: isDark),
                 textAlign: TextAlign.center,
@@ -413,12 +430,19 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
               Text(
                 LanguageHelper.pick(
                   language,
-                  english: _skippedStepIds.isEmpty
+                  english: allSkipped
+                      ? 'You skipped ${_skippedStepIds.length} activities. You can come back when it feels right.'
+                      : _skippedStepIds.isEmpty
                       ? 'Well done, ${user.displayName}. You made time for every activity.'
                       : 'Well done, ${user.displayName}. You finished at your own pace and skipped ${_skippedStepIds.length} ${_skippedStepIds.length == 1 ? 'activity' : 'activities'}.',
-                  filipino: _skippedStepIds.isEmpty
-                      ? 'Mahusay, ${user.displayName}. Naglaan ka ng oras para sa bawat activity.'
-                      : 'Mahusay, ${user.displayName}. Natapos mo sa sarili mong pace at nilaktawan ang ${_skippedStepIds.length} ${_skippedStepIds.length == 1 ? 'activity' : 'activities'}.',
+                  filipino: allSkipped
+                      ? 'Nilaktawan mo ang ${_skippedStepIds.length} gawain. Maaari kang bumalik kapag handa ka na.'
+                      : _skippedStepIds.isEmpty
+                          ? 'Salamat sa paglalaan ng oras para sa sarili, ${user.displayName}.'
+                          : 'Natapos mo ang $completedCount gawain at nilaktawan ang ${_skippedStepIds.length}. Ikaw ang pumipili ng makatutulong sa iyo.',
+                  taglish: allSkipped
+                      ? 'You skipped ${_skippedStepIds.length} activities. Balik ka kapag ready ka na.'
+                      : 'You made time for yourself, ${user.displayName}. Natapos mo ang $completedCount activities.',
                 ),
                 style: AppTypography.bodyMedium(context, isDark: isDark),
                 textAlign: TextAlign.center,
@@ -426,12 +450,15 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
               const SizedBox(height: 34),
               SizedBox(
                 width: double.infinity,
-                height: 54,
+                // Content may grow with accessibility text settings.
                 child: FilledButton(
                   key: const ValueKey('finish-routine'),
                   onPressed: _isFinishing ? null : _finishRoutine,
                   style: FilledButton.styleFrom(
                     backgroundColor: widget.config.primaryColor,
+                    foregroundColor: AppColors.readableOn(widget.config.primaryColor),
+                    minimumSize: const Size(0, 54),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
                     ),
@@ -448,8 +475,9 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
                       : Text(
                           LanguageHelper.pick(
                             language,
-                            english: 'Finish & return home',
-                            filipino: 'Tapusin at bumalik sa home',
+                            english: allSkipped ? 'Return to routines' : 'Save & finish',
+                            filipino: allSkipped ? 'Bumalik sa mga gawain' : 'I-save at tapusin',
+                            taglish: allSkipped ? 'Balik sa routines' : 'Save at tapusin',
                           ),
                           style: const TextStyle(
                             fontSize: 16,
@@ -479,12 +507,12 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
             ),
             const SizedBox(height: 16),
             Text(
-              'No active activities',
+              routineText(context, 'No active activities', 'Wala pang napiling gawain'),
               style: AppTypography.titleLarge(context, isDark: isDark),
             ),
             const SizedBox(height: 8),
             Text(
-              'Add or enable an activity before starting this routine.',
+              routineText(context, 'Add or enable an activity before starting this routine.', 'Magdagdag o pumili muna ng gawain bago magsimula.'),
               style: AppTypography.bodyMedium(context, isDark: isDark),
               textAlign: TextAlign.center,
             ),
@@ -496,171 +524,6 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
 }
 
 enum _RoutineActivityOutcome { completed, skipped }
-
-class _RoutineActivityFrame extends StatelessWidget {
-  const _RoutineActivityFrame({
-    required this.routineTitle,
-    required this.stepTitle,
-    required this.currentIndex,
-    required this.totalSteps,
-    required this.accent,
-    required this.onSkip,
-    required this.child,
-  });
-
-  final String routineTitle;
-  final String stepTitle;
-  final int currentIndex;
-  final int totalSteps;
-  final Color accent;
-  final VoidCallback onSkip;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primaryTextColor =
-        isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight;
-    final backgroundColor =
-        isDark ? AppColors.darkBackground : AppColors.warmCream;
-
-    return Scaffold(
-      backgroundColor: backgroundColor,
-      body: Column(
-        children: [
-          SafeArea(
-            bottom: false,
-            child: Container(
-              key: const ValueKey('routine-activity-progress-bar'),
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.darkCard : Colors.white,
-                border: Border(
-                  bottom: BorderSide(
-                    color: isDark
-                        ? AppColors.darkCardBorder
-                        : Colors.black.withValues(alpha: 0.06),
-                    width: 1,
-                  ),
-                ),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: accent.withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          'Step ${currentIndex + 1} of $totalSteps',
-                          style: TextStyle(
-                            color: accent,
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '$routineTitle • $stepTitle',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: primaryTextColor,
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      Semantics(
-                        button: true,
-                        label: 'Skip $stepTitle and continue the routine',
-                        child: TextButton.icon(
-                          key: const ValueKey('skip-routine-activity'),
-                          onPressed: onSkip,
-                          style: TextButton.styleFrom(
-                            foregroundColor: accent,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          icon: const Icon(Icons.skip_next_rounded, size: 18),
-                          label: const Text(
-                            'Skip',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  _RoutineProgress(
-                    keyPrefix: 'routine-activity-progress-',
-                    stepCount: totalSteps - 1,
-                    activeIndex: currentIndex,
-                    accent: accent,
-                    isDark: isDark,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Expanded(child: child),
-        ],
-      ),
-    );
-  }
-}
-
-class _RoutineProgress extends StatelessWidget {
-  const _RoutineProgress({
-    this.keyPrefix = 'routine-progress-',
-    required this.stepCount,
-    required this.activeIndex,
-    required this.accent,
-    required this.isDark,
-  });
-
-  final String keyPrefix;
-  final int stepCount;
-  final int activeIndex;
-  final Color accent;
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: List.generate(stepCount + 1, (index) {
-        final active = index == activeIndex;
-        final passed = index < activeIndex;
-        return Expanded(
-          child: AnimatedContainer(
-            key: ValueKey('$keyPrefix$index'),
-            duration: const Duration(milliseconds: 240),
-            height: active ? 6 : 4,
-            margin: EdgeInsets.only(right: index == stepCount ? 0 : 6),
-            decoration: BoxDecoration(
-              color: active || passed
-                  ? accent
-                  : (isDark ? Colors.white12 : Colors.black12),
-              borderRadius: BorderRadius.circular(99),
-            ),
-          ),
-        );
-      }),
-    );
-  }
-}
 
 class _CustomRoutineActivity extends StatelessWidget {
   const _CustomRoutineActivity({
@@ -683,7 +546,7 @@ class _CustomRoutineActivity extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
           icon: const Icon(Icons.close_rounded),
         ),
-        title: Text(step.title),
+        title: Text(step.title, maxLines: 2, overflow: TextOverflow.ellipsis),
       ),
       body: SafeArea(
         child: Center(
@@ -719,8 +582,11 @@ class _CustomRoutineActivity extends StatelessWidget {
                     child: FilledButton.icon(
                       onPressed: onCompleted,
                       icon: const Icon(Icons.check_rounded),
-                      label: const Text('Complete activity'),
-                      style: FilledButton.styleFrom(backgroundColor: accent),
+                      label: Text(routineText(context, 'Complete activity', 'Tapusin ang gawain')), 
+                      style: FilledButton.styleFrom(
+                        backgroundColor: accent,
+                        foregroundColor: AppColors.readableOn(accent),
+                      ),
                     ),
                   ),
                 ],

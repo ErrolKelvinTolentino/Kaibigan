@@ -15,6 +15,7 @@ import 'learning_lesson_screen.dart';
 import 'learning_model.dart';
 import 'learning_progress_store.dart';
 import 'learning_toolkit_screen.dart';
+import 'friend_support/friend_support_hub_screen.dart';
 
 class LearningHubScreen extends StatefulWidget {
   const LearningHubScreen({super.key});
@@ -31,7 +32,6 @@ class _LearningHubScreenState extends State<LearningHubScreen> {
   LearningPath? _path;
   String? _lastLessonId;
   int _lastIdeaIndex = 0;
-  bool _loadingProgress = true;
 
   @override
   void initState() {
@@ -51,10 +51,9 @@ class _LearningHubScreenState extends State<LearningHubScreen> {
           );
     if (!mounted) return;
     setState(() {
-      _completed = completed;
+      _completed = completed.where((id) => _lessonForId(id) != null).toSet();
       _lastLessonId = lastLessonId;
       _lastIdeaIndex = lastIdeaIndex;
-      _loadingProgress = false;
     });
   }
 
@@ -160,9 +159,6 @@ class _LearningHubScreenState extends State<LearningHubScreen> {
                 .indexOf(a)
                 .compareTo(LearningCatalog.lessons.indexOf(b));
       });
-    final progress = LearningCatalog.lessons.isEmpty
-        ? 0.0
-        : _completed.length / LearningCatalog.lessons.length;
     final resumeLesson = _lessonForId(_lastLessonId);
 
     return Scaffold(
@@ -182,7 +178,7 @@ class _LearningHubScreenState extends State<LearningHubScreen> {
             tooltip: LanguageHelper.pick(
               language,
               english: 'Saved ideas',
-              filipino: 'Mga naka-save na idea',
+              filipino: 'Mga itinabing ideya',
             ),
             onPressed: () => Navigator.of(context).push<void>(
               MaterialPageRoute(builder: (_) => const LearningToolkitScreen()),
@@ -194,7 +190,9 @@ class _LearningHubScreenState extends State<LearningHubScreen> {
       ),
       body: SafeArea(
         top: false,
-        child: CustomScrollView(
+        child: MobileContent(
+            child: CustomScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           key: const ValueKey('learning-hub-scroll-view'),
           slivers: [
             SliverPadding(
@@ -263,8 +261,8 @@ class _LearningHubScreenState extends State<LearningHubScreen> {
                               Text(
                                 LanguageHelper.pick(
                                   language,
-                                  english: 'Mental health, made understandable',
-                                  filipino: 'Unawain ang sarili, nang banayad',
+                                  english: 'A little understanding helps',
+                                  filipino: 'Unti-unting unawain ang sarili',
                                 ),
                                 style: Theme.of(context).textTheme.titleMedium,
                               ),
@@ -273,44 +271,29 @@ class _LearningHubScreenState extends State<LearningHubScreen> {
                                 LanguageHelper.pick(
                                   language,
                                   english:
-                                      'Practical, trusted lessons—one clear idea at a time.',
+                                      'Small, practical lessons for everyday life.',
                                   filipino:
-                                      'Maikli at praktikal na lessons na mababasa sa sarili mong pace.',
+                                      'Maiikli at praktikal na aralin para sa araw-araw.',
                                 ),
                                 style: Theme.of(context)
                                     .textTheme
                                     .bodyMedium
                                     ?.copyWith(color: palette.textSecondary),
                               ),
-                              const SizedBox(height: 14),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(20),
-                                      child: LinearProgressIndicator(
-                                        minHeight: 7,
-                                        value:
-                                            _loadingProgress ? null : progress,
-                                        backgroundColor: palette.surface
-                                            .withValues(alpha: 0.8),
-                                        color: palette.accentStrong,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 11),
-                                  Text(
-                                    '${_completed.length}/${LearningCatalog.lessons.length}',
+                              if (_completed.isNotEmpty) ...[
+                                const SizedBox(height: 10),
+                                Text(
+                                    LanguageHelper.pick(language,
+                                        english:
+                                            '${_completed.length} lessons explored · at your pace',
+                                        filipino:
+                                            '${_completed.length} araling natapos · sa sarili mong bilis'),
                                     style: Theme.of(context)
                                         .textTheme
-                                        .labelMedium
+                                        .labelSmall
                                         ?.copyWith(
-                                          color: palette.textSecondary,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                  ),
-                                ],
-                              ),
+                                            color: palette.accentStrong)),
+                              ],
                             ],
                           ),
                         ),
@@ -325,59 +308,6 @@ class _LearningHubScreenState extends State<LearningHubScreen> {
                       ideaIndex: _lastIdeaIndex,
                       completed: _completed.contains(resumeLesson.id),
                       onTap: () => _openLesson(resumeLesson),
-                    ),
-                  ],
-                  if (query.isEmpty) ...[
-                    const SizedBox(height: 22),
-                    Semantics(
-                      headingLevel: 2,
-                      child: Text(
-                        LanguageHelper.pick(
-                          language,
-                          english: 'What would help right now?',
-                          filipino: 'Ano ang makakatulong ngayon?',
-                        ),
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      LanguageHelper.pick(
-                        language,
-                        english: 'Choose a gentle path or browse everything.',
-                        filipino:
-                            'Pumili ng banayad na path o tingnan ang lahat.',
-                      ),
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: palette.textMuted),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      key: const ValueKey('learning-paths-list'),
-                      height: 168,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        physics: const BouncingScrollPhysics(),
-                        itemCount: LearningCatalog.paths.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 10),
-                        itemBuilder: (context, index) {
-                          final path = LearningCatalog.paths[index];
-                          return _LearningPathCard(
-                            path: path,
-                            language: language,
-                            selected: _path?.id == path.id,
-                            completedCount: path.lessonIds
-                                .where(_completed.contains)
-                                .length,
-                            onTap: () => setState(() {
-                              _path = _path?.id == path.id ? null : path;
-                              _category = null;
-                            }),
-                          );
-                        },
-                      ),
                     ),
                   ],
                   const SizedBox(height: 20),
@@ -399,7 +329,7 @@ class _LearningHubScreenState extends State<LearningHubScreen> {
                               tooltip: LanguageHelper.pick(
                                 language,
                                 english: 'Clear search',
-                                filipino: 'Burahin ang search',
+                                filipino: 'Burahin ang hinanap',
                               ),
                               onPressed: () {
                                 _searchController.clear();
@@ -409,6 +339,73 @@ class _LearningHubScreenState extends State<LearningHubScreen> {
                             ),
                     ),
                   ),
+                  if (query.isEmpty) ...[
+                    const SizedBox(height: 14),
+                    _FriendSupportEntryCard(
+                      language: language,
+                      onTap: () async {
+                        await Navigator.of(context).push<void>(
+                          MaterialPageRoute(
+                            settings: const RouteSettings(name: 'friend_support_hub'),
+                            builder: (_) => const FriendSupportHubScreen(),
+                          ),
+                        );
+                        await _loadProgress();
+                      },
+                    ),
+                    const SizedBox(height: 22),
+                    Semantics(
+                      headingLevel: 2,
+                      child: Text(
+                        LanguageHelper.pick(
+                          language,
+                          english: 'What would help right now?',
+                          filipino: 'Ano ang makakatulong ngayon?',
+                        ),
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      LanguageHelper.pick(
+                        language,
+                        english: 'Choose a topic that fits your day.',
+                        filipino: 'Pumili ng paksang angkop sa araw mo.',
+                      ),
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: palette.textMuted),
+                    ),
+                    const SizedBox(height: 12),
+                    SingleChildScrollView(
+                      key: const ValueKey('learning-paths-list'),
+                      scrollDirection: Axis.horizontal,
+                      child: IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: LearningCatalog.paths
+                              .map((path) => Padding(
+                                    padding: const EdgeInsets.only(right: 10),
+                                    child: _LearningPathCard(
+                                      path: path,
+                                      language: language,
+                                      selected: _path?.id == path.id,
+                                      completedCount: path.lessonIds
+                                          .where(_completed.contains)
+                                          .length,
+                                      onTap: () => setState(() {
+                                        _path =
+                                            _path?.id == path.id ? null : path;
+                                        _category = null;
+                                      }),
+                                    ),
+                                  ))
+                              .toList(growable: false),
+                        ),
+                      ),
+                    ),
+                  ],
                   if (showSafetyResult) ...[
                     const SizedBox(height: 12),
                     _SearchSafetyCard(
@@ -453,7 +450,7 @@ class _LearningHubScreenState extends State<LearningHubScreen> {
                           LanguageHelper.pick(
                             language,
                             english: 'All lessons',
-                            filipino: 'Lahat ng lesson',
+                            filipino: 'Lahat ng aralin',
                           ),
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
@@ -463,7 +460,8 @@ class _LearningHubScreenState extends State<LearningHubScreen> {
                     LanguageHelper.pick(
                       language,
                       english: '${lessons.length} available offline',
-                      filipino: '${lessons.length} available kahit offline',
+                      filipino:
+                          '${lessons.length} aralin kahit walang internet',
                     ),
                     style: Theme.of(context)
                         .textTheme
@@ -481,7 +479,7 @@ class _LearningHubScreenState extends State<LearningHubScreen> {
                   title: LanguageHelper.pick(
                     language,
                     english: 'No lessons found',
-                    filipino: 'Walang nahanap na lesson',
+                    filipino: 'Walang nahanap na aralin',
                   ),
                   message: LanguageHelper.pick(
                     language,
@@ -539,7 +537,7 @@ class _LearningHubScreenState extends State<LearningHubScreen> {
                 ),
               ),
           ],
-        ),
+        )),
       ),
     );
   }
@@ -627,28 +625,28 @@ class _LearningPathCard extends StatelessWidget {
                   ),
                   child: Icon(path.icon, size: 20, color: palette.accent),
                 ),
-                const Spacer(),
-                Text(
-                  '$completedCount/${path.lessonIds.length}',
+                const SizedBox(width: 10),
+                Expanded(
+                    child: Text(
+                  LanguageHelper.pick(language,
+                      english: '${path.lessonIds.length} lessons',
+                      filipino: '${path.lessonIds.length} aralin'),
+                  textAlign: TextAlign.end,
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
                         color: palette.accentStrong,
                         fontWeight: FontWeight.w800,
                       ),
-                ),
+                )),
               ],
             ),
             const SizedBox(height: 10),
             Text(
               path.title.resolve(language),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.titleSmall,
             ),
-            const Spacer(),
+            const SizedBox(height: 8),
             Text(
               path.description.resolve(language),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
               style: Theme.of(context)
                   .textTheme
                   .bodySmall
@@ -696,7 +694,7 @@ class _SearchSafetyCard extends StatelessWidget {
                   LanguageHelper.pick(
                     language,
                     english: 'Immediate support is available',
-                    filipino: 'May immediate support na available',
+                    filipino: 'May agarang tulong na makukuha',
                   ),
                   style: Theme.of(context).textTheme.titleSmall,
                 ),
@@ -707,7 +705,7 @@ class _SearchSafetyCard extends StatelessWidget {
                     english:
                         'Open safety steps and Philippine crisis contacts. Call 911 if danger is immediate.',
                     filipino:
-                        'Buksan ang safety steps at Philippine crisis contacts. Tumawag sa 911 kung immediate ang danger.',
+                        'Tingnan ang mga hakbang sa kaligtasan at maaaring tawagan sa Pilipinas. Tumawag sa 911 kung may agarang panganib.',
                   ),
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: palette.textSecondary,
@@ -748,8 +746,11 @@ class _ContinueLearningCard extends StatelessWidget {
       tone: KaibiganSurfaceTone.accent,
       onTap: onTap,
       padding: const EdgeInsets.all(15),
-      semanticLabel:
-          '${completed ? 'Review' : 'Continue'} ${lesson.title.resolve(language)}',
+      semanticLabel: LanguageHelper.pick(language,
+          english:
+              '${completed ? 'Review' : 'Continue'} ${lesson.title.resolve(language)}',
+          filipino:
+              '${completed ? 'Balikan' : 'Ipagpatuloy'} ang ${lesson.title.resolve(language)}'),
       child: Row(
         children: [
           Container(
@@ -776,7 +777,7 @@ class _ContinueLearningCard extends StatelessWidget {
                         ? 'Review your last lesson'
                         : 'Continue learning',
                     filipino: completed
-                        ? 'Balikan ang huling lesson'
+                        ? 'Balikan ang huling aralin'
                         : 'Ipagpatuloy ang pag-aaral',
                   ),
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
@@ -796,7 +797,7 @@ class _ContinueLearningCard extends StatelessWidget {
                   LanguageHelper.pick(
                     language,
                     english: 'Idea ${ideaIndex + 1} of $total',
-                    filipino: 'Idea ${ideaIndex + 1} sa $total',
+                    filipino: 'Ideya ${ideaIndex + 1} sa $total',
                   ),
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: palette.textSecondary,
@@ -900,6 +901,107 @@ class _LessonCard extends StatelessWidget {
           const SizedBox(width: 7),
           Icon(Icons.chevron_right_rounded, color: palette.textMuted),
         ],
+      ),
+    );
+  }
+}
+
+class _FriendSupportEntryCard extends StatelessWidget {
+  const _FriendSupportEntryCard({
+    required this.language,
+    required this.onTap,
+  });
+
+  final String language;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.kaibigan;
+
+    return KaibiganSurface(
+      key: const ValueKey('friend-support-entry-card'),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: palette.accentSubtle,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: palette.accent.withValues(alpha: 0.25),
+                  ),
+                ),
+                alignment: Alignment.center,
+                child: const Text('💛', style: TextStyle(fontSize: 24)),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: palette.accentSubtle,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        LanguageHelper.pick(
+                          language,
+                          english: '3 Interactive Lessons & Quizzes',
+                          filipino: '3 Aralin at Pagsasanay',
+                        ),
+                        style: TextStyle(
+                          color: palette.accentStrong,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      LanguageHelper.pick(
+                        language,
+                        english: 'Friend Support Lessons',
+                        filipino: 'Aralin sa Pagsuporta sa Kaibigan',
+                      ),
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      LanguageHelper.pick(
+                        language,
+                        english: 'Learn how to listen and respond with empathy.',
+                        filipino: 'Matutong makinig at sumuporta nang may malasakit.',
+                      ),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: palette.textSecondary,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 16,
+                color: palette.accent,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

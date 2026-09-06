@@ -43,6 +43,7 @@ class LearningAskKaiService {
     required String language,
     AIRequestCancellationToken? cancellationToken,
   }) async {
+    cancellationToken?.throwIfCancelled();
     final prepared = AIService.prepareJournalText(question);
     if (prepared.isEmpty) {
       return LearningAskKaiResult(
@@ -267,14 +268,22 @@ class LearningAskKaiService {
 
   static bool requestsDiagnosisOrMedication(String question) {
     final lower = question.toLowerCase();
-    return RegExp(
+    final diagnosisRequest = RegExp(
           r'\b(do i have|diagnose me|am i diagnosed|does this mean i have|tell me my diagnosis)\b|\b(may|mayroon|meron) (adhd|anxiety|depression|bipolar|ocd|ptsd|autism|panic disorder) ba ako\b|\b(mayroon|meron) ba akong (adhd|anxiety|depression|bipolar|ocd|ptsd|autism|panic disorder)\b',
           caseSensitive: false,
-        ).hasMatch(lower) ||
-        RegExp(
+        ).hasMatch(lower);
+    // Ordinary requests such as "Should I take a break?" and "Can I start
+    // journaling?" need a helpful answer, not a medication refusal.
+    final medicationContext = RegExp(
+      r'\b(medication|medicine|meds|pill|pills|dose|dosage|mg|antidepressant|stimulant|sertraline|fluoxetine|escitalopram|alprazolam|gamot|dosis|reseta)\b',
+      caseSensitive: false,
+    ).hasMatch(lower);
+    final medicationChange = RegExp(
           r'\b(should i|can i|dapat ba akong|puwede ba akong|pwede ba akong)\s+(start|stop|take|change|increase|decrease|double|simulan|itigil|inumin|palitan|dagdagan|bawasan)\b',
           caseSensitive: false,
-        ).hasMatch(lower) ||
+        ).hasMatch(lower);
+    return diagnosisRequest ||
+        (medicationContext && medicationChange) ||
         RegExp(
           r'\b(what dose|how many mg|prescribe|anong dose|ilang mg|anong gamot ang dapat)\b',
           caseSensitive: false,
@@ -288,18 +297,7 @@ class LearningAskKaiService {
         lower.contains('lesson_context')) {
       return true;
     }
-    const conditions =
-        r'(adhd|depression|anxiety disorder|bipolar|ocd|ptsd|autism|panic disorder|mental illness)';
-    if (RegExp(
-      '\\b(you|the user) (definitely |clearly )?(have|has|meet the criteria for|are suffering from) $conditions\\b',
-      caseSensitive: false,
-    ).hasMatch(lower)) {
-      return true;
-    }
-    return RegExp(
-      r'\b(start|stop|increase|decrease|double|take)\b.{0,45}\b(dose|mg|medication|medicine|antidepressant|stimulant)\b',
-      caseSensitive: false,
-    ).hasMatch(lower);
+    return AIService.hasUnsafeClinicalAdvice(answer);
   }
 
   static String buildEducationalContext({
@@ -309,6 +307,8 @@ class LearningAskKaiService {
     String? question,
   }) {
     final buffer = StringBuffer()
+      ..writeln('REFERENCE ONLY: Explain what is supported below. If a detail is missing, say so; never invent a source, diagnosis, or treatment recommendation.')
+      ..writeln('SOURCE LABEL: ${lesson.sourceLabel}')
       ..writeln('CURRENT LESSON: ${lesson.title.resolve(language)}')
       ..writeln('SUMMARY: ${lesson.summary.resolve(language)}')
       ..writeln('CURRENT SLIDE / IDEA: ${currentSection.heading.resolve(language)}')
@@ -356,8 +356,8 @@ class LearningAskKaiService {
       ..writeln()
       ..writeln('SCOPE & GUIDELINES:')
       ..writeln(
-        'You can answer questions about the current slide, any other slides in this lesson, other lessons in Kaibigan, and general mental health and emotional well-being topics. '
-        'Explain warmly, clearly, and practically. Do not provide medical diagnoses or prescribe/change medication.',
+        'Use the supplied lesson content for factual explanations. For broader questions, explain only what this context supports and acknowledge what it does not cover. '
+        'Answer the question directly, explain one idea at a time, and use one everyday example when helpful. Do not infer symptoms or history about the learner.',
       )
       ..writeln('SOURCE LABEL: ${lesson.sourceLabel}');
 
@@ -429,9 +429,9 @@ class LearningAskKaiService {
     final bounded = body.length <= 700 ? body : '${body.substring(0, 697)}…';
     return _pick(
       language,
-      english: 'From this lesson: $bounded',
-      filipino: 'Mula sa lesson na ito: $bounded',
-      taglish: 'From this lesson: $bounded',
+      english: 'From this lesson: $bounded\n\nA personal explanation is unavailable right now. This is the saved lesson text; it may not answer every part of your question.',
+      filipino: 'Mula sa araling ito: $bounded\n\nHindi available ngayon ang paliwanag ni Kai. Ito ang naka-save na teksto ng aralin; maaaring hindi nito masagot ang lahat ng bahagi ng tanong mo.',
+      taglish: 'From this lesson: $bounded\n\nHindi available ang personal na explanation ngayon. Saved lesson text ito, so it may not answer every part of your question.',
     );
   }
 

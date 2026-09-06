@@ -1,8 +1,9 @@
-import 'dart:io' if (dart.library.html) 'dart:html';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+
+import 'env_loader_web.dart'
+    if (dart.library.io) 'env_loader_io.dart' as platform_env;
 
 class EnvConfig {
   static final Map<String, String> _runtimeValues = <String, String>{};
@@ -48,26 +49,23 @@ class EnvConfig {
       } catch (_) {}
     }
 
-    // 3. On desktop / local / tests, search workspace directories for .env
-    if (!kIsWeb) {
-      try {
-        final envFile = _findProjectDotEnv();
-        if (envFile != null && envFile.existsSync()) {
-          for (final entry in _parseDotEnv(await envFile.readAsString()).entries) {
-            _runtimeValues[entry.key] = entry.value;
-          }
-        }
-      } catch (_) {}
+    // 3. On desktop / local / tests, search workspace directories for .env (no-op on web)
+    try {
+      final fsEnv = await platform_env.loadFileSystemEnv(_parseDotEnv);
+      for (final entry in fsEnv.entries) {
+        _runtimeValues[entry.key] = entry.value;
+      }
+    } catch (_) {}
 
-      // 4. On non-web platforms, read from Platform environment
-      try {
-        for (final entry in Platform.environment.entries) {
-          if (entry.value.trim().isNotEmpty) {
-            _runtimeValues[entry.key] = entry.value.trim();
-          }
+    // 4. On non-web platforms, read from Platform environment (empty on web)
+    try {
+      final platformMap = platform_env.getPlatformEnvironment();
+      for (final entry in platformMap.entries) {
+        if (entry.value.trim().isNotEmpty) {
+          _runtimeValues[entry.key] = entry.value.trim();
         }
-      } catch (_) {}
-    }
+      }
+    } catch (_) {}
   }
 
   static void applyRuntimeValues(Map<String, String> values) {
@@ -135,8 +133,30 @@ class EnvConfig {
       kDebugMode &&
       (geminiApiKey.trim().isNotEmpty || groqApiKey.trim().isNotEmpty);
 
+  static String _readBuildEnvironment(String key) => switch (key) {
+        'SUPABASE_URL' => const String.fromEnvironment('SUPABASE_URL'),
+        'SUPABASE_ANON_KEY' =>
+          const String.fromEnvironment('SUPABASE_ANON_KEY'),
+        'PASSWORD_RESET_REDIRECT_URL' =>
+          const String.fromEnvironment('PASSWORD_RESET_REDIRECT_URL'),
+        'OAUTH_REDIRECT_URL' =>
+          const String.fromEnvironment('OAUTH_REDIRECT_URL'),
+        'ENABLE_GOOGLE_AUTH' =>
+          const String.fromEnvironment('ENABLE_GOOGLE_AUTH'),
+        'GEMINI_API_KEY' => const String.fromEnvironment('GEMINI_API_KEY'),
+        'GOOGLE_API_KEY' => const String.fromEnvironment('GOOGLE_API_KEY'),
+        'GEMINI_MODEL' => const String.fromEnvironment('GEMINI_MODEL'),
+        'PRIMARY_AI_MODEL' => const String.fromEnvironment('PRIMARY_AI_MODEL'),
+        'GROQ_API_KEY' => const String.fromEnvironment('GROQ_API_KEY'),
+        'GROQ_FALLBACK_MODEL' =>
+          const String.fromEnvironment('GROQ_FALLBACK_MODEL'),
+        'FALLBACK_AI_MODEL' =>
+          const String.fromEnvironment('FALLBACK_AI_MODEL'),
+        _ => '',
+      };
+
   static String _readString(String key, {String defaultValue = ''}) {
-    final buildValue = String.fromEnvironment(key, defaultValue: '');
+    final buildValue = _readBuildEnvironment(key);
     if (buildValue.trim().isNotEmpty) return buildValue.trim();
 
     final runtimeValue = _runtimeValues[key];
@@ -151,20 +171,18 @@ class EnvConfig {
       }
     } catch (_) {}
 
-    if (!kIsWeb) {
-      try {
-        final platformValue = Platform.environment[key];
-        if (platformValue != null && platformValue.trim().isNotEmpty) {
-          return platformValue.trim();
-        }
-      } catch (_) {}
-    }
+    try {
+      final platformValue = platform_env.getPlatformEnvironment()[key];
+      if (platformValue != null && platformValue.trim().isNotEmpty) {
+        return platformValue.trim();
+      }
+    } catch (_) {}
 
     return defaultValue;
   }
 
   static bool _readBool(String key, {required bool defaultValue}) {
-    final buildValue = String.fromEnvironment(key, defaultValue: '');
+    final buildValue = _readBuildEnvironment(key);
     if (buildValue.trim().isNotEmpty) {
       return _parseBool(buildValue);
     }
@@ -181,14 +199,12 @@ class EnvConfig {
       }
     } catch (_) {}
 
-    if (!kIsWeb) {
-      try {
-        final platformValue = Platform.environment[key];
-        if (platformValue != null && platformValue.trim().isNotEmpty) {
-          return _parseBool(platformValue);
-        }
-      } catch (_) {}
-    }
+    try {
+      final platformValue = platform_env.getPlatformEnvironment()[key];
+      if (platformValue != null && platformValue.trim().isNotEmpty) {
+        return _parseBool(platformValue);
+      }
+    } catch (_) {}
 
     return defaultValue;
   }
@@ -202,23 +218,6 @@ class EnvConfig {
     if (override.trim().isNotEmpty) return override.trim();
     if (kIsWeb) return Uri.base.resolve('auth-callback').toString();
     return 'com.kaibigan.app://auth-callback';
-  }
-
-  static File? _findProjectDotEnv() {
-    if (kIsWeb) return null;
-    try {
-      final current = Directory.current;
-      final candidates = [
-        File('${current.path}${Platform.pathSeparator}.env'),
-        File('${current.path}${Platform.pathSeparator}kaibigan_flutter${Platform.pathSeparator}.env'),
-        File('${current.parent.path}${Platform.pathSeparator}.env'),
-        File('${current.parent.path}${Platform.pathSeparator}kaibigan_flutter${Platform.pathSeparator}.env'),
-      ];
-      for (final file in candidates) {
-        if (file.existsSync()) return file;
-      }
-    } catch (_) {}
-    return null;
   }
 
   static Map<String, String> _parseDotEnv(String source) {

@@ -138,6 +138,19 @@ void main() {
     expect(medication.text, contains('prescriber or pharmacist'));
   });
 
+  test('ordinary self-care questions do not trigger medication refusal', () {
+    for (final question in [
+      'Should I take a break?',
+      'Can I start journaling?',
+      'Dapat ba akong simulan ang journaling?',
+    ]) {
+      expect(LearningAskKaiService.requestsDiagnosisOrMedication(question),
+          isFalse, reason: question);
+    }
+    expect(LearningAskKaiService.requestsDiagnosisOrMedication(
+        'Can I increase my medication?'), isTrue);
+  });
+
   test('crisis language always reaches the existing safety response', () async {
     final result = await service.answer(
       question: 'I want to kill myself.',

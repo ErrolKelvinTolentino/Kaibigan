@@ -135,8 +135,11 @@ class LanguageHelper {
   }
 
   static String normalize(String language) {
-    if (language == 'filipino' || language == 'taglish') return language;
-    return 'english';
+    return switch (language.trim().toLowerCase().replaceAll('_', '-')) {
+      'filipino' || 'tagalog' || 'fil' || 'tl' || 'fil-ph' || 'tl-ph' => 'filipino',
+      'taglish' || 'en-fil' || 'en-tl' => 'taglish',
+      _ => 'english',
+    };
   }
 
   static String pick(

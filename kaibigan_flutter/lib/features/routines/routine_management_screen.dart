@@ -7,6 +7,7 @@ import 'routine_model.dart';
 import 'routines_provider.dart';
 import 'widgets/custom_routine_dialog.dart';
 import 'widgets/add_action_sheet.dart';
+import 'widgets/routine_activity_frame.dart';
 
 // Standalone feature screens
 import 'screens/sleep_log_flow_screen.dart';
@@ -34,7 +35,7 @@ class _RoutineManagementScreenState extends State<RoutineManagementScreen>
   void initState() {
     super.initState();
     _tabController = TabController(
-        length: 4, vsync: this, initialIndex: widget.initialIndex);
+        length: 4, vsync: this, initialIndex: widget.initialIndex.clamp(0, 3));
   }
 
   @override
@@ -43,9 +44,33 @@ class _RoutineManagementScreenState extends State<RoutineManagementScreen>
     super.dispose();
   }
 
-  void _openStepScreen(BuildContext context, StepType type) {
+  void _openStepScreen(BuildContext context, RoutineStep step) {
+    if (step.type == StepType.custom) {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        showDragHandle: true,
+        builder: (context) => SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(step.title, style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 12),
+              Text(step.customPrompt?.trim().isNotEmpty == true
+                  ? step.customPrompt! : step.subtitle),
+              const SizedBox(height: 16),
+              Text('~${step.estimatedMinutes} min'),
+            ],
+          ),
+        ),
+      );
+      return;
+    }
     Widget screen;
-    switch (type) {
+    switch (step.type) {
       case StepType.sleepTracker:
         screen = const SleepLogFlowScreen();
         break;
@@ -118,7 +143,7 @@ class _RoutineManagementScreenState extends State<RoutineManagementScreen>
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          'Manage routines',
+          routineText(context, 'Manage routines', 'Ayusin ang mga gawain'),
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w800,
@@ -137,22 +162,23 @@ class _RoutineManagementScreenState extends State<RoutineManagementScreen>
           indicatorWeight: 3,
           labelStyle:
               const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-          tabs: const [
-            Tab(text: 'Morning'),
-            Tab(text: 'Mid-Day'),
-            Tab(text: 'Night'),
-            Tab(text: 'Custom'),
+          tabAlignment: TabAlignment.start,
+          tabs: [
+            Tab(text: routineText(context, 'Morning', 'Umaga')),
+            Tab(text: routineText(context, 'Mid-Day', 'Tanghali')),
+            Tab(text: routineText(context, 'Night', 'Gabi')),
+            Tab(text: routineText(context, 'Custom', 'Sarili mong gawa')),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tabController,
         children: [
-          if (morningRoutine != null)
+          morningRoutine == null ? const SizedBox.shrink() :
             _buildRoutineEditor(morningRoutine, routinesProvider, isDark),
-          if (middayRoutine != null)
+          middayRoutine == null ? const SizedBox.shrink() :
             _buildRoutineEditor(middayRoutine, routinesProvider, isDark),
-          if (nightRoutine != null)
+          nightRoutine == null ? const SizedBox.shrink() :
             _buildRoutineEditor(nightRoutine, routinesProvider, isDark),
           _buildCustomRoutinesTab(customRoutines, routinesProvider, isDark),
         ],
@@ -354,7 +380,7 @@ class _RoutineManagementScreenState extends State<RoutineManagementScreen>
                     borderRadius: BorderRadius.circular(20),
                     clipBehavior: Clip.antiAlias,
                     child: ListTile(
-                      onTap: () => _openStepScreen(context, step.type),
+                      onTap: () => _openStepScreen(context, step),
                       leading: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
@@ -499,56 +525,41 @@ class _RoutineManagementScreenState extends State<RoutineManagementScreen>
               ),
             )
           else
-            ...customRoutines.map((routine) {
-              return Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isDark ? AppColors.darkCard : Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                      color: isDark
-                          ? AppColors.darkCardBorder
-                          : Colors.black.withValues(alpha: 0.06)),
-                ),
-                child: Row(
+            ...customRoutines.map((routine) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Material(
+                color: isDark ? AppColors.darkCard : Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                clipBehavior: Clip.antiAlias,
+                child: ExpansionTile(
+                  key: ValueKey('edit-custom-${routine.id}'),
+                  title: Text(routine.title,
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: Text(routineText(context, 'Tap to edit your activities',
+                      'Pindutin para ayusin ang mga gawain')),
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppColors.sageGreen.withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.star_outline,
-                          color: AppColors.sageGreen, size: 22),
+                    _buildRoutineEditor(routine, provider, isDark),
+                    TextButton.icon(
+                      onPressed: () async {
+                        final confirmed = await CozyConfirmSheet.show(
+                          context,
+                          title: 'Remove ${routine.title}?',
+                          message: 'Your saved activity history will stay available.',
+                          confirmLabel: 'Remove routine',
+                          cancelLabel: 'Keep it',
+                        );
+                        if (confirmed && mounted) {
+                          provider.deleteCustomRoutine(routine.id);
+                        }
+                      },
+                      icon: const Icon(Icons.delete_outline_rounded),
+                      label: Text(routineText(context, 'Remove routine', 'Alisin ang gawain')),
                     ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(routine.title,
-                              style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                  color: isDark
-                                      ? AppColors.textPrimaryDark
-                                      : AppColors.textPrimaryLight)),
-                          Text('${routine.activeStepsCount} steps',
-                              style: AppTypography.bodySmall(context,
-                                  isDark: isDark)),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline,
-                          color: Colors.redAccent),
-                      onPressed: () => provider.deleteCustomRoutine(routine.id),
-                    ),
+                    const SizedBox(height: 12),
                   ],
                 ),
-              );
-            }),
+              ),
+            )),
         ],
       ),
     );

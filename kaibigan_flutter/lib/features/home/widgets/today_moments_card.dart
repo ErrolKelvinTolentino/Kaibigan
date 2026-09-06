@@ -11,6 +11,7 @@ class TodayMomentsCard extends StatelessWidget {
   final String affirmation;
   final int arrivedLetterCount;
   final VoidCallback onLettersTap;
+  final VoidCallback? onAffirmationsTap;
   final bool showAffirmation;
   final bool showFutureLetter;
 
@@ -22,6 +23,7 @@ class TodayMomentsCard extends StatelessWidget {
     required this.affirmation,
     required this.arrivedLetterCount,
     required this.onLettersTap,
+    this.onAffirmationsTap,
     this.showAffirmation = true,
     this.showFutureLetter = true,
   });
@@ -73,8 +75,8 @@ class TodayMomentsCard extends StatelessWidget {
               ),
               boxShadow: [
                 BoxShadow(
-                  color:
-                      AppColors.warmPeach.withValues(alpha: isDark ? 0.08 : 0.12),
+                  color: AppColors.warmPeach
+                      .withValues(alpha: isDark ? 0.08 : 0.12),
                   blurRadius: 18,
                   offset: const Offset(0, 6),
                 ),
@@ -105,8 +107,7 @@ class TodayMomentsCard extends StatelessWidget {
                               .withValues(alpha: isDark ? 0.22 : 0.16),
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                            color:
-                                AppColors.warmPeach.withValues(alpha: 0.28),
+                            color: AppColors.warmPeach.withValues(alpha: 0.28),
                             width: 1,
                           ),
                         ),
@@ -284,8 +285,6 @@ class TodayMomentsCard extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 17),
                   child: Text(
                     affirmation,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: foreground,
                       fontFamily: 'serif',
@@ -305,6 +304,19 @@ class TodayMomentsCard extends StatelessWidget {
                         fontSize: 10.5,
                         fontWeight: FontWeight.w800,
                       ),
+                    ),
+                  ),
+                if (onAffirmationsTap != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                    child: TextButton.icon(
+                      key: const ValueKey('home-open-affirmations'),
+                      onPressed: onAffirmationsTap,
+                      icon: const Icon(Icons.favorite_border_rounded),
+                      label: Text(copy(
+                          'Find words for this moment',
+                          'Humanap ng mga salitang makakatulong',
+                          'Find words for this moment')),
                     ),
                   ),
                 if (showFutureLetter && arrivedLetterCount > 0)

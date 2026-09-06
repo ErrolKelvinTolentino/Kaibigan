@@ -11,6 +11,8 @@ import '../../../core/widgets/kaibigan_surface.dart';
 import '../../../core/widgets/mobile_layout.dart';
 import '../../../core/widgets/sync_status_banner.dart';
 import '../../companion/companion_model.dart';
+import '../../insights/wellness_analytics.dart';
+import '../../insights/wellness_insights_panel.dart';
 import '../../settings/user_provider.dart';
 import '../routine_model.dart';
 import '../routines_provider.dart';
@@ -28,35 +30,14 @@ class ParsedSleepLog {
 
   final RoutineLog rawLog;
   final SleepFeeling feeling;
-  final double hours;
+  final double? hours;
   final DateTime completedAt;
   final String description;
 
   static ParsedSleepLog? tryParse(RoutineLog log) {
     final text = log.focusOrHighlight ?? '';
-    final isSleepLog = log.sleepFeeling != null ||
-        log.routineId == 'sleep' ||
-        log.routineId.startsWith('sleep_') ||
-        text.toLowerCase().contains('slept') ||
-        text.toLowerCase().contains('sleep');
-    if (!isSleepLog) return null;
-
-    var hours = 7.0;
-    final match = RegExp(
-      r'Slept\s+(.+?)\s*(?:hrs|hours)',
-      caseSensitive: false,
-    ).firstMatch(text);
-    if (match != null) {
-      final value = match.group(1)?.trim().toLowerCase() ?? '';
-      if (value.contains('less than 1') || value.contains('under 1')) {
-        hours = .5;
-      } else if (value.contains('10+')) {
-        hours = 10;
-      } else {
-        hours = double.tryParse(value) ?? hours;
-      }
-    }
-
+    if (routineActivity(log) != 'sleep') return null;
+    final hours = loggedSleepHours(log);
     return ParsedSleepLog(
       rawLog: log,
       feeling: log.sleepFeeling ?? SleepFeeling.moderate,
@@ -346,278 +327,35 @@ class _AnalyticsTab extends StatelessWidget {
         onLogSleep: onLogSleep,
       );
     }
-    final average =
-        logs.fold<double>(0, (sum, log) => sum + log.hours) / logs.length;
-    final commonFeeling = _mostCommonFeeling(logs);
     final lastSeven = _lastSevenDays(logs);
-    final recentCount = lastSeven.where((day) => day.log != null).length;
-
+    final recent = lastSeven.map((day) => day.log).whereType<ParsedSleepLog>().toList();
+    final snapshot = WellnessAnalytics.build(now: DateTime.now(), routines: logs.map((log) => log.rawLog));
     return MobileContent(
       child: SingleChildScrollView(
         padding: MobileLayout.pageInsets(context, top: 10, bottom: 104),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _InsightHero(
-              mascot: mascot,
-              average: average,
-              feeling: commonFeeling,
-              count: logs.length,
-              copy: copy,
-            ),
-            const SizedBox(height: 14),
-            _OverviewMetrics(
-              average: average,
-              commonFeeling: commonFeeling,
-              recentCount: recentCount,
-              colorForFeeling: colorForFeeling,
-              copy: copy,
-            ),
-            const SizedBox(height: 20),
-            _WeeklyRhythmCard(
+            WellnessInsightsPanel(snapshot: snapshot,
+              language: context.watch<UserProvider>().language, feature: 'sleep'),
+            const SizedBox(height: 16),            _WeeklyRhythmCard(
               days: lastSeven,
               copy: copy,
             ),
             const SizedBox(height: 20),
             _QualityDistribution(
-              logs: logs,
+              logs: recent.where((log) => log.rawLog.sleepFeeling != null).toList(),
               colorForFeeling: colorForFeeling,
               copy: copy,
             ),
             const SizedBox(height: 20),
-            _SleepPrinciples(copy: copy),
+
           ],
         ),
       ),
     );
   }
 
-  SleepFeeling _mostCommonFeeling(List<ParsedSleepLog> values) {
-    final counts = <SleepFeeling, int>{};
-    for (final log in values) {
-      counts[log.feeling] = (counts[log.feeling] ?? 0) + 1;
-    }
-    return counts.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
-  }
-}
-
-class _InsightHero extends StatelessWidget {
-  const _InsightHero({
-    required this.mascot,
-    required this.average,
-    required this.feeling,
-    required this.count,
-    required this.copy,
-  });
-
-  final MascotInfo mascot;
-  final double average;
-  final SleepFeeling feeling;
-  final int count;
-  final String Function(String, String) copy;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.kaibigan;
-    final text = Theme.of(context).textTheme;
-    final message = average >= 7 && feeling.score >= 4
-        ? copy(
-            'Your recent rest looks nourishing. Protect the routines that are helping this rhythm feel steady.',
-            'Mukhang nakapagpapalakas ang iyong pahinga. Panatilihin ang mga rutinang tumutulong sa rhythm na ito.',
-          )
-        : average < 6 || feeling.score <= 2
-            ? copy(
-                'Rest has felt limited lately. A gentler pace and one small wind-down cue may help tonight.',
-                'Medyo kapos ang pahinga kamakailan. Makakatulong ang mas banayad na araw at simpleng wind-down cue.',
-              )
-            : copy(
-                'Your sleep rhythm is taking shape. Keep checking in—patterns become more useful with consistency.',
-                'Unti-unting lumilinaw ang ritmo ng iyong tulog. Magpatuloy sa pagtatala para mas makita ang pattern.',
-              );
-
-    return Semantics(
-      container: true,
-      label: '${mascot.name} sleep insight. $message',
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [palette.accentSubtle, palette.botanicalSubtle],
-          ),
-          borderRadius: BorderRadius.circular(KaibiganRadius.feature),
-          border: Border.all(color: palette.accent.withValues(alpha: .22)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 46,
-                  height: 46,
-                  decoration: BoxDecoration(
-                    color: palette.surfaceElevated,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Icon(
-                    mascot.materialIcon,
-                    color: mascot.primaryColor,
-                    size: 26,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "${mascot.name}'s Sleep Check",
-                        style: text.titleMedium,
-                      ),
-                      Text(
-                        copy(
-                          'Based on $count ${count == 1 ? 'check-in' : 'check-ins'}',
-                          'Batay sa $count ${count == 1 ? 'tala' : 'mga tala'}',
-                        ),
-                        style: text.bodySmall?.copyWith(
-                          color: palette.textMuted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(Icons.auto_awesome_rounded, color: palette.accent),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              message,
-              style: text.bodyMedium?.copyWith(
-                color: palette.textPrimary,
-                height: 1.5,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _OverviewMetrics extends StatelessWidget {
-  const _OverviewMetrics({
-    required this.average,
-    required this.commonFeeling,
-    required this.recentCount,
-    required this.colorForFeeling,
-    required this.copy,
-  });
-
-  final double average;
-  final SleepFeeling commonFeeling;
-  final int recentCount;
-  final Color Function(SleepFeeling) colorForFeeling;
-  final String Function(String, String) copy;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _MetricCard(
-            icon: Icons.bedtime_outlined,
-            label: copy('Average Rest', 'Karaniwang Pahinga'),
-            value: '${average.toStringAsFixed(1)} hrs',
-            supporting: copy('Across all logs', 'Sa lahat ng tala'),
-            accent: context.kaibigan.accent,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _MetricCard(
-            icon: commonFeeling.icon,
-            label: copy('Usual Feeling', 'Madalas na Pakiramdam'),
-            value: commonFeeling.label,
-            supporting: copy('$recentCount of 7 days logged',
-                '$recentCount sa 7 araw ang may tala'),
-            accent: colorForFeeling(commonFeeling),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _MetricCard extends StatelessWidget {
-  const _MetricCard({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.supporting,
-    required this.accent,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-  final String supporting;
-  final Color accent;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.kaibigan;
-    final text = Theme.of(context).textTheme;
-    return KaibiganSurface(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: .13),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, size: 18, color: accent),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 2,
-                  style: text.labelMedium?.copyWith(
-                    color: palette.textSecondary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Text(
-            value,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: text.titleLarge?.copyWith(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              height: 1.1,
-            ),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            supporting,
-            maxLines: 2,
-            style: text.bodySmall?.copyWith(color: palette.textMuted),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _SleepDay {
@@ -630,10 +368,10 @@ List<_SleepDay> _lastSevenDays(List<ParsedSleepLog> logs) {
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
   return List.generate(7, (index) {
-    final date = today.subtract(Duration(days: 6 - index));
+    final date = DateTime(today.year, today.month, today.day - 6 + index);
     ParsedSleepLog? match;
     for (final log in logs) {
-      if (DateUtils.isSameDay(log.completedAt, date)) {
+      if (!log.completedAt.isAfter(now) && DateUtils.isSameDay(log.completedAt, date)) {
         match = log;
         break;
       }
@@ -676,8 +414,8 @@ class _WeeklyRhythmCard extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(
                       copy(
-                        'Each row shows what you logged and how it compares with your 7–9 hour guide.',
-                        'Makikita sa bawat hanay ang tala mo at paghahambing nito sa 7–9 oras na gabay.',
+                        'Each row shows your latest sleep entry that day. Missing hours stay blank.',
+                        'Pinakahuling tala ng tulog sa bawat araw. Blangko ang oras na hindi naitala.',
                       ),
                       style: text.bodySmall?.copyWith(color: palette.textMuted),
                     ),
@@ -708,19 +446,8 @@ class _WeeklyRhythmCard extends StatelessWidget {
               final day = days[index];
               final log = day.log;
               final isToday = DateUtils.isSameDay(day.date, DateTime.now());
-              final status = log == null
-                  ? null
-                  : log.hours < 7
-                      ? copy('Below guide', 'Kulang sa gabay')
-                      : log.hours <= 9
-                          ? copy('Within guide', 'Pasok sa gabay')
-                          : copy('Above guide', 'Higit sa gabay');
-              final statusColor = log == null
-                  ? palette.textMuted
-                  : log.hours >= 7 && log.hours <= 9
-                      ? palette.success
-                      : palette.warning;
-              return Container(
+              final status = copy('Logged', 'Naitala');
+              final statusColor = palette.textSecondary;              return Container(
                 key: ValueKey('sleep-rhythm-day-$index'),
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 decoration: BoxDecoration(
@@ -771,7 +498,7 @@ class _WeeklyRhythmCard extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Text(
-                                  '${log.hours.toStringAsFixed(1)} hours',
+                                  _sleepDurationLabel(log, copy),
                                   style: text.bodyMedium?.copyWith(
                                     color: palette.textPrimary,
                                     fontWeight: FontWeight.w800,
@@ -779,7 +506,7 @@ class _WeeklyRhythmCard extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  '$status · ${log.feeling.label}',
+                                  '$status · ${_sleepFeelingLabel(log, copy)}',
                                   textAlign: TextAlign.end,
                                   style: text.bodySmall?.copyWith(
                                     color: statusColor,
@@ -919,133 +646,6 @@ class _DistributionRow extends StatelessWidget {
   }
 }
 
-class _SleepPrinciples extends StatelessWidget {
-  const _SleepPrinciples({required this.copy});
-  final String Function(String, String) copy;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.kaibigan;
-    final text = Theme.of(context).textTheme;
-    return KaibiganSurface(
-      key: const ValueKey('sleep-principles-card'),
-      tone: KaibiganSurfaceTone.accent,
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: AppColors.pollenGlow.withValues(alpha: .72),
-                  borderRadius: BorderRadius.circular(13),
-                ),
-                child: const Icon(
-                  Icons.spa_rounded,
-                  color: AppColors.onHoney,
-                ),
-              ),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Text(
-                  copy('Sleep Hygiene Principles',
-                      'Mga Gabay sa Mahimbing na Tulog'),
-                  style: text.titleMedium?.copyWith(
-                    color: palette.textPrimary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 17),
-          _Principle(
-            icon: Icons.wb_sunny_outlined,
-            title:
-                copy('Anchor your wake time', 'Panatilihin ang oras ng gising'),
-            body: copy(
-              'A steady morning cue can support your body clock—even after a rough night.',
-              'Ang pare-parehong oras ng gising ay tumutulong sa body clock kahit hindi maganda ang tulog.',
-            ),
-          ),
-          const SizedBox(height: 13),
-          _Principle(
-            icon: Icons.brightness_4_outlined,
-            title:
-                copy('Lower the evening signal', 'Bawasan ang liwanag sa gabi'),
-            body: copy(
-              'Dim light and quiet screens before bed to make winding down easier.',
-              'Bawasan ang liwanag at screen bago matulog para mas madaling magpahinga.',
-            ),
-          ),
-          const SizedBox(height: 13),
-          _Principle(
-            icon: Icons.self_improvement_rounded,
-            title: copy('Release the pressure', 'Bawasan ang pressure'),
-            body: copy(
-              'Quiet rest still counts. Your log is a guide, never a grade.',
-              'Mahalaga rin ang tahimik na pahinga. Gabay ang tala, hindi marka.',
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Principle extends StatelessWidget {
-  const _Principle({
-    required this.icon,
-    required this.title,
-    required this.body,
-  });
-  final IconData icon;
-  final String title;
-  final String body;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.kaibigan;
-    final text = Theme.of(context).textTheme;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 1),
-          child: Icon(icon, size: 19, color: AppColors.honeyAmber),
-        ),
-        const SizedBox(width: 11),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: text.labelLarge?.copyWith(
-                  color: palette.textPrimary,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                body,
-                style: text.bodySmall?.copyWith(
-                  color: palette.textSecondary,
-                  height: 1.4,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _HistoryTab extends StatelessWidget {
   const _HistoryTab({
     required this.logs,
@@ -1095,6 +695,7 @@ class _HistoryTab extends StatelessWidget {
             child: _HistoryEntry(
               entry: entry,
               color: colorForFeeling(entry.feeling),
+              copy: copy,
               deleteLabel: copy('Delete log', 'Burahin ang tala'),
               onDelete: () => onDelete(entry),
             ),
@@ -1109,11 +710,13 @@ class _HistoryEntry extends StatelessWidget {
   const _HistoryEntry({
     required this.entry,
     required this.color,
+    required this.copy,
     required this.deleteLabel,
     required this.onDelete,
   });
   final ParsedSleepLog entry;
   final Color color;
+  final String Function(String, String) copy;
   final String deleteLabel;
   final VoidCallback onDelete;
 
@@ -1158,11 +761,11 @@ class _HistoryEntry extends StatelessWidget {
                   runSpacing: 6,
                   children: [
                     _HistoryPill(
-                      label: entry.feeling.label,
+                      label: _sleepFeelingLabel(entry, copy),
                       color: color,
                     ),
                     _HistoryPill(
-                      label: '${entry.hours.toStringAsFixed(1)} hrs',
+                      label: _sleepDurationLabel(entry, copy),
                       color: palette.textSecondary,
                     ),
                     _HistoryPill(
@@ -1318,4 +921,23 @@ class _EmptySleepState extends StatelessWidget {
       ),
     );
   }
+}
+
+String _sleepDurationLabel(ParsedSleepLog log, String Function(String, String) copy) {
+  if (log.hours != null) return copy('${log.hours!.toStringAsFixed(1)} hours', '${log.hours!.toStringAsFixed(1)} oras');
+  final content = log.description.toLowerCase();
+  if (content.startsWith('slept less than 1')) return copy('Less than 1 hour', 'Wala pang 1 oras');
+  if (content.startsWith('slept 10+')) return copy('10+ hours', '10+ oras');
+  return copy('Duration not logged', 'Hindi naitala ang tagal');
+}
+
+String _sleepFeelingLabel(ParsedSleepLog log, String Function(String, String) copy) {
+  if (log.rawLog.sleepFeeling == null) return copy('Quality not logged', 'Hindi naitala ang kalidad');
+  return switch (log.feeling) {
+    SleepFeeling.restless => copy('Restless', 'Hindi mapakali'),
+    SleepFeeling.groggy => copy('A bit groggy', 'Medyo antok'),
+    SleepFeeling.moderate => copy('Okay', 'Katamtaman'),
+    SleepFeeling.wellRested => copy('Well rested', 'Nakapagpahinga'),
+    SleepFeeling.energized => copy('Energized', 'Masigla'),
+  };
 }

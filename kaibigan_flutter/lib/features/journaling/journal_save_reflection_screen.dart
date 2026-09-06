@@ -410,6 +410,34 @@ class _JournalSaveReflectionScreenState
                     .toList(),
               ),
             ],
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Icon(
+                  Icons.auto_awesome_rounded,
+                  size: 11,
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
+                ),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(
+                    _copy(
+                      '✦ AI-generated reflection · for personal insight, not medical advice',
+                      '✦ Binuo ng AI na pagninilay · para sa pansariling pananaw, hindi medikal na payo',
+                    ),
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color: isDark
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondaryLight,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),

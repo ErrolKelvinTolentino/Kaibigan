@@ -103,6 +103,52 @@ void main() {
   });
 
   group('AI output safety and quality gate', () {
+    test('distinguishes educational mentions from explicit safety risk', () {
+      expect(AIService.isCrisisMessage('What is suicide prevention?'), isFalse);
+      expect(AIService.isCrisisMessage('Explain overdose awareness.'), isFalse);
+      expect(AIService.isCrisisMessage('I am planning to overdose tonight.'), isTrue);
+      expect(AIService.isCrisisMessage('I’m suicidal and need help.'), isTrue);
+      expect(AIService.isCrisisMessage('I read about prevention but I want to kill myself.'), isTrue);
+    });
+
+    test('clinical backstop rejects direct advice but allows safe boundaries', () {
+      for (final unsafe in [
+        'You definitely have an anxiety disorder.',
+        'May depression ka.',
+        'You should stop your medication.',
+        'Take 20 mg tonight.',
+        'Do not worry, you should double your dose.',
+      ]) {
+        expect(AIService.hasUnsafeClinicalAdvice(unsafe), isTrue, reason: unsafe);
+      }
+      for (final safe in [
+        'I cannot advise you to stop medication. Ask your prescriber about your concerns.',
+        'Do not change your dose without your prescriber.',
+        'The lesson explains what anxiety can feel like.',
+        'You should take a short break if that feels useful.',
+      ]) {
+        expect(AIService.hasUnsafeClinicalAdvice(safe), isFalse, reason: safe);
+      }
+    });
+
+    test('rejects dependency language before display', () {
+      expect(AIService.evaluateReplyQuality(
+        const AICompanionReply(text: 'Only I understand you. You only need me.'),
+        expectedLanguage: 'english',
+        mode: CompanionMode.companion,
+      ), contains('dependency_language'));
+    });
+
+    test('offline response does not celebrate a negated positive feeling', () async {
+      final reply = await AIService.generateCompanionReply(
+        userText: 'I am not happy about what happened with my friend.',
+        companionId: 'ann', language: 'english',
+      );
+      expect(reply.isOffline, isTrue);
+      expect(reply.text, isNot(contains('celebrat')));
+      expect(reply.text, isNot(contains('good part')));
+    });
+
     test('sanitizes display data but rejects invalid provider metadata', () {
       const raw = '''
 {"possible_need":"made_up","safety_level":"unknown","suggested_replies":["Tell me more","Tell me more","A second thought"],"response":"That sounds like a meaningful shift in how you see the situation."}

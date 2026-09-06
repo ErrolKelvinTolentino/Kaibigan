@@ -1081,6 +1081,33 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                 ),
               ),
             ],
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Icon(
+                  Icons.auto_awesome_rounded,
+                  size: 11,
+                  color: isDark ? Colors.white38 : Colors.black38,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    _t(
+                      language,
+                      english:
+                          '✦ AI response · for personal reflection, not medical advice',
+                      filipino:
+                          '✦ Tugon ng AI · para sa pagninilay, hindi medikal na payo',
+                    ),
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: isDark ? Colors.white38 : Colors.black38,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),

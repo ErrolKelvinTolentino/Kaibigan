@@ -141,7 +141,7 @@ Log mood before and after the busiest period on three days next week.
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('stale reflection is removed when weekly totals have changed',
+  testWidgets('saved reflection is preserved when weekly totals have changed',
       (tester) async {
     final storageKey = currentStorageKey();
     SharedPreferences.setMockInitialValues({
@@ -177,10 +177,56 @@ Old experiment that no longer matches.
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Create reflection'), findsOneWidget);
-    expect(find.textContaining('Old evidence'), findsNothing);
+    expect(find.text('Reflect again'), findsOneWidget);
+    expect(find.textContaining('Old evidence that no longer matches'), findsOneWidget);
+    expect(find.byKey(const ValueKey('weekly-reflection-new-data-notice')), findsOneWidget);
     final preferences = await SharedPreferences.getInstance();
-    expect(preferences.containsKey(storageKey), isFalse);
+    expect(preferences.containsKey(storageKey), isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('saved reflection persists across rolling date key shifts',
+      (tester) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    // Simulate reflection saved 2 days ago
+    final pastStart = today.subtract(const Duration(days: 8));
+    final pastKey =
+        'weekly_reflection_v4_local_${DateFormat('yyyyMMdd').format(pastStart)}';
+    SharedPreferences.setMockInitialValues({
+      'preferred_language': 'english',
+      pastKey: jsonEncode({
+        'version': 4,
+        'savedAt': now.subtract(const Duration(days: 2)).toIso8601String(),
+        'text': '''
+**Evidence**
+
+Evidence from two days ago.
+
+**Pattern**
+
+Pattern from two days ago.
+
+**One experiment**
+
+Experiment from two days ago.
+''',
+      }),
+    });
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(screenUnderTest());
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('weekly-companion-reflection')),
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Reflect again'), findsOneWidget);
+    expect(find.textContaining('Evidence from two days ago'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -220,6 +266,16 @@ Old experiment that no longer matches.
     final saved = jsonDecode(preferences.getString(storageKey)!);
     expect(saved['version'], 4);
     expect(saved['snapshotSignature'], isNotEmpty);
+
+    // Verify saving to journal works
+    final saveJournalButton =
+        find.byKey(const ValueKey('weekly-reflection-save-journal'));
+    await tester.ensureVisible(saveJournalButton);
+    await tester.pumpAndSettle();
+    await tester.tap(saveJournalButton);
+    await tester.pumpAndSettle();
+    expect(find.text('In Journal'), findsOneWidget);
+
     expect(tester.takeException(), isNull);
   });
 }
@@ -246,4 +302,30 @@ class _FakeJournalProvider extends JournalProvider {
 
   @override
   Future<void> fetchJournalEntries() async {}
+
+  @override
+  Future<JournalEntry?> addJournalEntry({
+    required String title,
+    required String content,
+    String? aiReply,
+    String? aiResponse,
+    required String companionId,
+    required String mood,
+    String reflectionMode = 'auto',
+    List<String> tags = const [],
+    List<JournalConversationTurn> conversationTurns = const [],
+  }) async {
+    final entry = JournalEntry(
+      id: 'mock-${DateTime.now().millisecondsSinceEpoch}',
+      title: title,
+      content: content,
+      aiResponse: aiResponse ?? aiReply,
+      companionId: companionId,
+      createdAt: DateTime.now(),
+      tags: tags,
+    );
+    _entries.add(entry);
+    notifyListeners();
+    return entry;
+  }
 }

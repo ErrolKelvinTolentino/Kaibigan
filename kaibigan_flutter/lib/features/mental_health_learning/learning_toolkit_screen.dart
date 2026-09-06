@@ -37,7 +37,7 @@ class _LearningToolkitScreenState extends State<LearningToolkitScreen> {
       if (separator <= 0) continue;
       final lessonId = ref.substring(0, separator);
       final index = int.tryParse(ref.substring(separator + 1));
-      if (index == null) continue;
+      if (index == null || index < 0) continue;
       final lesson = LearningCatalog.byId(lessonId);
       if (lesson.id != lessonId || index >= lesson.sections.length) continue;
       ideas.add(_SavedIdea(lesson: lesson, index: index));
@@ -59,6 +59,24 @@ class _LearningToolkitScreenState extends State<LearningToolkitScreen> {
     setState(() => _savedIdeas = _loadSavedIdeas());
   }
 
+  Future<void> _removeIdea(_SavedIdea idea, String language) async {
+    await _store.setIdeaHelpful(idea.lesson.id, idea.index, false);
+    if (!mounted) return;
+    setState(() => _savedIdeas = _loadSavedIdeas());
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(LanguageHelper.pick(language,
+          english: 'Idea removed from saved ideas.',
+          filipino: 'Inalis sa mga itinabing ideya.')),
+      action: SnackBarAction(
+        label: LanguageHelper.pick(language, english: 'Undo', filipino: 'Ibalik'),
+        onPressed: () async {
+          await _store.setIdeaHelpful(idea.lesson.id, idea.index, true);
+          if (mounted) setState(() => _savedIdeas = _loadSavedIdeas());
+        },
+      ),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     final language = context.watch<UserProvider>().language;
@@ -69,13 +87,13 @@ class _LearningToolkitScreenState extends State<LearningToolkitScreen> {
         title: Text(
           LanguageHelper.pick(
             language,
-            english: 'Saved for me',
-            filipino: 'Naka-save para sa akin',
+            english: 'Saved ideas',
+            filipino: 'Mga itinabing ideya',
           ),
         ),
         centerTitle: true,
       ),
-      body: FutureBuilder<List<_SavedIdea>>(
+      body: SafeArea(top: false, child: MobileContent(child: FutureBuilder<List<_SavedIdea>>(
         future: _savedIdeas,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -84,13 +102,26 @@ class _LearningToolkitScreenState extends State<LearningToolkitScreen> {
               title: LanguageHelper.pick(
                 language,
                 english: 'Gathering your ideas',
-                filipino: 'Kinokolekta ang mga idea mo',
+                filipino: 'Inihahanda ang mga ideya mo',
               ),
               message: LanguageHelper.pick(
                 language,
                 english: 'Your personal learning toolkit is almost ready.',
-                filipino: 'Inihahanda ang personal learning toolkit mo.',
+                filipino: 'Inihahanda ang mga ideyang maaari mong balikan.',
               ),
+            );
+          }
+          if (snapshot.hasError) {
+            return KaibiganStateView(
+              icon: Icons.refresh_rounded,
+              title: LanguageHelper.pick(language,
+                  english: 'Let’s try that again', filipino: 'Subukan nating muli'),
+              message: LanguageHelper.pick(language,
+                  english: 'Your saved ideas could not load just now.',
+                  filipino: 'Hindi mabuksan ang mga itinabing ideya ngayon.'),
+              actionLabel: LanguageHelper.pick(language,
+                  english: 'Try again', filipino: 'Subukan muli'),
+              onAction: () => setState(() => _savedIdeas = _loadSavedIdeas()),
             );
           }
           final ideas = snapshot.data ?? const <_SavedIdea>[];
@@ -100,14 +131,14 @@ class _LearningToolkitScreenState extends State<LearningToolkitScreen> {
               title: LanguageHelper.pick(
                 language,
                 english: 'Save ideas you want to remember',
-                filipino: 'Mag-save ng idea na gusto mong tandaan',
+                filipino: 'Itabi ang mga ideyang nais mong tandaan',
               ),
               message: LanguageHelper.pick(
                 language,
                 english:
-                    'Tap Helpful on any lesson idea and it will appear here.',
+                    'Tap Save idea in a lesson. Come back whenever you need a gentle reminder.',
                 filipino:
-                    'I-tap ang Helpful sa lesson idea at lalabas iyon dito.',
+                    'Piliin ang Itabi ang ideya sa isang aralin. Balikan ito kapag kailangan mo ng paalala.',
               ),
             );
           }
@@ -119,10 +150,20 @@ class _LearningToolkitScreenState extends State<LearningToolkitScreen> {
               MobileLayout.horizontalPadding(context),
               32,
             ),
-            itemCount: ideas.length,
+            itemCount: ideas.length + 1,
             separatorBuilder: (_, __) => const SizedBox(height: 11),
             itemBuilder: (context, index) {
-              final idea = ideas[index];
+              if (index == 0) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(LanguageHelper.pick(language,
+                      english: 'Keep what helps. Revisit an idea or make room for something new.',
+                      filipino: 'Itabi ang nakakatulong. Balikan ang isang ideya o maglaan ng puwang para sa bago.'),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: palette.textSecondary, height: 1.5)),
+                );
+              }
+              final idea = ideas[index - 1];
               final section = idea.lesson.sections[idea.index];
               return KaibiganSurface(
                 key: ValueKey('saved-idea-${idea.lesson.id}-${idea.index}'),
@@ -175,14 +216,21 @@ class _LearningToolkitScreenState extends State<LearningToolkitScreen> {
                       ),
                     ),
                     const SizedBox(width: 6),
-                    Icon(Icons.arrow_forward_rounded, color: palette.textMuted),
+                    IconButton(
+                      key: ValueKey('remove-saved-idea-${idea.lesson.id}-${idea.index}'),
+                      tooltip: LanguageHelper.pick(language,
+                          english: 'Remove saved idea', filipino: 'Alisin ang itinabing ideya'),
+                      onPressed: () => _removeIdea(idea, language),
+                      icon: Icon(Icons.bookmark_remove_outlined,
+                          color: palette.textMuted),
+                    ),
                   ],
                 ),
               );
             },
           );
         },
-      ),
+      ))),
     );
   }
 }

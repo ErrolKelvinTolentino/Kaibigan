@@ -1,0 +1,531 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../../core/constants/app_colors.dart';
+import '../../../core/theme/kaibigan_tokens.dart';
+import '../../../core/utils/language_helper.dart';
+import '../../../core/widgets/kaibigan_surface.dart';
+import '../../../core/widgets/mobile_layout.dart';
+import '../../settings/user_provider.dart';
+import '../learning_progress_store.dart';
+import 'friend_support_catalog.dart';
+import 'friend_support_lesson_screen.dart';
+import 'friend_support_model.dart';
+import 'friend_support_safety_sheet.dart';
+
+class FriendSupportHubScreen extends StatefulWidget {
+  const FriendSupportHubScreen({
+    super.key,
+    this.progressStore,
+  });
+
+  final LearningProgressStore? progressStore;
+
+  @override
+  State<FriendSupportHubScreen> createState() => _FriendSupportHubScreenState();
+}
+
+class _FriendSupportHubScreenState extends State<FriendSupportHubScreen> {
+  late final LearningProgressStore _progressStore;
+  Set<String> _completedIds = {};
+  final Map<String, ({int score, int total})> _quizScores = {};
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _progressStore = widget.progressStore ?? LearningProgressStore();
+    _loadProgress();
+  }
+
+  Future<void> _loadProgress() async {
+    final completed = await _progressStore.loadCompleted();
+    final scores = <String, ({int score, int total})>{};
+    for (final lesson in FriendSupportCatalog.lessons) {
+      final scoreData = await _progressStore.loadQuizScore(lesson.id);
+      if (scoreData != null) {
+        scores[lesson.id] = scoreData;
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _completedIds = completed;
+      _quizScores.clear();
+      _quizScores.addAll(scores);
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _openLesson(FriendSupportLesson lesson) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => FriendSupportLessonScreen(lesson: lesson),
+      ),
+    );
+    await _loadProgress();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final language = context.watch<UserProvider>().language;
+    final palette = context.kaibigan;
+    final completedCount = FriendSupportCatalog.lessons
+        .where((l) => _completedIds.contains(l.id))
+        .length;
+    final totalCount = FriendSupportCatalog.lessons.length;
+
+    return Scaffold(
+      backgroundColor: palette.background,
+      appBar: AppBar(
+        title: Text(
+          LanguageHelper.pick(
+            language,
+            english: 'Friend Support Lessons',
+            filipino: 'Aralin sa Pagsuporta',
+          ),
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        centerTitle: true,
+        actions: [
+          TextButton.icon(
+            key: const ValueKey('friend-support-hub-need-help'),
+            onPressed: () => FriendSupportSafetySheet.show(
+              context,
+              language: language,
+            ),
+            icon: Icon(
+              Icons.health_and_safety_outlined,
+              color: palette.danger,
+              size: 18,
+            ),
+            label: Text(
+              LanguageHelper.pick(
+                language,
+                english: 'Need Help?',
+                filipino: 'Tulong?',
+              ),
+              style: TextStyle(
+                color: palette.danger,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
+      body: SafeArea(
+        child: MobileContent(
+          child: RefreshIndicator(
+            onRefresh: _loadProgress,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: EdgeInsets.symmetric(
+                horizontal: MobileLayout.horizontalPadding(context),
+                vertical: 16,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Hero Introduction Card
+                  Container(
+                    key: const ValueKey('friend-support-hub-hero'),
+                    padding: const EdgeInsets.all(22),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          palette.accentSubtle,
+                          Theme.of(context).brightness == Brightness.dark
+                              ? palette.surfaceElevated
+                              : AppColors.pollenGlow.withValues(alpha: 0.85),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: palette.accent.withValues(alpha: 0.32),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: palette.accent.withValues(alpha: 0.08),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 54,
+                              height: 54,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    Colors.white.withValues(alpha: 0.9),
+                                    palette.accentSubtle,
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(18),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: palette.accent.withValues(alpha: 0.15),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: const Center(
+                                child: Text(
+                                  '💛',
+                                  style: TextStyle(fontSize: 28),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    LanguageHelper.pick(
+                                      language,
+                                      english: 'How to be there for a friend',
+                                      filipino: 'Paano sumuporta sa kaibigan',
+                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 17,
+                                        ),
+                                  ),
+                                  const SizedBox(height: 5),
+                                  Text(
+                                    LanguageHelper.pick(
+                                      language,
+                                      english:
+                                          'Learn how to listen without judging, recognize crisis situations, and know when to involve help.',
+                                      filipino:
+                                          'Matutong makinig nang walang panghuhusga, makilala ang delikadong sitwasyon, at malaman kung kailan hihingi ng tulong.',
+                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          color: palette.textSecondary,
+                                          height: 1.42,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 18),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: palette.surface.withValues(alpha: 0.7),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: palette.border.withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      LanguageHelper.pick(
+                                        language,
+                                        english:
+                                            '$completedCount of $totalCount lessons completed',
+                                        filipino:
+                                            '$completedCount sa $totalCount aralin ang natapos',
+                                      ),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelSmall
+                                          ?.copyWith(
+                                            color: palette.accentStrong,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '${totalCount == 0 ? 0 : ((completedCount / totalCount) * 100).toInt()}%',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(
+                                          color: palette.accentStrong,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: LinearProgressIndicator(
+                                  value: totalCount == 0
+                                      ? 0
+                                      : completedCount / totalCount,
+                                  minHeight: 7,
+                                  backgroundColor: palette.surfaceSubtle,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    palette.accent,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+
+                  // Section Title
+                  Text(
+                    LanguageHelper.pick(
+                      language,
+                      english: 'Lessons & Practice Quizzes',
+                      filipino: 'Mga Aralin at Pagsasanay',
+                    ),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Lesson Cards
+                  if (_isLoading)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(32),
+                        child: CircularProgressIndicator(),
+                      ),
+                    )
+                  else
+                    ...FriendSupportCatalog.lessons.map((lesson) {
+                      final isCompleted = _completedIds.contains(lesson.id);
+                      final scoreData = _quizScores[lesson.id];
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: KaibiganSurface(
+                          key: ValueKey('friend-lesson-card-${lesson.id}'),
+                          child: InkWell(
+                            onTap: () => _openLesson(lesson),
+                            borderRadius: BorderRadius.circular(20),
+                            child: Padding(
+                              padding: const EdgeInsets.all(18),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: isCompleted
+                                              ? palette.accentSubtle
+                                              : palette.surfaceSubtle,
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              LanguageHelper.pick(
+                                                language,
+                                                english: 'Lesson ${lesson.order}',
+                                                filipino: 'Aralin ${lesson.order}',
+                                              ),
+                                              style: TextStyle(
+                                                color: isCompleted
+                                                    ? palette.accentStrong
+                                                    : palette.textSecondary,
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      if (isCompleted)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 9,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: palette.accentSubtle,
+                                            borderRadius:
+                                                BorderRadius.circular(99),
+                                            border: Border.all(
+                                              color: palette.accent.withValues(alpha: 0.3),
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.check_circle_rounded,
+                                                color: palette.accentStrong,
+                                                size: 13,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                LanguageHelper.pick(
+                                                  language,
+                                                  english: 'Completed',
+                                                  filipino: 'Tapos na',
+                                                ),
+                                                style: TextStyle(
+                                                  color: palette.accentStrong,
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w800,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    lesson.title.resolve(language),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    lesson.subtitle.resolve(language),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          color: palette.textSecondary,
+                                          height: 1.42,
+                                        ),
+                                  ),
+                                  const SizedBox(height: 14),
+                                  Wrap(
+                                    spacing: 12,
+                                    runSpacing: 6,
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
+                                    children: [
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.quiz_outlined,
+                                            size: 15,
+                                            color: palette.textMuted,
+                                          ),
+                                          const SizedBox(width: 5),
+                                          Text(
+                                            LanguageHelper.pick(
+                                              language,
+                                              english:
+                                                  '${lesson.questions.length} questions',
+                                              filipino:
+                                                  '${lesson.questions.length} tanong',
+                                            ),
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .labelSmall
+                                                ?.copyWith(
+                                                  color: palette.textMuted,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                          ),
+                                        ],
+                                      ),
+                                      if (scoreData != null)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 3,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: palette.accentSubtle,
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.emoji_events_rounded,
+                                                size: 14,
+                                                color: palette.accentStrong,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                LanguageHelper.pick(
+                                                  language,
+                                                  english:
+                                                      'Best: ${scoreData.score}/${scoreData.total}',
+                                                  filipino:
+                                                      'Iskor: ${scoreData.score}/${scoreData.total}',
+                                                ),
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .labelSmall
+                                                    ?.copyWith(
+                                                      color:
+                                                          palette.accentStrong,
+                                                      fontWeight:
+                                                          FontWeight.w800,
+                                                    ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  const SizedBox(height: 20),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

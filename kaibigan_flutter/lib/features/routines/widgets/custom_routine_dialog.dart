@@ -71,7 +71,7 @@ class _CustomRoutineDialogState extends State<CustomRoutineDialog> {
   }
 
   void _saveRoutine() {
-    if (_titleController.text.trim().isEmpty) return;
+    if (_titleController.text.trim().isEmpty || _selectedSteps.isEmpty) return;
 
     final routinesProvider =
         Provider.of<RoutinesProvider>(context, listen: false);
@@ -86,12 +86,7 @@ class _CustomRoutineDialogState extends State<CustomRoutineDialog> {
       type: RoutineType.custom,
       reminderTime: _reminderTime,
       primaryColor: AppColors.sageGreen,
-      steps: _selectedSteps.isEmpty
-          ? [
-              _availableSteps[1],
-              _availableSteps[5]
-            ] // Default steps if none selected
-          : List.from(_selectedSteps),
+      steps: List.from(_selectedSteps),
     );
 
     routinesProvider.addCustomRoutine(newRoutine);
@@ -103,6 +98,7 @@ class _CustomRoutineDialogState extends State<CustomRoutineDialog> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
+      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.92),
       padding: EdgeInsets.only(
         top: 24,
         left: 24,
@@ -121,7 +117,7 @@ class _CustomRoutineDialogState extends State<CustomRoutineDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
+                Expanded(child: Text(
                   'Create Custom Routine',
                   style: TextStyle(
                     fontSize: 20,
@@ -130,7 +126,7 @@ class _CustomRoutineDialogState extends State<CustomRoutineDialog> {
                         ? AppColors.textPrimaryDark
                         : AppColors.textPrimaryLight,
                   ),
-                ),
+                )),
                 IconButton(
                   icon: const Icon(Icons.close),
                   onPressed: () => Navigator.pop(context),
@@ -140,6 +136,8 @@ class _CustomRoutineDialogState extends State<CustomRoutineDialog> {
             const SizedBox(height: 16),
             TextField(
               controller: _titleController,
+              onChanged: (_) => setState(() {}),
+              maxLength: 60,
               decoration: InputDecoration(
                 labelText: 'Routine Title',
                 hintText: 'e.g. Afternoon Energy Reset',
@@ -167,7 +165,7 @@ class _CustomRoutineDialogState extends State<CustomRoutineDialog> {
             ),
             const SizedBox(height: 20),
             Text(
-              'Select Included Steps:',
+              'Choose at least one activity:',
               style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
@@ -202,7 +200,8 @@ class _CustomRoutineDialogState extends State<CustomRoutineDialog> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _saveRoutine,
+                onPressed: _titleController.text.trim().isEmpty || _selectedSteps.isEmpty
+                    ? null : _saveRoutine,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.sageGreen,
                   foregroundColor: Colors.white,

@@ -84,6 +84,19 @@ not a valid line
     }
   });
 
+  test('EnvConfig reads build environment and default values without error', () {
+    EnvConfig.clearRuntimeValues();
+    expect(() => EnvConfig.supabaseUrl, returnsNormally);
+    expect(() => EnvConfig.supabaseAnonKey, returnsNormally);
+    expect(() => EnvConfig.geminiApiKey, returnsNormally);
+    expect(() => EnvConfig.geminiModel, returnsNormally);
+    expect(() => EnvConfig.groqApiKey, returnsNormally);
+    expect(() => EnvConfig.groqFallbackModel, returnsNormally);
+    expect(() => EnvConfig.googleAuthEnabled, returnsNormally);
+    expect(() => EnvConfig.passwordResetRedirectUrl, returnsNormally);
+    expect(() => EnvConfig.oauthRedirectUrl, returnsNormally);
+  });
+
   group('device selection', () {
     test('defaults to Chrome when no device was supplied', () {
       final arguments = buildFlutterArguments(

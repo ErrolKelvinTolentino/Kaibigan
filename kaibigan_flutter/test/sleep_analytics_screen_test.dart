@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:kaibigan_flutter/core/constants/app_colors.dart';
 import 'package:kaibigan_flutter/core/theme/app_theme.dart';
-import 'package:kaibigan_flutter/core/theme/kaibigan_tokens.dart';
+
 import 'package:kaibigan_flutter/features/routines/routine_model.dart';
 import 'package:kaibigan_flutter/features/routines/routines_provider.dart';
 import 'package:kaibigan_flutter/features/routines/screens/sleep_analytics_screen.dart';
@@ -64,8 +64,8 @@ void main() {
       final parsed1 = ParsedSleepLog.tryParse(log1);
       final parsed2 = ParsedSleepLog.tryParse(log2);
 
-      expect(parsed1?.hours, 0.5);
-      expect(parsed2?.hours, 10.0);
+      expect(parsed1?.hours, isNull);
+      expect(parsed2?.hours, isNull);
     });
 
     test('returns null for non-sleep routine logs', () {
@@ -154,34 +154,16 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Sleep Analytics'), findsOneWidget);
-      expect(find.text("Kai's Sleep Check"), findsOneWidget);
-      expect(find.text('Average Rest'), findsOneWidget);
-      expect(find.text('7.2 hrs'),
-          findsOneWidget); // (8 + 7.5 + 6) / 3 = 7.166 -> 7.2
+      expect(find.byKey(const ValueKey('wellness-metric-sleep')), findsOneWidget);
+      expect(find.text('4.0 / 5'), findsOneWidget);
+      expect(find.text('7.2 h average · 3 nights with duration'), findsOneWidget);
       expect(find.text('Your last 7 nights'), findsOneWidget);
-      expect(
-        find.text(
-          'Each row shows what you logged and how it compares with your 7–9 hour guide.',
-        ),
-        findsOneWidget,
-      );
+      expect(find.text('Each row shows your latest sleep entry that day. Missing hours stay blank.'), findsOneWidget);
       expect(find.text('3 of 7 logged'), findsOneWidget);
       expect(find.byKey(const ValueKey('sleep-rhythm-list')), findsOneWidget);
-      expect(find.textContaining('Within guide'), findsNWidgets(2));
-      expect(find.textContaining('Below guide'), findsOneWidget);
-      expect(find.text('7-Day Sleep Rhythm'), findsNothing);
-      expect(find.text('Tap a day for details'), findsNothing);
+      expect(find.textContaining('Within guide'), findsNothing);
       expect(find.text('Sleep Quality Distribution'), findsOneWidget);
-      expect(find.text('Sleep Hygiene Principles'), findsOneWidget);
-
-      final principleTitle = tester.widget<Text>(
-        find.text('Anchor your wake time'),
-      );
-      expect(
-        principleTitle.style?.color,
-        AppTheme.lightTheme.extension<KaibiganPalette>()!.textPrimary,
-      );
-
+      expect(tester.takeException(), isNull);
       final logButton = tester.widget<FloatingActionButton>(
         find.byKey(const ValueKey('sleep-log-button')),
       );
@@ -213,8 +195,8 @@ void main() {
       await tester.tap(find.text('History'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Well Rested'), findsWidgets);
-      expect(find.text('8.0 hrs'), findsOneWidget);
+      expect(find.text('Well rested'), findsWidgets);
+      expect(find.text('8.0 hours'), findsOneWidget);
       expect(find.text('Slept 8 hrs: Peaceful morning'), findsOneWidget);
     });
 

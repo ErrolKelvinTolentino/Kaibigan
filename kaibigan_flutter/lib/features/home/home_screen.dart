@@ -1,5 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
+
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
@@ -43,6 +44,7 @@ import 'activity_usage_store.dart';
 import 'widgets/home_favorites_carousel.dart';
 import 'widgets/home_streak_greeting_card.dart';
 import 'widgets/today_moments_card.dart';
+import '../insights/wellness_analytics.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -51,41 +53,50 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  Set<DateTime> _loginDates = {};
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+  Timer? _dayTimer;
   Map<String, int> _activityCounts = {};
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _scheduleDayRefresh();
     _loadActivityStats();
   }
 
   Future<void> _loadActivityStats() async {
-    await ActivityUsageStore.recordTodayLogin();
-    final dates = await ActivityUsageStore.loadLoginDates();
     final counts = await ActivityUsageStore.loadActivityCounts();
     if (mounted) {
       setState(() {
-        _loginDates = dates;
         _activityCounts = counts;
       });
     }
   }
 
-  int _calculateStreak(Set<DateTime> dates) {
-    if (dates.isEmpty) return 1;
+  void _scheduleDayRefresh() {
+    _dayTimer?.cancel();
     final now = DateTime.now();
-    var cursor = DateTime(now.year, now.month, now.day);
-    if (!dates.contains(cursor)) {
-      cursor = cursor.subtract(const Duration(days: 1));
+    final midnight = DateTime(now.year, now.month, now.day + 1);
+    _dayTimer = Timer(midnight.difference(now), () {
+      if (mounted) setState(() {});
+      _scheduleDayRefresh();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      setState(() {});
+      _scheduleDayRefresh();
     }
-    var streak = 0;
-    while (dates.contains(cursor)) {
-      streak++;
-      cursor = cursor.subtract(const Duration(days: 1));
-    }
-    return streak > 0 ? streak : 1;
+  }
+
+  @override
+  void dispose() {
+    _dayTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   T? _maybeRead<T extends ChangeNotifier>(BuildContext context) {
@@ -204,97 +215,97 @@ class _HomeScreenState extends State<HomeScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                const Text(
-                  'KAI CHECKS BACK IN',
-                  style: TextStyle(
-                    color: AppColors.honeyAmber,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.8,
+                  const Text(
+                    'KAI CHECKS BACK IN',
+                    style: TextStyle(
+                      color: AppColors.honeyAmber,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.8,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  LanguageHelper.pick(
-                    language,
-                    english: 'Did that help?',
-                    filipino: 'Nakatulong ba iyon?',
-                    taglish: 'Did that help?',
+                  const SizedBox(height: 8),
+                  Text(
+                    LanguageHelper.pick(
+                      language,
+                      english: 'Did that help?',
+                      filipino: 'Nakatulong ba iyon?',
+                      taglish: 'Did that help?',
+                    ),
+                    style: TextStyle(
+                      color: isDark
+                          ? AppColors.textPrimaryDark
+                          : AppColors.textPrimaryLight,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
-                  style: TextStyle(
-                    color: isDark
-                        ? AppColors.textPrimaryDark
-                        : AppColors.textPrimaryLight,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
+                  const SizedBox(height: 5),
+                  Text(
+                    LanguageHelper.pick(
+                      language,
+                      english:
+                          'Your answer helps Kai choose what to offer next. No journal text is saved with it.',
+                      filipino:
+                          'Tutulong ang sagot mo kay Kai na pumili ng susunod na alok. Walang journal text na ise-save rito.',
+                      taglish:
+                          'Your answer helps Kai choose what to offer next. Walang journal text na ise-save.',
+                    ),
+                    style: TextStyle(
+                      color: isDark
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondaryLight,
+                      fontSize: 12.5,
+                      height: 1.4,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  LanguageHelper.pick(
-                    language,
-                    english:
-                        'Your answer helps Kai choose what to offer next. No journal text is saved with it.',
-                    filipino:
-                        'Tutulong ang sagot mo kay Kai na pumili ng susunod na alok. Walang journal text na ise-save rito.',
-                    taglish:
-                        'Your answer helps Kai choose what to offer next. Walang journal text na ise-save.',
+                  const SizedBox(height: 16),
+                  _FeedbackChoice(
+                    key: const ValueKey('activity-helped'),
+                    icon: Icons.sentiment_satisfied_alt_rounded,
+                    label: LanguageHelper.pick(
+                      language,
+                      english: 'Yes, a little',
+                      filipino: 'Oo, kahit kaunti',
+                    ),
+                    onTap: () => Navigator.pop(
+                      sheetContext,
+                      ActivityHelpfulness.helped,
+                    ),
                   ),
-                  style: TextStyle(
-                    color: isDark
-                        ? AppColors.textSecondaryDark
-                        : AppColors.textSecondaryLight,
-                    fontSize: 12.5,
-                    height: 1.4,
+                  const SizedBox(height: 8),
+                  _FeedbackChoice(
+                    key: const ValueKey('activity-unsure'),
+                    icon: Icons.remove_rounded,
+                    label: LanguageHelper.pick(
+                      language,
+                      english: 'Not sure yet',
+                      filipino: 'Hindi pa sigurado',
+                    ),
+                    onTap: () => Navigator.pop(
+                      sheetContext,
+                      ActivityHelpfulness.unsure,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                _FeedbackChoice(
-                  key: const ValueKey('activity-helped'),
-                  icon: Icons.sentiment_satisfied_alt_rounded,
-                  label: LanguageHelper.pick(
-                    language,
-                    english: 'Yes, a little',
-                    filipino: 'Oo, kahit kaunti',
+                  const SizedBox(height: 8),
+                  _FeedbackChoice(
+                    key: const ValueKey('activity-not-helpful'),
+                    icon: Icons.swap_horiz_rounded,
+                    label: LanguageHelper.pick(
+                      language,
+                      english: 'No—try something else',
+                      filipino: 'Hindi—subukan ang iba',
+                    ),
+                    onTap: () => Navigator.pop(
+                      sheetContext,
+                      ActivityHelpfulness.notHelpful,
+                    ),
                   ),
-                  onTap: () => Navigator.pop(
-                    sheetContext,
-                    ActivityHelpfulness.helped,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                _FeedbackChoice(
-                  key: const ValueKey('activity-unsure'),
-                  icon: Icons.remove_rounded,
-                  label: LanguageHelper.pick(
-                    language,
-                    english: 'Not sure yet',
-                    filipino: 'Hindi pa sigurado',
-                  ),
-                  onTap: () => Navigator.pop(
-                    sheetContext,
-                    ActivityHelpfulness.unsure,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                _FeedbackChoice(
-                  key: const ValueKey('activity-not-helpful'),
-                  icon: Icons.swap_horiz_rounded,
-                  label: LanguageHelper.pick(
-                    language,
-                    english: 'No—try something else',
-                    filipino: 'Hindi—subukan ang iba',
-                  ),
-                  onTap: () => Navigator.pop(
-                    sheetContext,
-                    ActivityHelpfulness.notHelpful,
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-      );
+        );
       },
     );
     if (result == null || !mounted) return;
@@ -340,7 +351,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final activityDates = <DateTime>{
       if (journal != null)
-        ...journal.entries.map((entry) {
+        ...journal.allEntries.map((entry) {
           final d = entry.createdAt.toLocal();
           return DateTime(d.year, d.month, d.day);
         }),
@@ -358,9 +369,8 @@ class _HomeScreenState extends State<HomeScreen> {
         final d = entry.completedAt.toLocal();
         return DateTime(d.year, d.month, d.day);
       }),
-      ..._loginDates,
     };
-    final streakCount = _calculateStreak(activityDates);
+    final streakCount = WellnessStreak.fromDates(activityDates).current;
 
     final activeSession = routines.activeSession;
     final activeRoutine = activeSession == null
@@ -587,6 +597,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       arrivedLetterCount: arrivedLetterCount,
                       onLettersTap: _openFutureLetters,
                       showFutureLetter: false,
+                      onAffirmationsTap: _openAffirmations,
                     ),
                   ),
                 ),
@@ -625,6 +636,16 @@ class _HomeScreenState extends State<HomeScreen> {
                       resuming: isResuming,
                       completed: routineCompleted,
                       loading: routines.isLoading,
+                    ),
+                  ),
+                ),
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(pagePadding, 14, pagePadding, 6),
+                  sliver: SliverToBoxAdapter(
+                    child: _buildWeeklyInsightsCard(
+                      context: context,
+                      isDark: isDark,
+                      language: language,
                     ),
                   ),
                 ),
@@ -814,171 +835,176 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 20),
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white24 : Colors.black12,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.local_fire_department_rounded,
-                    color: Color(0xFFFF6B00),
-                    size: 28,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    LanguageHelper.pick(
-                      language,
-                      english: '$streakCount Day Streak!',
-                      filipino: '$streakCount Araw na Streak!',
-                    ),
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: isDark
-                          ? AppColors.textPrimaryDark
-                          : const Color(0xFF2C2C2C),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                LanguageHelper.pick(
-                  language,
-                  english:
-                      'You showed up today! Keep returning daily to nurture your garden and peace of mind.',
-                  filipino:
-                      'Naglaan ka ng oras ngayon! Magpatuloy araw-araw upang alagaan ang iyong sarili.',
-                ),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13,
-                  height: 1.4,
-                  color: isDark
-                      ? AppColors.textSecondaryDark
-                      : Colors.grey.shade600,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isDark ? AppColors.darkHoneySurface : const Color(0xFFF6F4ED),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: isDark ? AppColors.darkCardBorder : AppColors.honeyBorder,
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white24 : Colors.black12,
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Column(
-                      children: [
-                        Text(
-                          LanguageHelper.pick(
-                            language,
-                            english: '🌱 Garden Level',
-                            filipino: '🌱 Antas ng Hardin',
-                          ),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: isDark
-                                ? AppColors.textSecondaryDark
-                                : Colors.grey.shade700,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${gratitudeProvider.gardenLevel}',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.sageGreen,
-                          ),
-                        ),
-                      ],
+                    const Icon(
+                      Icons.local_fire_department_rounded,
+                      color: Color(0xFFFF6B00),
+                      size: 28,
                     ),
-                    Container(
-                      width: 1,
-                      height: 36,
-                      color: isDark ? Colors.white12 : Colors.black12,
-                    ),
-                    Column(
-                      children: [
-                        Text(
-                          LanguageHelper.pick(
-                            language,
-                            english: '🌸 Garden Blooms',
-                            filipino: '🌸 Mga Bulaklak',
-                          ),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: isDark
-                                ? AppColors.textSecondaryDark
-                                : Colors.grey.shade700,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${gratitudeProvider.flowerCount}',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.honeyAmber,
-                          ),
-                        ),
-                      ],
+                    const SizedBox(width: 6),
+                    Text(
+                      LanguageHelper.pick(
+                        language,
+                        english: '$streakCount Day Streak!',
+                        filipino: '$streakCount Araw na Streak!',
+                      ),
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: isDark
+                            ? AppColors.textPrimaryDark
+                            : const Color(0xFF2C2C2C),
+                      ),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.honeyAmber,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    elevation: 0,
+                const SizedBox(height: 8),
+                Text(
+                  LanguageHelper.pick(
+                    language,
+                    english:
+                        'A saved check-in, journal, gratitude note, or completed practice counts once per day. You have all of today to continue. A missed day never erases the care you have taken.',
+                    filipino:
+                        'Bawat araw na may naitalang damdamin, talaarawan, pasasalamat, o natapos na pagsasanay ay binibilang nang isang beses. May buong araw ka pa para magpatuloy. Hindi nabubura ng pagliban ang pag-aalaga mo sa sarili.',
                   ),
-                  icon: const Icon(Icons.local_florist_rounded, color: Colors.white),
-                  label: Text(
-                    LanguageHelper.pick(
-                      language,
-                      english: 'Visit Gratitude Garden',
-                      filipino: 'Bisitahin ang Hardin',
-                    ),
-                    style: const TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                    ),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.4,
+                    color: isDark
+                        ? AppColors.textSecondaryDark
+                        : Colors.grey.shade600,
                   ),
-                  onPressed: () {
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const GardenScreen()),
-                    );
-                  },
                 ),
-              ),
-            ],
+                const SizedBox(height: 20),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? AppColors.darkHoneySurface
+                        : const Color(0xFFF6F4ED),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: isDark
+                          ? AppColors.darkCardBorder
+                          : AppColors.honeyBorder,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      Column(
+                        children: [
+                          Text(
+                            LanguageHelper.pick(
+                              language,
+                              english: '🌱 Garden Level',
+                              filipino: '🌱 Antas ng Hardin',
+                            ),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: isDark
+                                  ? AppColors.textSecondaryDark
+                                  : Colors.grey.shade700,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${gratitudeProvider.gardenLevel}',
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.sageGreen,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        width: 1,
+                        height: 36,
+                        color: isDark ? Colors.white12 : Colors.black12,
+                      ),
+                      Column(
+                        children: [
+                          Text(
+                            LanguageHelper.pick(
+                              language,
+                              english: '🌸 Garden Blooms',
+                              filipino: '🌸 Mga Bulaklak',
+                            ),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: isDark
+                                  ? AppColors.textSecondaryDark
+                                  : Colors.grey.shade700,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${gratitudeProvider.flowerCount}',
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.honeyAmber,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.honeyAmber,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      elevation: 0,
+                    ),
+                    icon: const Icon(Icons.local_florist_rounded,
+                        color: Colors.white),
+                    label: Text(
+                      LanguageHelper.pick(
+                        language,
+                        english: 'Visit Gratitude Garden',
+                        filipino: 'Bisitahin ang Hardin',
+                      ),
+                      style: const TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const GardenScreen()),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-      );
+        );
       },
     );
   }
@@ -1005,6 +1031,8 @@ class _HomeScreenState extends State<HomeScreen> {
         placeholderIcon: Icons.sentiment_satisfied_alt_outlined,
         onTap: () {
           ActivityUsageStore.incrementActivityUsage('mood');
+          WidgetsBinding.instance.addObserver(this);
+          _scheduleDayRefresh();
           _loadActivityStats();
           Navigator.push(
             context,
@@ -1030,6 +1058,8 @@ class _HomeScreenState extends State<HomeScreen> {
         placeholderIcon: Icons.local_florist_outlined,
         onTap: () {
           ActivityUsageStore.incrementActivityUsage('gratitude');
+          WidgetsBinding.instance.addObserver(this);
+          _scheduleDayRefresh();
           _loadActivityStats();
           Navigator.push(
             context,
@@ -1055,6 +1085,8 @@ class _HomeScreenState extends State<HomeScreen> {
         placeholderIcon: Icons.auto_stories_outlined,
         onTap: () {
           ActivityUsageStore.incrementActivityUsage('journal');
+          WidgetsBinding.instance.addObserver(this);
+          _scheduleDayRefresh();
           _loadActivityStats();
           Navigator.push(
             context,
@@ -1080,6 +1112,8 @@ class _HomeScreenState extends State<HomeScreen> {
         placeholderIcon: Icons.spa_outlined,
         onTap: () {
           ActivityUsageStore.incrementActivityUsage('grounding');
+          WidgetsBinding.instance.addObserver(this);
+          _scheduleDayRefresh();
           _loadActivityStats();
           Navigator.push(
             context,
@@ -1105,6 +1139,8 @@ class _HomeScreenState extends State<HomeScreen> {
         placeholderIcon: Icons.mail_outline_rounded,
         onTap: () {
           ActivityUsageStore.incrementActivityUsage('letters');
+          WidgetsBinding.instance.addObserver(this);
+          _scheduleDayRefresh();
           _loadActivityStats();
           _openFutureLetters();
         },
@@ -1127,6 +1163,8 @@ class _HomeScreenState extends State<HomeScreen> {
         placeholderIcon: Icons.schedule_rounded,
         onTap: () {
           ActivityUsageStore.incrementActivityUsage('routines');
+          WidgetsBinding.instance.addObserver(this);
+          _scheduleDayRefresh();
           _loadActivityStats();
           Navigator.push(
             context,
@@ -1152,6 +1190,8 @@ class _HomeScreenState extends State<HomeScreen> {
         placeholderIcon: Icons.nights_stay_rounded,
         onTap: () {
           ActivityUsageStore.incrementActivityUsage('sleep');
+          WidgetsBinding.instance.addObserver(this);
+          _scheduleDayRefresh();
           _loadActivityStats();
           Navigator.push(
             context,
@@ -1254,7 +1294,11 @@ class _HomeScreenState extends State<HomeScreen> {
       child: InkWell(
         key: const ValueKey('home-routine-card'),
         onTap: completed || loading || routine == null
-            ? null
+            ? () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const RoutinesHubScreen()),
+                );
+              }
             : () => _openRoutine(routine, resume: resuming),
         borderRadius: BorderRadius.circular(24),
         child: AnimatedContainer(
@@ -1412,41 +1456,82 @@ class _HomeScreenState extends State<HomeScreen> {
                         height: 1.3,
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: completed
+                            ? accent.withValues(alpha: 0.14)
+                            : accent,
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              completed || routine == null
+                                  ? LanguageHelper.pick(
+                                      language,
+                                      english: 'Explore routines',
+                                      filipino: 'Tingnan ang mga gawain',
+                                    )
+                                  : resuming
+                                      ? LanguageHelper.pick(
+                                          language,
+                                          english: 'Continue routine',
+                                          filipino: 'Ituloy ang gawain',
+                                        )
+                                      : LanguageHelper.pick(
+                                          language,
+                                          english: 'Begin routine',
+                                          filipino: 'Simulan ang gawain',
+                                        ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: completed ? accent : AppColors.onHoney,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            completed
+                                ? Icons.verified_rounded
+                                : resuming
+                                    ? Icons.play_arrow_rounded
+                                    : Icons.arrow_forward_rounded,
+                            size: 13,
+                            color: completed ? accent : AppColors.onHoney,
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
               if (loading)
-                SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: accent,
-                  ),
-                )
-              else
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: completed ? accent.withValues(alpha: 0.14) : accent,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    completed
-                        ? Icons.verified_rounded
-                        : resuming
-                            ? Icons.play_arrow_rounded
-                            : Icons.arrow_forward_rounded,
-                    size: 20,
-                    color: completed ? accent : AppColors.onHoney,
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: accent,
+                    ),
                   ),
                 ),
             ],
           ),
         ),
       ),
-    ).animate().fadeIn(delay: 60.ms).slideY(begin: 0.05);
+    );
   }
 
   Widget _buildHighlightCard({
@@ -1621,7 +1706,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               'Itala ang isang magandang detalye mula ngayon.',
                         ),
                   style: hasHighlight
-                      ? TextStyle(
+                      ? const TextStyle(
                           color: Colors.white,
                           fontFamily: 'serif',
                           fontSize: 20,
@@ -1671,7 +1756,216 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-    ).animate().fadeIn(delay: 100.ms).slideY(begin: 0.05);
+    );
+  }
+
+  Widget _buildWeeklyInsightsCard({
+    required BuildContext context,
+    required bool isDark,
+    required String language,
+  }) {
+    final primary =
+        isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight;
+    final secondary =
+        isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
+    return InkWell(
+      key: const ValueKey('home-weekly-insights-card'),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const WeeklyReflectionScreen()),
+      ),
+      borderRadius: BorderRadius.circular(26),
+      child: Container(
+        key: const ValueKey('home-weekly-insights-surface'),
+        padding: const EdgeInsets.all(18),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isDark
+                ? const [Color(0xFF2A2338), Color(0xFF1B1824)]
+                : const [Color(0xFFF3EDFF), Color(0xFFFBF9FF)],
+          ),
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(
+            color: const Color(0xFFC4B5FD)
+                .withValues(alpha: isDark ? 0.30 : 0.60),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color:
+                  const Color(0xFF7C3AED).withValues(alpha: isDark ? 0.12 : 0.07),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              right: -25,
+              top: -30,
+              child: Container(
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      const Color(0xFFDDD6FE)
+                          .withValues(alpha: isDark ? 0.15 : 0.35),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+                child: Icon(
+                  Icons.auto_awesome_rounded,
+                  size: 48,
+                  color: const Color(0xFF7C3AED)
+                      .withValues(alpha: isDark ? 0.15 : 0.12),
+                ),
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(9),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0xFF7C3AED).withValues(alpha: 0.22)
+                            : Colors.white.withValues(alpha: 0.90),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: const Color(0xFFC4B5FD).withValues(alpha: 0.40),
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.insights_rounded,
+                        size: 20,
+                        color: Color(0xFF7C3AED),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF7C3AED)
+                                  .withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              LanguageHelper.pick(
+                                language,
+                                english: 'WEEKLY SUMMARY',
+                                filipino: 'LINGGUHANG BUOD',
+                              ),
+                              style: const TextStyle(
+                                color: Color(0xFF7C3AED),
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.6,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            LanguageHelper.pick(
+                              language,
+                              english: 'Your week, at a glance',
+                              filipino: 'Isang tingin sa iyong linggo',
+                              taglish: 'Your week, at a glance',
+                            ),
+                            style: TextStyle(
+                              color: primary,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  LanguageHelper.pick(
+                    language,
+                    english:
+                        'See your sleep, check-ins, and small moments of care together. Clear observations, with an optional reflection from Kai.',
+                    filipino:
+                        'Tingnan ang tulog, damdamin, at mga sandali ng pag-aalaga. Malinaw na obserbasyon, at pagninilay ni Kai kung gusto mo.',
+                    taglish:
+                        'See your sleep, check-ins, and moments of care. May optional reflection din mula kay Kai.',
+                  ),
+                  style: TextStyle(
+                    color: secondary,
+                    fontSize: 12,
+                    height: 1.45,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? const Color(0xFF7C3AED).withValues(alpha: 0.28)
+                          : const Color(0xFF7C3AED),
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            LanguageHelper.pick(
+                              language,
+                              english: 'Open weekly insights',
+                              filipino: 'Tingnan ang lingguhang buod',
+                              taglish: 'Open weekly insights',
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: isDark
+                                  ? const Color(0xFFDDD6FE)
+                                  : Colors.white,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        Icon(
+                          Icons.arrow_forward_rounded,
+                          size: 13,
+                          color:
+                              isDark ? const Color(0xFFDDD6FE) : Colors.white,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _headerButton({

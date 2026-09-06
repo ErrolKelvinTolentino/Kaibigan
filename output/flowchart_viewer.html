@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kaibigan System Flowcharts (Clean & Exact Connections)</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    body {
+      background-color: #ffffff;
+      color: #000000;
+      font-family: Arial, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .flowchart-container {
+      border: 1.5px solid #000000;
+      background: #ffffff;
+      overflow: auto;
+      max-height: 82vh;
+    }
+    .btn-tab {
+      border: 1.5px solid #000000;
+      background: #ffffff;
+      color: #000000;
+      font-weight: 600;
+      padding: 6px 14px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .btn-tab.active {
+      background: #000000;
+      color: #ffffff;
+    }
+    .btn-tab:hover:not(.active) {
+      background: #f0f0f0;
+    }
+    .legend-box {
+      border: 1.5px solid #000000;
+      background: #ffffff;
+      padding: 8px 14px;
+      font-size: 12px;
+    }
+    @media print {
+      .no-print { display: none; }
+      .flowchart-container { max-height: none; border: none; }
+    }
+  </style>
+</head>
+<body class="p-4 sm:p-6 antialiased">
+  <div class="max-w-7xl mx-auto space-y-4">
+    <!-- Header -->
+    <div class="border-b-2 border-black pb-3 flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h1 class="text-xl font-bold tracking-tight text-black uppercase">KAIBIGAN SYSTEM FLOWCHART</h1>
+        <p class="text-xs text-gray-700">ANSI/ISO Standard Monochrome Diagram &bull; Exact Port Connections &bull; Zero Colliding Lines &bull; Decision Max 2 Branches (Yes/No)</p>
+      </div>
+      <div class="flex items-center gap-2 no-print">
+        <button onclick="window.print()" class="btn-tab text-xs">&DownArrowBar; Print / Save PDF</button>
+      </div>
+    </div>
+
+    <!-- Shape Legend Bar -->
+    <div class="legend-box flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-2">
+        <span class="inline-block w-6 h-3 border border-black rounded-full"></span>
+        <span><strong>Oval:</strong> Start / End</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="inline-block w-4 h-4 border border-black rotate-45"></span>
+        <span><strong>Diamond:</strong> Decision (Max 2 Branches: Yes / No)</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="inline-block w-5 h-3 border border-black"></span>
+        <span><strong>Rectangle:</strong> Process / Task</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="inline-block w-4 h-4 border border-black rounded-full"></span>
+        <span><strong>Circle:</strong> Terminate / Subsystem Connector (H, J, D, R, S, G, C, E)</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="inline-block w-5 h-4 border border-black rounded-sm"></span>
+        <span><strong>Cylinder:</strong> Database (Supabase PostgreSQL / SharedPreferences)</span>
+      </div>
+    </div>
+
+    <!-- Tabs Navigation -->
+    <div class="flex flex-wrap gap-2 no-print pt-1">
+      <button id="tab-btn-master" onclick="switchTab('master')" class="btn-tab active">Part 1: Master System & Navigation Hub</button>
+      <button id="tab-btn-journal" onclick="switchTab('journal')" class="btn-tab">Part 2: Journaling, Safety & AI Companion Engine</button>
+      <button id="tab-btn-persistence" onclick="switchTab('persistence')" class="btn-tab">Part 3: Trackers, Routines & Device Persistence</button>
+    </div>
+
+    <!-- Tab 1: Master System -->
+    <div id="tab-view-master" class="flowchart-container p-4">
+      <div class="mb-2 text-xs font-bold text-gray-800 uppercase">Part 1: App Launch, Authentication Gate, Profile Sync & Sequential Feature Router</div>
+      
+      <svg viewBox="0 0 1200 1640" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" style="background:#ffffff;">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="#000000"/>
+          </marker>
+        </defs>
+        
+      <rect x="600" y="35" width="240" height="50" rx="25" ry="25" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="720" y="64" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">START: Launch App</text>
+    
+
+      <rect x="530" y="135" width="380" height="60" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="720" y="161" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Initialize Environment, Supabase Client,</text>
+<text x="720" y="177" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">NotificationService &amp; System Overlay</text>
+    
+
+      <polygon points="720,250 850,295 720,340 590,295" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="720" y="291.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Authenticated</text>
+<text x="720" y="306.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Session Exists?</text>
+    
+
+      <line x1="720" y1="85" x2="720" y2="135" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="720" y1="195" x2="720" y2="250" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <rect x="120" y="345" width="240" height="60" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="240" y="371" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Open Authentication Page</text>
+<text x="240" y="387" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">(Sign In / Sign Up / OAuth)</text>
+    
+
+      <rect x="120" y="465" width="240" height="60" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="240" y="491" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Enter Credentials, Register,</text>
+<text x="240" y="507" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">or Authenticate via Provider</text>
+    
+
+      <polygon points="240,585 360,630 240,675 120,630" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="240" y="626.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Credentials</text>
+<text x="240" y="641.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Valid?</text>
+    
+
+      <path d="M 590 295 L 240 295 L 240 345" fill="none" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="404" y="275" width="32" height="18" fill="#ffffff"/>
+        <text x="420" y="288" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">No</text>
+      
+    
+
+      <line x1="240" y1="405" x2="240" y2="465" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="240" y1="525" x2="240" y2="585" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <path d="M 120 630 L 50 630 L 50 375 L 120 375" fill="none" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="69" y="610" width="32" height="18" fill="#ffffff"/>
+        <text x="85" y="623" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">No</text>
+      
+    
+
+      <rect x="530" y="415" width="380" height="60" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="720" y="441" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Load Profile and Current User Records</text>
+<text x="720" y="457" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">via Authenticated RLS</text>
+    
+
+      <path d="M 1000 420 v 50 a 85 10 0 0 0 170 0 v -50" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <path d="M 1000 470 a 85 10 0 0 1 170 0" fill="none" stroke="#000000" stroke-width="1.2" stroke-dasharray="3,3"/>
+      <ellipse cx="1085" cy="420" rx="85" ry="10" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="1085" y="445.5" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#000000" text-anchor="middle">Supabase DB:</text>
+<text x="1085" y="460.5" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#000000" text-anchor="middle">profiles + user tables</text>
+    
+
+      <line x1="720" y1="340" x2="720" y2="415" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="729" y="365" width="32" height="18" fill="#ffffff"/>
+        <text x="745" y="378" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Yes</text>
+      
+    
+
+      <path d="M 360 630 L 490 630 L 490 445 L 530 445" fill="none" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="404" y="610" width="32" height="18" fill="#ffffff"/>
+        <text x="420" y="623" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Yes</text>
+      
+    
+
+      <line x1="910" y1="445" x2="1000" y2="445" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <rect x="530" y="535" width="380" height="60" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="720" y="561" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Load Local Routine Configurations</text>
+<text x="720" y="577" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">and Resumable Active Session</text>
+    
+
+      <path d="M 1000 540 v 50 a 85 10 0 0 0 170 0 v -50" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <path d="M 1000 590 a 85 10 0 0 1 170 0" fill="none" stroke="#000000" stroke-width="1.2" stroke-dasharray="3,3"/>
+      <ellipse cx="1085" cy="540" rx="85" ry="10" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="1085" y="565.5" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#000000" text-anchor="middle">Device Storage:</text>
+<text x="1085" y="580.5" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#000000" text-anchor="middle">SharedPreferences</text>
+    
+
+      <line x1="720" y1="475" x2="720" y2="535" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="910" y1="565" x2="1000" y2="565" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <rect x="530" y="660" width="380" height="60" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="720" y="686" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Display Home Dashboard:</text>
+<text x="720" y="702" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Daily Streaks, Greetings &amp; Action Cards</text>
+    
+
+      <circle cx="410" cy="690" r="25" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="410" y="695" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">H</text>
+    
+
+      <line x1="720" y1="595" x2="720" y2="660" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="435" y1="690" x2="530" y2="690" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <polygon points="720,782.5 870,825 720,867.5 570,825" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="720" y="821.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Open Journal</text>
+<text x="720" y="836.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Feature?</text>
+    
+
+      <circle cx="1035" cy="825" r="25" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="1035" y="830" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">J</text>
+    
+
+      <line x1="720" y1="720" x2="720" y2="782.5" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="870" y1="825" x2="1010" y2="825" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="924" y="805" width="32" height="18" fill="#ffffff"/>
+        <text x="940" y="818" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Yes</text>
+      
+    
+
+      <polygon points="720,932.5 885,975 720,1017.5 555,975" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="720" y="971.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Open Mood, Gratitude,</text>
+<text x="720" y="986.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">or Future Letters?</text>
+    
+
+      <circle cx="1035" cy="975" r="25" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="1035" y="980" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">D</text>
+    
+
+      <line x1="720" y1="867.5" x2="720" y2="932.5" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="729" y="885" width="32" height="18" fill="#ffffff"/>
+        <text x="745" y="898" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">No</text>
+      
+    
+
+      <line x1="885" y1="975" x2="1010" y2="975" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="929" y="955" width="32" height="18" fill="#ffffff"/>
+        <text x="945" y="968" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Yes</text>
+      
+    
+
+      <polygon points="720,1082.5 870,1125 720,1167.5 570,1125" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="720" y="1121.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Open Routine</text>
+<text x="720" y="1136.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Runner?</text>
+    
+
+      <circle cx="1035" cy="1125" r="25" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="1035" y="1130" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">R</text>
+    
+
+      <line x1="720" y1="1017.5" x2="720" y2="1082.5" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="729" y="1035" width="32" height="18" fill="#ffffff"/>
+        <text x="745" y="1048" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">No</text>
+      
+    
+
+      <line x1="870" y1="1125" x2="1010" y2="1125" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="924" y="1105" width="32" height="18" fill="#ffffff"/>
+        <text x="940" y="1118" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Yes</text>
+      
+    
+
+      <polygon points="720,1232.5 870,1275 720,1317.5 570,1275" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="720" y="1271.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Open Settings or</text>
+<text x="720" y="1286.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">AI Memory?</text>
+    
+
+      <circle cx="1035" cy="1275" r="25" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="1035" y="1280" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">S</text>
+    
+
+      <line x1="720" y1="1167.5" x2="720" y2="1232.5" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="729" y="1185" width="32" height="18" fill="#ffffff"/>
+        <text x="745" y="1198" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">No</text>
+      
+    
+
+      <line x1="870" y1="1275" x2="1010" y2="1275" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="924" y="1255" width="32" height="18" fill="#ffffff"/>
+        <text x="940" y="1268" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Yes</text>
+      
+    
+
+      <polygon points="720,1382.5 860,1425 720,1467.5 580,1425" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="720" y="1421.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Log Out of</text>
+<text x="720" y="1436.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Kaibigan?</text>
+    
+
+      <circle cx="410" cy="1425" r="25" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="410" y="1430" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">H</text>
+    
+
+      <line x1="720" y1="1317.5" x2="720" y2="1382.5" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="729" y="1335" width="32" height="18" fill="#ffffff"/>
+        <text x="745" y="1348" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">No</text>
+      
+    
+
+      <line x1="580" y1="1425" x2="435" y2="1425" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="514" y="1405" width="32" height="18" fill="#ffffff"/>
+        <text x="530" y="1418" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">No</text>
+      
+    
+
+      <rect x="590" y="1525" width="260" height="50" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="720" y="1546" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Clear Authentication Session</text>
+<text x="720" y="1562" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">&amp; Local User Cache</text>
+    
+
+      <rect x="925" y="1527.5" width="110" height="45" rx="22.5" ry="22.5" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="980" y="1554" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">END</text>
+    
+
+      <line x1="720" y1="1467.5" x2="720" y2="1525" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="729" y="1485" width="32" height="18" fill="#ffffff"/>
+        <text x="745" y="1498" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Yes</text>
+      
+    
+
+      <line x1="850" y1="1550" x2="925" y2="1550" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+      </svg>
+    
+    </div>
+
+    <!-- Tab 2: Journal & AI Engine -->
+    <div id="tab-view-journal" class="flowchart-container p-4 hidden">
+      <div class="mb-2 text-xs font-bold text-gray-800 uppercase">Part 2: Journal CRUD, Crisis Filter, Gemini AI & Groq Fallback, Cloud Save & Memory Extraction</div>
+      
+      <svg viewBox="0 0 1480 1950" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" style="background:#ffffff;">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="#000000"/>
+          </marker>
+        </defs>
+        
+      <circle cx="80" cy="100" r="25" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="80" y="105" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">J</text>
+    
+
+      <rect x="185" y="70" width="180" height="60" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="275" y="96" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">READ Journal Entries</text>
+<text x="275" y="112" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">(Authenticated RLS)</text>
+    
+
+      <path d="M 445 77.5 v 45 a 75 10 0 0 0 150 0 v -45" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <path d="M 445 122.5 a 75 10 0 0 1 150 0" fill="none" stroke="#000000" stroke-width="1.2" stroke-dasharray="3,3"/>
+      <ellipse cx="520" cy="77.5" rx="75" ry="10" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="520" y="100.5" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#000000" text-anchor="middle">journal_entries</text>
+<text x="520" y="115.5" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#000000" text-anchor="middle">SELECT</text>
+    
+
+      <polygon points="765,60 855,100 765,140 675,100" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="765" y="96.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Create New</text>
+<text x="765" y="111.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Entry?</text>
+    
+
+      <circle cx="975" cy="100" r="25" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="975" y="105" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">C</text>
+    
+
+      <circle cx="765" cy="230" r="25" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="765" y="235" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">E</text>
+    
+
+      <line x1="105" y1="100" x2="185" y2="100" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="365" y1="100" x2="445" y2="100" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="595" y1="100" x2="675" y2="100" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="855" y1="100" x2="950" y2="100" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="884" y="80" width="32" height="18" fill="#ffffff"/>
+        <text x="900" y="93" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Yes</text>
+      
+    
+
+      <line x1="765" y1="140" x2="765" y2="205" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="774" y="160" width="32" height="18" fill="#ffffff"/>
+        <text x="790" y="173" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">No</text>
+      
+    
+
+      <line x1="40" y1="280" x2="1440" y2="280" stroke="#000000" stroke-width="1.5" stroke-dasharray="4,4"/>
+      <text x="50" y="305" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000">NEW ENTRY &amp; AI COMPANION PIPELINE</text>
+    
+
+      <circle cx="80" cy="380" r="25" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="80" y="385" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">C</text>
+    
+
+      <rect x="185" y="350" width="200" height="60" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="285" y="376" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">User Enters Title, Body</text>
+<text x="285" y="392" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">&amp; Emotional Reflections</text>
+    
+
+      <polygon points="565,340 655,380 565,420 475,380" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="565" y="376.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Request AI</text>
+<text x="565" y="391.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Companion?</text>
+    
+
+      <circle cx="565" cy="520" r="25" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="565" y="525" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">G</text>
+    
+
+      <rect x="745" y="350" width="200" height="60" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="845" y="376" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Apply Input Bounds &amp; Local</text>
+<text x="845" y="392" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Crisis Regex Guardrails</text>
+    
+
+      <polygon points="1135,337.5 1235,380 1135,422.5 1035,380" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="1135" y="376.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Crisis Language</text>
+<text x="1135" y="391.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Detected?</text>
+    
+
+      <rect x="1025" y="497.5" width="220" height="65" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="1135" y="526" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Display Emergency Hotlines:</text>
+<text x="1135" y="542" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">NCMH 1553, Hopeline 2919</text>
+    
+
+      <circle cx="1135" cy="635" r="25" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="1135" y="640" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">G</text>
+    
+
+      <line x1="105" y1="380" x2="185" y2="380" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="385" y1="380" x2="475" y2="380" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="565" y1="420" x2="565" y2="495" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="574" y="445" width="32" height="18" fill="#ffffff"/>
+        <text x="590" y="458" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">No</text>
+      
+    
+
+      <line x1="655" y1="380" x2="745" y2="380" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="684" y="360" width="32" height="18" fill="#ffffff"/>
+        <text x="700" y="373" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Yes</text>
+      
+    
+
+      <line x1="945" y1="380" x2="1035" y2="380" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="1135" y1="422.5" x2="1135" y2="497.5" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="1149" y="445" width="32" height="18" fill="#ffffff"/>
+        <text x="1165" y="458" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Yes</text>
+      
+    
+
+      <line x1="1135" y1="562.5" x2="1135" y2="610" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <rect x="930" y="687.5" width="220" height="65" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="1040" y="716" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Call Authenticated Edge Function</text>
+<text x="1040" y="732" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">kaibigan-ai (with Memories)</text>
+    
+
+      <polygon points="765,680 850,720 765,760 680,720" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="765" y="716.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Gemini API</text>
+<text x="765" y="731.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Succeeds?</text>
+    
+
+      <rect x="415" y="692.5" width="170" height="55" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="500" y="716" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Return Structured AI</text>
+<text x="500" y="732" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Reflection &amp; Turn JSON</text>
+    
+
+      <circle cx="325" cy="720" r="25" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="325" y="725" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">G</text>
+    
+
+      <path d="M 1235 380 L 1320 380 L 1320 720 L 1150 720" fill="none" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="1269" y="360" width="32" height="18" fill="#ffffff"/>
+        <text x="1285" y="373" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">No</text>
+      
+    
+
+      <line x1="930" y1="720" x2="850" y2="720" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="680" y1="720" x2="585" y2="720" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="619" y="700" width="32" height="18" fill="#ffffff"/>
+        <text x="635" y="713" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Yes</text>
+      
+    
+
+      <line x1="415" y1="720" x2="350" y2="720" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <rect x="670" y="847.5" width="190" height="55" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="765" y="871" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Invoke Fallback Provider:</text>
+<text x="765" y="887" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Groq Llama-3 70B API</text>
+    
+
+      <polygon points="765,960 850,1000 765,1040 680,1000" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="765" y="996.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Groq API</text>
+<text x="765" y="1011.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Succeeds?</text>
+    
+
+      <rect x="415" y="972.5" width="170" height="55" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="500" y="996" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Return Groq AI Response</text>
+<text x="500" y="1012" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">&amp; Structured Turn</text>
+    
+
+      <circle cx="325" cy="1000" r="25" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="325" y="1005" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">G</text>
+    
+
+      <rect x="670" y="1105" width="190" height="50" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="765" y="1126" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Show AI Unavailable;</text>
+<text x="765" y="1142" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Entry Remains Savable</text>
+    
+
+      <circle cx="565" cy="1130" r="25" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="565" y="1135" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">G</text>
+    
+
+      <line x1="765" y1="760" x2="765" y2="847.5" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="774" y="785" width="32" height="18" fill="#ffffff"/>
+        <text x="790" y="798" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">No</text>
+      
+    
+
+      <line x1="765" y1="902.5" x2="765" y2="960" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="680" y1="1000" x2="585" y2="1000" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="619" y="980" width="32" height="18" fill="#ffffff"/>
+        <text x="635" y="993" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Yes</text>
+      
+    
+
+      <line x1="415" y1="1000" x2="350" y2="1000" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="765" y1="1040" x2="765" y2="1105" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="774" y="1055" width="32" height="18" fill="#ffffff"/>
+        <text x="790" y="1068" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">No</text>
+      
+    
+
+      <line x1="670" y1="1130" x2="590" y2="1130" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="40" y1="1200" x2="1440" y2="1200" stroke="#000000" stroke-width="1.5" stroke-dasharray="4,4"/>
+      <text x="50" y="1225" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000">ENTRY PERSISTENCE GATE</text>
+    
+
+      <circle cx="80" cy="1320" r="25" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="80" y="1325" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">G</text>
+    
+
+      <polygon points="265,1280 345,1320 265,1360 185,1320" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="265" y="1316.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Save Journal</text>
+<text x="265" y="1331.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Entry?</text>
+    
+
+      <rect x="175" y="1412.5" width="180" height="55" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="265" y="1436" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Save Draft on Device</text>
+<text x="265" y="1452" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">or Discard (No Cloud Write)</text>
+    
+
+      <circle cx="265" cy="1530" r="25" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="265" y="1535" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">H</text>
+    
+
+      <line x1="105" y1="1320" x2="185" y2="1320" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="265" y1="1360" x2="265" y2="1412.5" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="274" y="1360" width="32" height="18" fill="#ffffff"/>
+        <text x="290" y="1373" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">No</text>
+      
+    
+
+      <line x1="265" y1="1467.5" x2="265" y2="1505" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <rect x="435" y="1290" width="200" height="60" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="535" y="1316" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">INSERT journal_entries</text>
+<text x="535" y="1332" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">with turns &amp; ai_response</text>
+    
+
+      <path d="M 715 1297.5 v 45 a 70 10 0 0 0 140 0 v -45" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <path d="M 715 1342.5 a 70 10 0 0 1 140 0" fill="none" stroke="#000000" stroke-width="1.2" stroke-dasharray="3,3"/>
+      <ellipse cx="785" cy="1297.5" rx="70" ry="10" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="785" y="1320.5" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#000000" text-anchor="middle">Supabase:</text>
+<text x="785" y="1335.5" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#000000" text-anchor="middle">journal_entries</text>
+    
+
+      <rect x="935" y="1290" width="200" height="60" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="1035" y="1316" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Extract Durable Personalization</text>
+<text x="1035" y="1332" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Memory from Journal Text</text>
+    
+
+      <path d="M 1195 1297.5 v 45 a 60 10 0 0 0 120 0 v -45" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <path d="M 1195 1342.5 a 60 10 0 0 1 120 0" fill="none" stroke="#000000" stroke-width="1.2" stroke-dasharray="3,3"/>
+      <ellipse cx="1255" cy="1297.5" rx="60" ry="10" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="1255" y="1320.5" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#000000" text-anchor="middle">user_memories</text>
+<text x="1255" y="1335.5" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#000000" text-anchor="middle">INSERT</text>
+    
+
+      <circle cx="1390" cy="1320" r="25" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="1390" y="1325" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">H</text>
+    
+
+      <line x1="345" y1="1320" x2="435" y2="1320" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="374" y="1300" width="32" height="18" fill="#ffffff"/>
+        <text x="390" y="1313" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Yes</text>
+      
+    
+
+      <line x1="635" y1="1320" x2="715" y2="1320" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="855" y1="1320" x2="935" y2="1320" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="1135" y1="1320" x2="1195" y2="1320" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="1315" y1="1320" x2="1365" y2="1320" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="40" y1="1580" x2="1440" y2="1580" stroke="#000000" stroke-width="1.5" stroke-dasharray="4,4"/>
+      <text x="50" y="1605" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000">MANAGE EXISTING ENTRIES (EDIT, DELETE, FAVORITE)</text>
+    
+
+      <circle cx="80" cy="1680" r="25" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="80" y="1685" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">E</text>
+    
+
+      <polygon points="240,1642.5 310,1680 240,1717.5 170,1680" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="240" y="1684" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Edit Entry?</text>
+    
+
+      <rect x="160" y="1775" width="160" height="50" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="240" y="1796" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">UPDATE Entry</text>
+<text x="240" y="1812" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">on User Save</text>
+    
+
+      <circle cx="240" cy="1890" r="22" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="240" y="1895" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">H</text>
+    
+
+      <line x1="105" y1="1680" x2="170" y2="1680" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="240" y1="1717.5" x2="240" y2="1775" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="249" y="1730" width="32" height="18" fill="#ffffff"/>
+        <text x="265" y="1743" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Yes</text>
+      
+    
+
+      <line x1="240" y1="1825" x2="240" y2="1868" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <polygon points="480,1642.5 545,1680 480,1717.5 415,1680" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="480" y="1684" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Delete?</text>
+    
+
+      <rect x="405" y="1775" width="150" height="50" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="480" y="1796" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">DELETE on Confirm</text>
+<text x="480" y="1812" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">&amp; Cascade Guard</text>
+    
+
+      <circle cx="480" cy="1890" r="22" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="480" y="1895" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">H</text>
+    
+
+      <line x1="310" y1="1680" x2="415" y2="1680" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="344" y="1660" width="32" height="18" fill="#ffffff"/>
+        <text x="360" y="1673" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">No</text>
+      
+    
+
+      <line x1="480" y1="1717.5" x2="480" y2="1775" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="489" y="1730" width="32" height="18" fill="#ffffff"/>
+        <text x="505" y="1743" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Yes</text>
+      
+    
+
+      <line x1="480" y1="1825" x2="480" y2="1868" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <polygon points="720,1642.5 785,1680 720,1717.5 655,1680" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="720" y="1684" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Toggle Fav?</text>
+    
+
+      <rect x="645" y="1775" width="150" height="50" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="720" y="1796" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">UPDATE is_favorite</text>
+<text x="720" y="1812" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Flag in Cloud</text>
+    
+
+      <circle cx="720" cy="1890" r="22" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="720" y="1895" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">H</text>
+    
+
+      <line x1="545" y1="1680" x2="655" y2="1680" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="584" y="1660" width="32" height="18" fill="#ffffff"/>
+        <text x="600" y="1673" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">No</text>
+      
+    
+
+      <line x1="720" y1="1717.5" x2="720" y2="1775" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="729" y="1730" width="32" height="18" fill="#ffffff"/>
+        <text x="745" y="1743" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Yes</text>
+      
+    
+
+      <line x1="720" y1="1825" x2="720" y2="1868" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <rect x="890" y="1655" width="140" height="50" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="960" y="1676" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">View Only</text>
+<text x="960" y="1692" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">(No DB Write)</text>
+    
+
+      <circle cx="1130" cy="1680" r="22" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="1130" y="1685" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">H</text>
+    
+
+      <line x1="785" y1="1680" x2="890" y2="1680" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="819" y="1660" width="32" height="18" fill="#ffffff"/>
+        <text x="835" y="1673" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">No</text>
+      
+    
+
+      <line x1="1030" y1="1680" x2="1108" y2="1680" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+      </svg>
+    
+    </div>
+
+    <!-- Tab 3: Trackers & Persistence -->
+    <div id="tab-view-persistence" class="flowchart-container p-4 hidden">
+      <div class="mb-2 text-xs font-bold text-gray-800 uppercase">Part 3: Mood, Gratitude Garden, Future Letters, Routine Session Runner & Settings Persistence</div>
+      
+      <svg viewBox="0 0 1380 1260" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" style="background:#ffffff;">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="#000000"/>
+          </marker>
+        </defs>
+        
+      <line x1="40" y1="30" x2="1340" y2="30" stroke="#000000" stroke-width="1.5" stroke-dasharray="4,4"/>
+      <text x="50" y="55" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000">1. DATA TRACKERS (MOOD, GRATITUDE, LETTERS) — CLOUD CRUD</text>
+    
+
+      <circle cx="80" cy="110" r="25" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="80" y="115" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">D</text>
+    
+
+      <rect x="175" y="80" width="170" height="60" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="260" y="106" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">READ Records for Selected</text>
+<text x="260" y="122" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Tracker (Owner RLS)</text>
+    
+
+      <path d="M 425 87.5 v 45 a 85 10 0 0 0 170 0 v -45" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <path d="M 425 132.5 a 85 10 0 0 1 170 0" fill="none" stroke="#000000" stroke-width="1.2" stroke-dasharray="3,3"/>
+      <ellipse cx="510" cy="87.5" rx="85" ry="10" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="510" y="110.5" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#000000" text-anchor="middle">mood_logs / gratitude /</text>
+<text x="510" y="125.5" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#000000" text-anchor="middle">future_letters</text>
+    
+
+      <polygon points="745,72.5 815,110 745,147.5 675,110" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="745" y="106.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Create New</text>
+<text x="745" y="121.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Record?</text>
+    
+
+      <line x1="105" y1="110" x2="175" y2="110" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="345" y1="110" x2="425" y2="110" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="595" y1="110" x2="675" y2="110" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <rect x="665" y="207.5" width="160" height="55" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="745" y="231" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">INSERT Record on Save</text>
+<text x="745" y="247" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">with User ID</text>
+    
+
+      <circle cx="910" cy="235" r="20" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="910" y="240" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">H</text>
+    
+
+      <line x1="745" y1="147.5" x2="745" y2="207.5" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="754" y="165" width="32" height="18" fill="#ffffff"/>
+        <text x="770" y="178" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Yes</text>
+      
+    
+
+      <line x1="825" y1="235" x2="890" y2="235" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <polygon points="955,75 1015,110 955,145 895,110" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="955" y="114" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Edit / Open?</text>
+    
+
+      <rect x="875" y="207.5" width="160" height="55" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="955" y="231" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">UPDATE Record</text>
+<text x="955" y="247" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">on User Confirm</text>
+    
+
+      <circle cx="1120" cy="235" r="20" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="1120" y="240" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">H</text>
+    
+
+      <line x1="815" y1="110" x2="895" y2="110" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="839" y="90" width="32" height="18" fill="#ffffff"/>
+        <text x="855" y="103" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">No</text>
+      
+    
+
+      <line x1="955" y1="145" x2="955" y2="207.5" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="964" y="165" width="32" height="18" fill="#ffffff"/>
+        <text x="980" y="178" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Yes</text>
+      
+    
+
+      <line x1="1035" y1="235" x2="1100" y2="235" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <polygon points="1140,75 1195,110 1140,145 1085,110" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="1140" y="114" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Delete?</text>
+    
+
+      <rect x="1070" y="207.5" width="140" height="55" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="1140" y="231" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">DELETE Record</text>
+<text x="1140" y="247" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">after Confirm</text>
+    
+
+      <circle cx="1295" cy="235" r="20" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="1295" y="240" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">H</text>
+    
+
+      <circle cx="1295" cy="110" r="20" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="1295" y="115" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">H</text>
+    
+
+      <line x1="1015" y1="110" x2="1085" y2="110" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="1034" y="90" width="32" height="18" fill="#ffffff"/>
+        <text x="1050" y="103" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">No</text>
+      
+    
+
+      <line x1="1140" y1="145" x2="1140" y2="207.5" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="1149" y="165" width="32" height="18" fill="#ffffff"/>
+        <text x="1165" y="178" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Yes</text>
+      
+    
+
+      <line x1="1210" y1="235" x2="1275" y2="235" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="1195" y1="110" x2="1275" y2="110" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="1219" y="90" width="32" height="18" fill="#ffffff"/>
+        <text x="1235" y="103" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">No</text>
+      
+    
+
+      <line x1="40" y1="310" x2="1340" y2="310" stroke="#000000" stroke-width="1.5" stroke-dasharray="4,4"/>
+      <text x="50" y="335" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000">2. ROUTINES &amp; PROGRESSIVE RUNNER — LOCAL CONFIG + CLOUD LOGS</text>
+    
+
+      <circle cx="80" cy="420" r="25" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="80" y="425" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">R</text>
+    
+
+      <rect x="175" y="390" width="200" height="60" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="275" y="416" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Load Routine Steps &amp; Active</text>
+<text x="275" y="432" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Session from Local Store</text>
+    
+
+      <path d="M 455 397.5 v 45 a 80 10 0 0 0 160 0 v -45" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <path d="M 455 442.5 a 80 10 0 0 1 160 0" fill="none" stroke="#000000" stroke-width="1.2" stroke-dasharray="3,3"/>
+      <ellipse cx="535" cy="397.5" rx="80" ry="10" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="535" y="420.5" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#000000" text-anchor="middle">SharedPreferences:</text>
+<text x="535" y="435.5" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#000000" text-anchor="middle">routine configs + session</text>
+    
+
+      <rect x="695" y="390" width="180" height="60" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="785" y="416" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Execute Progressive Runner</text>
+<text x="785" y="432" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Steps &amp; Timer Mechanics</text>
+    
+
+      <polygon points="1030,382.5 1105,420 1030,457.5 955,420" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="1030" y="416.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Routine</text>
+<text x="1030" y="431.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Completed?</text>
+    
+
+      <line x1="105" y1="420" x2="175" y2="420" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="375" y1="420" x2="455" y2="420" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="615" y1="420" x2="695" y2="420" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="875" y1="420" x2="955" y2="420" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <rect x="1175" y="390" width="120" height="60" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="1235" y="416" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">INSERT log;</text>
+<text x="1235" y="432" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Clear Session</text>
+    
+
+      <path d="M 1165 522.5 v 45 a 70 10 0 0 0 140 0 v -45" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <path d="M 1165 567.5 a 70 10 0 0 1 140 0" fill="none" stroke="#000000" stroke-width="1.2" stroke-dasharray="3,3"/>
+      <ellipse cx="1235" cy="522.5" rx="70" ry="10" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="1235" y="545.5" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#000000" text-anchor="middle">Supabase DB:</text>
+<text x="1235" y="560.5" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#000000" text-anchor="middle">routine_logs</text>
+    
+
+      <circle cx="1235" cy="640" r="20" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="1235" y="645" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">H</text>
+    
+
+      <line x1="1105" y1="420" x2="1175" y2="420" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="1124" y="400" width="32" height="18" fill="#ffffff"/>
+        <text x="1140" y="413" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Yes</text>
+      
+    
+
+      <line x1="1235" y1="450" x2="1235" y2="512.5" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="1235" y1="577.5" x2="1235" y2="620" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <rect x="940" y="520" width="180" height="60" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="1030" y="546" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Save Resumable Step &amp;</text>
+<text x="1030" y="562" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Elapsed Timer Locally</text>
+    
+
+      <circle cx="1030" cy="640" r="20" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="1030" y="645" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">H</text>
+    
+
+      <line x1="1030" y1="457.5" x2="1030" y2="520" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="1039" y="480" width="32" height="18" fill="#ffffff"/>
+        <text x="1055" y="493" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">No</text>
+      
+    
+
+      <line x1="1030" y1="580" x2="1030" y2="620" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="40" y1="690" x2="1340" y2="690" stroke="#000000" stroke-width="1.5" stroke-dasharray="4,4"/>
+      <text x="50" y="715" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000">3. SETTINGS &amp; AI PERSONALIZATION MEMORY</text>
+    
+
+      <circle cx="80" cy="800" r="25" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="80" y="805" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">S</text>
+    
+
+      <polygon points="240,762.5 305,800 240,837.5 175,800" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="240" y="796.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Profile / Tone</text>
+<text x="240" y="811.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Changed?</text>
+    
+
+      <rect x="165" y="897.5" width="150" height="55" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="240" y="921" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">UPSERT profiles</text>
+<text x="240" y="937" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">on User Save</text>
+    
+
+      <path d="M 175 1012.5 v 45 a 65 10 0 0 0 130 0 v -45" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <path d="M 175 1057.5 a 65 10 0 0 1 130 0" fill="none" stroke="#000000" stroke-width="1.2" stroke-dasharray="3,3"/>
+      <ellipse cx="240" cy="1012.5" rx="65" ry="10" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="240" y="1035.5" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#000000" text-anchor="middle">Supabase DB:</text>
+<text x="240" y="1050.5" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#000000" text-anchor="middle">profiles</text>
+    
+
+      <circle cx="240" cy="1135" r="20" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="240" y="1140" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">H</text>
+    
+
+      <line x1="105" y1="800" x2="175" y2="800" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="240" y1="837.5" x2="240" y2="897.5" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="249" y="855" width="32" height="18" fill="#ffffff"/>
+        <text x="265" y="868" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Yes</text>
+      
+    
+
+      <line x1="240" y1="952.5" x2="240" y2="1002.5" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="240" y1="1067.5" x2="240" y2="1115" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <polygon points="460,762.5 525,800 460,837.5 395,800" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="460" y="796.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Local Settings</text>
+<text x="460" y="811.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Changed?</text>
+    
+
+      <rect x="385" y="897.5" width="150" height="55" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="460" y="921" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">Write Theme &amp; Lang</text>
+<text x="460" y="937" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">to SharedPreferences</text>
+    
+
+      <path d="M 390 1012.5 v 45 a 70 10 0 0 0 140 0 v -45" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <path d="M 390 1057.5 a 70 10 0 0 1 140 0" fill="none" stroke="#000000" stroke-width="1.2" stroke-dasharray="3,3"/>
+      <ellipse cx="460" cy="1012.5" rx="70" ry="10" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="460" y="1035.5" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#000000" text-anchor="middle">SharedPreferences:</text>
+<text x="460" y="1050.5" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#000000" text-anchor="middle">theme, language</text>
+    
+
+      <circle cx="460" cy="1135" r="20" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="460" y="1140" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">H</text>
+    
+
+      <line x1="305" y1="800" x2="395" y2="800" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="334" y="780" width="32" height="18" fill="#ffffff"/>
+        <text x="350" y="793" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">No</text>
+      
+    
+
+      <line x1="460" y1="837.5" x2="460" y2="897.5" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="469" y="855" width="32" height="18" fill="#ffffff"/>
+        <text x="485" y="868" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Yes</text>
+      
+    
+
+      <line x1="460" y1="952.5" x2="460" y2="1002.5" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="460" y1="1067.5" x2="460" y2="1115" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <polygon points="685,762.5 755,800 685,837.5 615,800" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="685" y="796.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Delete AI</text>
+<text x="685" y="811.5" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Memory Fact?</text>
+    
+
+      <rect x="605" y="897.5" width="160" height="55" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="685" y="921" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">DELETE user_memories</text>
+<text x="685" y="937" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">after Confirmation</text>
+    
+
+      <path d="M 615 1012.5 v 45 a 70 10 0 0 0 140 0 v -45" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <path d="M 615 1057.5 a 70 10 0 0 1 140 0" fill="none" stroke="#000000" stroke-width="1.2" stroke-dasharray="3,3"/>
+      <ellipse cx="685" cy="1012.5" rx="70" ry="10" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="685" y="1035.5" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#000000" text-anchor="middle">Supabase DB:</text>
+<text x="685" y="1050.5" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#000000" text-anchor="middle">user_memories</text>
+    
+
+      <circle cx="685" cy="1135" r="20" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="685" y="1140" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">H</text>
+    
+
+      <line x1="525" y1="800" x2="615" y2="800" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="554" y="780" width="32" height="18" fill="#ffffff"/>
+        <text x="570" y="793" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">No</text>
+      
+    
+
+      <line x1="685" y1="837.5" x2="685" y2="897.5" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="694" y="855" width="32" height="18" fill="#ffffff"/>
+        <text x="710" y="868" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">Yes</text>
+      
+    
+
+      <line x1="685" y1="952.5" x2="685" y2="1002.5" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <line x1="685" y1="1067.5" x2="685" y2="1115" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+
+      <rect x="835" y="777.5" width="120" height="45" rx="3" ry="3" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="895" y="804" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#000000" text-anchor="middle">No Write</text>
+    
+
+      <circle cx="1035" cy="800" r="20" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+      <text x="1035" y="805" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#000000" text-anchor="middle">H</text>
+    
+
+      <line x1="755" y1="800" x2="835" y2="800" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+        <rect x="779" y="780" width="32" height="18" fill="#ffffff"/>
+        <text x="795" y="793" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#000000" text-anchor="middle">No</text>
+      
+    
+
+      <line x1="955" y1="800" x2="1015" y2="800" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+      
+    
+      </svg>
+    
+    </div>
+  </div>
+
+  <script>
+    function switchTab(tabId) {
+      document.querySelectorAll('[id^="tab-view-"]').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.btn-tab').forEach(el => el.classList.remove('active'));
+
+      const targetView = document.getElementById('tab-view-' + tabId);
+      const targetBtn = document.getElementById('tab-btn-' + tabId);
+      if (targetView) targetView.classList.remove('hidden');
+      if (targetBtn) targetBtn.classList.add('active');
+    }
+  </script>
+</body>
+</html>

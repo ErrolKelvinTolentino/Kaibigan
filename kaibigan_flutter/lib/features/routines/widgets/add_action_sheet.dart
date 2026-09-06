@@ -119,6 +119,7 @@ class _AddActionSheetState extends State<AddActionSheet> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
+      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.92),
       padding: EdgeInsets.only(
         top: 24,
         left: 24,
@@ -137,7 +138,7 @@ class _AddActionSheetState extends State<AddActionSheet> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
+                Expanded(child: Text(
                   _isCreatingCustom
                       ? 'Create Custom Action'
                       : 'Add Action to Routine',
@@ -148,7 +149,7 @@ class _AddActionSheetState extends State<AddActionSheet> {
                         ? AppColors.textPrimaryDark
                         : AppColors.textPrimaryLight,
                   ),
-                ),
+                )),
                 IconButton(
                   icon: const Icon(Icons.close),
                   onPressed: () => Navigator.pop(context),
@@ -212,6 +213,8 @@ class _AddActionSheetState extends State<AddActionSheet> {
             ] else ...[
               TextField(
                 controller: _customTitleController,
+                onChanged: (_) => setState(() {}),
+                maxLength: 60,
                 decoration: InputDecoration(
                   labelText: 'Action Title',
                   hintText: 'e.g. 5-Min Warm Tea Stretch',
@@ -287,7 +290,8 @@ class _AddActionSheetState extends State<AddActionSheet> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: _saveCustomAction,
+                      onPressed: _customTitleController.text.trim().isEmpty
+                          ? null : _saveCustomAction,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.sageGreen,
                         foregroundColor: Colors.white,

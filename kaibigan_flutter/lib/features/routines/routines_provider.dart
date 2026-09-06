@@ -1,3 +1,4 @@
+import '../insights/wellness_analytics.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -340,34 +341,17 @@ class RoutinesProvider extends ChangeNotifier {
     final now = DateTime.now();
     return _logs
         .where((log) =>
-            _routines.containsKey(log.routineId) &&
+            _routines.containsKey(log.routineId) && routineActivity(log) == 'routine' &&
             _isSameDay(log.completedAt, now))
         .map((log) => log.routineId)
         .toSet()
         .length;
   }
 
-  int get streakDays {
-    final completedDays =
-        _logs.where((log) => _routines.containsKey(log.routineId)).map((log) {
-      final local = log.completedAt.toLocal();
-      return DateTime(local.year, local.month, local.day);
-    }).toSet();
-    if (completedDays.isEmpty) return 0;
-
-    var cursor = DateTime.now();
-    cursor = DateTime(cursor.year, cursor.month, cursor.day);
-    if (!completedDays.contains(cursor)) {
-      cursor = cursor.subtract(const Duration(days: 1));
-    }
-    var streak = 0;
-    while (completedDays.contains(cursor)) {
-      streak++;
-      cursor = cursor.subtract(const Duration(days: 1));
-    }
-    return streak;
-  }
-
+  int get streakDays => WellnessStreak.fromDates(
+    _logs.where((log) => routineActivity(log) == 'routine')
+      .map((log) => log.completedAt),
+  ).current;
   bool isRoutineCompletedToday(RoutineType type) {
     return isRoutineCompletedTodayById(type.name);
   }
@@ -375,7 +359,7 @@ class RoutinesProvider extends ChangeNotifier {
   bool isRoutineCompletedTodayById(String routineId) {
     final now = DateTime.now();
     return _logs.any((log) =>
-        log.routineId == routineId && _isSameDay(log.completedAt, now));
+        log.routineId == routineId && routineActivity(log) == 'routine' && _isSameDay(log.completedAt, now));
   }
 
   void _initDefaultRoutines() {

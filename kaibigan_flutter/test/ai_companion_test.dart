@@ -55,6 +55,40 @@ void main() {
       expect(filipinoCrisis, contains('1553'));
       expect(filipinoCrisis, contains('NCMH Crisis Hotline'));
     });
+
+    test('detects colloquial Tagalog suicidal expressions including parang gusto ko na mamatay', () {
+      expect(AIService.isCrisisMessage('sa totoo lang parang gusto ko na mamatay'), isTrue);
+      expect(AIService.isCrisisMessage('gusto ko na mamatay'), isTrue);
+      expect(AIService.isCrisisMessage('gusto kong mamatay'), isTrue);
+      expect(AIService.isCrisisMessage('ayoko na mabuhay'), isTrue);
+      expect(AIService.isCrisisMessage('ayoko nang mabuhay'), isTrue);
+      expect(AIService.isCrisisMessage('pagod na ko mabuhay'), isTrue);
+    });
+
+    test('weekly reflection crisis response is structured with three markdown sections', () {
+      final response = AIService.getWeeklyReflectionCrisisResponse('english');
+      expect(response, contains('**Evidence**'));
+      expect(response, contains('**Pattern**'));
+      expect(response, contains('**One experiment**'));
+      expect(response, contains('1553'));
+      expect(response, contains('0917-899-8727'));
+      expect(response, contains('In Touch'));
+    });
+
+    test('generateCompanionReply returns structured crisis response for weekly reflection mode', () async {
+      final reply = await AIService.generateCompanionReply(
+        userText: 'Here is my week: sa totoo lang parang gusto ko na mamatay',
+        companionId: 'kai',
+        language: 'english',
+        mode: CompanionMode.weeklyReflection,
+      );
+
+      expect(reply.safetyLevel, 'crisis');
+      expect(reply.text, contains('**Evidence**'));
+      expect(reply.text, contains('**Pattern**'));
+      expect(reply.text, contains('**One experiment**'));
+      expect(reply.text, contains('1553'));
+    });
   });
 
   group('AIService - System Prompt Construction & Guardrails', () {
@@ -268,10 +302,11 @@ void main() {
       final res = reply.text;
 
       expect(reply.isOffline, isTrue);
-      expect(res, contains('temporary genie'));
+      expect(res, contains('choosing where to begin'));
       expect(res, contains('deadline'));
       expect(res, contains('ten minutes'));
-      expect(res, contains('help you rank it'));
+      expect(res, contains('fits your energy'));
+      expect(res, isNot(contains('bigger brain')));
       expect(res, isNot(contains('what happened today')));
       expect(res, isNot(contains('pinakamabigat sa pakiramdam')));
     });

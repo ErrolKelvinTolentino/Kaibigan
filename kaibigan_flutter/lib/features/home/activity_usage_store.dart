@@ -34,9 +34,6 @@ class ActivityUsageStore {
         dates.add(parsed);
       }
     }
-    // Also include today's date
-    final now = DateTime.now();
-    dates.add(DateTime(now.year, now.month, now.day));
     return dates;
   }
 

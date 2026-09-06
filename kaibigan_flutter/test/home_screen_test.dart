@@ -138,7 +138,7 @@ void main() {
           .first,
     );
     await tester.pumpAndSettle();
-    expect(find.text('RESUME ROUTINE'), findsOneWidget);
+    expect(find.text('Continue routine'), findsOneWidget);
     expect(find.textContaining('Second activity'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('home-routine-card')));
     await tester.pumpAndSettle();
