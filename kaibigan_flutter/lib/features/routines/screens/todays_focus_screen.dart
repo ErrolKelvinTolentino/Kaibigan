@@ -160,6 +160,38 @@ class _TodaysFocusScreenState extends State<TodaysFocusScreen> {
                 : AppColors.textSecondaryLight,
           ),
         ),
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppColors.sageGreen.withValues(alpha: isDark ? 0.14 : 0.10),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.explore_outlined,
+                size: 20,
+                color: AppColors.sageGreen,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Purpose: choose one meaningful intention to gently guide your attention today.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.4,
+                    color: isDark
+                        ? AppColors.textPrimaryDark
+                        : AppColors.textPrimaryLight,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
         const SizedBox(height: 16),
         Container(
           padding: const EdgeInsets.all(18),

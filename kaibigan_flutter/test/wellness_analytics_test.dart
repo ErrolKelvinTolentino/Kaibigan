@@ -81,6 +81,39 @@ void main() {
     expect(snapshot.observations.map((o) => o.id), contains('mood_change'));
   });
 
+  testWidgets('analytics lead with a verbal insight and helpful next step',
+      (tester) async {
+    final snapshot = WellnessAnalytics.build(
+      now: now,
+      moods: [
+        mood('a', 6, 4),
+        mood('b', 5, 3),
+        mood('c', 4, 4),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: WellnessInsightsPanel(
+              snapshot: snapshot,
+              language: 'english',
+              feature: 'mood',
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('wellness-verbal-insight')),
+        findsOneWidget);
+    expect(find.text('What your logs are saying'), findsOneWidget);
+    expect(find.byKey(const ValueKey('wellness-next-step')), findsOneWidget);
+    expect(find.text('The numbers behind it'), findsOneWidget);
+  });
+
   for (final language in ['english', 'filipino', 'taglish']) {
     testWidgets('insights fit 320px with enlarged $language text', (tester) async {
       await tester.binding.setSurfaceSize(const Size(320, 640));

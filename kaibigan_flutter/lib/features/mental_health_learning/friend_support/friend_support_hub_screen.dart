@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../core/constants/app_colors.dart';
 import '../../../core/theme/kaibigan_tokens.dart';
 import '../../../core/utils/language_helper.dart';
 import '../../../core/widgets/kaibigan_surface.dart';
@@ -136,11 +135,11 @@ class _FriendSupportHubScreenState extends State<FriendSupportHubScreen> {
                       gradient: LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
-                        colors: [
-                          palette.accentSubtle,
+                      colors: [
+                          palette.surface,
                           Theme.of(context).brightness == Brightness.dark
                               ? palette.surfaceElevated
-                              : AppColors.pollenGlow.withValues(alpha: 0.85),
+                              : palette.accentSubtle,
                         ],
                       ),
                       borderRadius: BorderRadius.circular(24),
@@ -165,27 +164,24 @@ class _FriendSupportHubScreenState extends State<FriendSupportHubScreen> {
                               width: 54,
                               height: 54,
                               decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [
-                                    Colors.white.withValues(alpha: 0.9),
-                                    palette.accentSubtle,
-                                  ],
-                                ),
+                                color: palette.surface,
                                 borderRadius: BorderRadius.circular(18),
+                                border: Border.all(
+                                  color: palette.accent.withValues(alpha: 0.24),
+                                ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: palette.accent.withValues(alpha: 0.15),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 2),
+                                    color: palette.accent.withValues(alpha: 0.10),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 4),
                                   ),
                                 ],
                               ),
-                              child: const Center(
-                                child: Text(
-                                  '💛',
-                                  style: TextStyle(fontSize: 28),
+                              child: Center(
+                                child: Icon(
+                                  Icons.handshake_rounded,
+                                  color: palette.accentStrong,
+                                  size: 29,
                                 ),
                               ),
                             ),
@@ -206,6 +202,21 @@ class _FriendSupportHubScreenState extends State<FriendSupportHubScreen> {
                                         ?.copyWith(
                                           fontWeight: FontWeight.w800,
                                           fontSize: 17,
+                                        ),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    LanguageHelper.pick(
+                                      language,
+                                      english: 'A practical guide for caring conversations',
+                                      filipino: 'Praktikal na gabay para sa maingat na pag-uusap',
+                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(
+                                          color: palette.accentStrong,
+                                          fontWeight: FontWeight.w700,
                                         ),
                                   ),
                                   const SizedBox(height: 5),

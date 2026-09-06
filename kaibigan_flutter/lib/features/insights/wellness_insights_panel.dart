@@ -43,6 +43,232 @@ class WellnessInsightsPanel extends StatelessWidget {
         _ => Icons.edit_note_rounded,
       };
 
+  String _verbalSummary() {
+    if (!snapshot.hasData) {
+      return copy(
+        'There is not enough saved activity yet to describe a pattern. That is okay—missing days are left unknown, not treated as bad days.',
+        'Wala pang sapat na naitalang gawain para makakita ng pattern. Ayos lang iyon—hindi itinuturing na masamang araw ang mga araw na walang tala.',
+        'Wala pang enough saved activity para makakita ng pattern. Okay lang—unknown ang missing days, hindi bad days.',
+      );
+    }
+
+    if (feature == 'mood') {
+      final mood = snapshot.metrics['mood']!;
+      if (mood.numericDays < 3) {
+        return copy(
+          'You have started checking in with yourself. A few more logged days will make it easier to tell whether this week felt steady or changeable.',
+          'Nagsimula ka nang kumustahin ang sarili mo. Makakatulong ang ilan pang araw na may tala para makita kung naging matatag o pabago-bago ang linggo.',
+          'You have started checking in. A few more logged days will make the pattern easier to understand.',
+        );
+      }
+      if (mood.change != null) {
+        final direction = mood.change! > 0
+            ? copy('lighter', 'mas magaan')
+            : copy('more difficult', 'mas mabigat');
+        return copy(
+          'The days you logged felt $direction than the previous week. This is a pattern in your check-ins, not a judgment about the whole week.',
+          'Ang mga araw na naitala mo ay $direction kaysa nakaraang linggo. Pattern lamang ito sa iyong mga check-in, hindi paghatol sa buong linggo.',
+          'Your logged days felt $direction than last week. Pattern ito sa check-ins mo, not a judgment on your whole week.',
+        );
+      }
+      final tone = mood.average! >= 3.5
+          ? copy('generally on the lighter side', 'karaniwang mas magaan')
+          : mood.average! <= 2.5
+              ? copy('more difficult overall', 'mas mabigat sa kabuuan')
+              : copy('mixed or near the middle', 'halo-halo o nasa gitna');
+      return copy(
+        'Your logged days were $tone. The average cannot explain why, so your notes and the situations around each check-in matter most.',
+        'Ang mga araw na naitala mo ay $tone. Hindi maipapaliwanag ng average kung bakit, kaya pinakamahalaga ang iyong mga tala at sitwasyon sa bawat check-in.',
+        'Your logged days were $tone. The average cannot explain why, so context from your notes matters most.',
+      );
+    }
+
+    if (feature == 'sleep') {
+      final sleep = snapshot.metrics['sleep']!;
+      if (sleep.days == 0) {
+        return copy(
+          'No recent sleep logs are available yet, so there is no sleep pattern to interpret.',
+          'Wala pang kamakailang tala ng tulog, kaya wala pang pattern na maaaring unawain.',
+          'Wala pang recent sleep logs, so wala pang pattern to interpret.',
+        );
+      }
+      if (snapshot.sleepHours != null && sleep.average != null) {
+        return copy(
+          'Your logs include both sleep length and how rested you felt. Those two measures may tell different stories, so neither should be read on its own.',
+          'Kasama sa iyong mga tala ang haba ng tulog at pakiramdam pagkagising. Maaaring magkaiba ang kuwento ng dalawang ito, kaya hindi sapat ang isa lamang.',
+          'Your logs include sleep length and how rested you felt. They can tell different stories, so look at both together.',
+        );
+      }
+      return copy(
+        'You recorded how sleep felt, but some nights do not have an exact duration. The quality pattern is useful; the missing hours should stay unknown.',
+        'Naitala mo ang pakiramdam ng tulog, ngunit walang eksaktong tagal ang ilang gabi. Kapaki-pakinabang ang quality pattern; mananatiling hindi alam ang kulang na oras.',
+        'You recorded how sleep felt, but some nights have no exact duration. Useful pa rin ang quality pattern; unknown ang missing hours.',
+      );
+    }
+
+    if (feature == 'breathing' || feature == 'grounding') {
+      final count = snapshot.metrics[feature]!.count;
+      return count == 0
+          ? copy(
+              'There are no completed ${_label(feature!)} sessions in this seven-day window yet.',
+              'Wala pang natapos na ${_label(feature!)} session sa nakaraang pitong araw.',
+            )
+          : copy(
+              'You returned to ${_label(feature!).toLowerCase()} this week. A session count shows that you practiced; your own check-back tells whether it helped.',
+              'Bumalik ka sa ${_label(feature!).toLowerCase()} ngayong linggo. Ipinapakita ng bilang na nagsanay ka; ikaw ang makapagsasabi kung nakatulong ito.',
+            );
+    }
+
+    final activeMetrics = snapshot.metrics.entries
+        .where((entry) => entry.value.days > 0)
+        .toList()
+      ..sort((left, right) => right.value.days.compareTo(left.value.days));
+    final strongest = activeMetrics.isEmpty ? null : activeMetrics.first;
+    if (strongest == null) {
+      return copy(
+        'You saved a few moments of care this week. There is not yet one activity that stands out as a repeated pattern.',
+        'May ilang sandali ng pag-aalaga kang naitala ngayong linggo. Wala pang isang gawaing malinaw na paulit-ulit.',
+      );
+    }
+    return copy(
+      'You made space for yourself on ${snapshot.activeDays} days. ${_label(strongest.key)} was the most repeated part of your week, which may make it a useful place to look for context—not proof of what caused you to feel better or worse.',
+      'Naglaan ka ng oras para sa sarili sa ${snapshot.activeDays} araw. Ang ${_label(strongest.key)} ang pinakamadalas na bahagi ng linggo, kaya maaari itong pagkunan ng konteksto—hindi patunay ng sanhi ng iyong naramdaman.',
+      'You made space for yourself on ${snapshot.activeDays} days. ${_label(strongest.key)} appeared most often, so it may be a useful place to look for context.',
+    );
+  }
+
+  String _helpfulNextStep() {
+    if (!snapshot.hasData) {
+      return copy(
+        'Start with one short mood check-in today. A sentence about what was happening will be more useful than a score alone.',
+        'Magsimula sa isang maikling mood check-in ngayon. Mas makatutulong ang isang pangungusap tungkol sa nangyayari kaysa numero lamang.',
+        'Start with one short mood check-in today. Add one sentence of context, not just a score.',
+      );
+    }
+    if (feature == 'mood') {
+      final mood = snapshot.metrics['mood']!;
+      return mood.numericDays < 3
+          ? copy(
+              'Try two more quick check-ins on different days, adding one note about what made the moment easier or harder.',
+              'Subukan ang dalawa pang mabilis na check-in sa magkaibang araw at magdagdag ng maikling tala tungkol sa nagpagaan o nagpabigat ng sandali.',
+            )
+          : copy(
+              'Compare one easier logged day with one harder day. Look for a difference in rest, demands, people, or routines that you may want to remember.',
+              'Ihambing ang isang magaan na araw at isang mabigat na araw. Tingnan kung may pagkakaiba sa pahinga, gawain, kasama, o routine na nais mong tandaan.',
+            );
+    }
+    if (feature == 'sleep') {
+      return snapshot.sleepDurationDays < 3
+          ? copy(
+              'For the next few nights, record both the duration and how rested you feel. That pairing will make the insight more useful.',
+              'Sa susunod na ilang gabi, itala ang tagal at pakiramdam pagkagising. Mas magiging kapaki-pakinabang ang insight kapag magkasama ang dalawa.',
+            )
+          : copy(
+              'Compare your most-rested night with a less-rested one and note one difference you could gently test again.',
+              'Ihambing ang gabing pinakanakapagpahinga ka sa isang hindi gaanong nakapagpahinga, at pumili ng isang pagkakaibang maaari mong subukan muli.',
+            );
+    }
+    if (feature == 'breathing' || feature == 'grounding') {
+      return copy(
+        'After your next session, pause for a moment and mark whether it helped. That check-back is more informative than adding another count.',
+        'Pagkatapos ng susunod na session, huminto sandali at itala kung nakatulong ito. Mas makabuluhan iyon kaysa dagdag na bilang lamang.',
+      );
+    }
+    if (snapshot.metrics['mood']!.numericDays < 3) {
+      return copy(
+        'Add a few short mood check-ins on different days. Include what was happening so future patterns have real context.',
+        'Magdagdag ng ilang maikling mood check-in sa magkaibang araw. Isama ang nangyayari para may tunay na konteksto ang susunod na pattern.',
+      );
+    }
+    if (snapshot.metrics['sleep']!.days > snapshot.sleepDurationDays) {
+      return copy(
+        'When you next log sleep, include both duration and how rested you feel. This fills the most important gap in the current picture.',
+        'Sa susunod na tala ng tulog, isama ang tagal at pakiramdam pagkagising. Ito ang pinakamahalagang kulang sa kasalukuyang larawan.',
+      );
+    }
+    return copy(
+      'Choose one easier day and one harder day from this week. Add a brief note about what was different before deciding what to repeat or adjust.',
+      'Pumili ng isang magaan at isang mabigat na araw ngayong linggo. Magdagdag ng maikling tala tungkol sa pagkakaiba bago pumili ng uulitin o babaguhin.',
+      'Choose one easier day and one harder day. Note what was different before deciding what to repeat or adjust.',
+    );
+  }
+
+  Widget _buildVerbalInsight(BuildContext context) {
+    final palette = context.kaibigan;
+    final text = Theme.of(context).textTheme;
+    return Container(
+      key: const ValueKey('wellness-verbal-insight'),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: palette.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: palette.botanicalSubtle,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.chat_bubble_outline_rounded,
+                    size: 20, color: palette.accentStrong),
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Text(
+                  copy('What your logs are saying',
+                      'Ano ang sinasabi ng iyong mga tala'),
+                  style: text.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(_verbalSummary(),
+              style: text.bodyMedium?.copyWith(height: 1.55)),
+          const SizedBox(height: 16),
+          Divider(height: 1, color: palette.border),
+          const SizedBox(height: 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.arrow_forward_rounded,
+                  size: 19, color: palette.accentStrong),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      copy('A helpful next step',
+                          'Isang makatutulong na susunod na hakbang'),
+                      style: text.labelLarge?.copyWith(
+                        color: palette.accentStrong,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _helpfulNextStep(),
+                      key: const ValueKey('wellness-next-step'),
+                      style: text.bodyMedium?.copyWith(height: 1.5),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = context.kaibigan;
@@ -109,6 +335,13 @@ class WellnessInsightsPanel extends StatelessWidget {
         ),
         const SizedBox(height: 20),
       ],
+      _buildVerbalInsight(context),
+      const SizedBox(height: 20),
+      Text(
+        copy('The numbers behind it', 'Mga bilang na pinagbabatayan'),
+        style: text.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+      ),
+      const SizedBox(height: 10),
       LayoutBuilder(builder: (context, constraints) {
         final twoColumns = feature == null &&
             constraints.maxWidth >= 340 &&

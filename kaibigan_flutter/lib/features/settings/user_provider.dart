@@ -487,14 +487,29 @@ class UserProvider extends ChangeNotifier {
     try {
       _dataError = null;
       final client = SupabaseService.client;
-      await client.from('profiles').upsert({
-        'id': userId,
+      final profile = {
         'email': email.toLowerCase(),
         'display_name': displayName,
         'preferred_mascot_id': _selectedCompanion,
         'preferred_language': _preferredLanguage,
         'updated_at': DateTime.now().toIso8601String(),
-      }, onConflict: 'id');
+      };
+
+      // Update existing profiles directly. This avoids relying on an
+      // upsert conflict path that can be rejected by RLS policies when the
+      // profile was created during a previous auth flow.
+      final updated = await client
+          .from('profiles')
+          .update(profile)
+          .eq('id', userId)
+          .select('id')
+          .maybeSingle();
+      if (updated == null) {
+        await client.from('profiles').insert({
+          'id': userId,
+          ...profile,
+        });
+      }
       return true;
     } catch (e) {
       _dataError = 'Your profile changes could not be synced.';
@@ -509,6 +524,7 @@ class UserProvider extends ChangeNotifier {
   }
 
   Future<bool> setCompanion(String companionId) async {
+    await _ensureLoaded();
     _selectedCompanion = companionId;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
@@ -520,6 +536,7 @@ class UserProvider extends ChangeNotifier {
       setCompanion(companionId);
 
   Future<bool> setLanguage(String lang) async {
+    await _ensureLoaded();
     _preferredLanguage = lang;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
@@ -588,6 +605,7 @@ class UserProvider extends ChangeNotifier {
   }
 
   Future<bool> updateDisplayName(String name) async {
+    await _ensureLoaded();
     final cleanName = name.trim();
     if (cleanName.isEmpty) {
       _dataError = 'Display name cannot be empty.';

@@ -10,8 +10,10 @@ import '../../core/widgets/cozy_feature_banner.dart';
 import '../../core/widgets/kaibigan_state_view.dart';
 import '../companion/companion_model.dart';
 import '../settings/user_provider.dart';
+import '../routines/screens/daily_reflection_screen.dart';
 import 'journal_provider.dart';
 import 'journal_editor_screen.dart';
+import 'journal_model.dart';
 
 class JournalListScreen extends StatefulWidget {
   const JournalListScreen({super.key});
@@ -26,10 +28,24 @@ class _JournalListScreenState extends State<JournalListScreen> {
   final List<String> _categories = [
     'All',
     'Favorites',
-    'Daily',
-    'Gratitude',
-    'Reflection'
+    'AI Journal',
+    'Reflections',
   ];
+
+  bool _isReflection(JournalEntry entry) {
+    final searchableText = [entry.title, ...entry.tags].join(' ').toLowerCase();
+    return searchableText.contains('reflection');
+  }
+
+  void _openNewEntry(String type) {
+    final Widget screen = type == 'reflection'
+        ? const DailyReflectionScreen()
+        : const JournalEditorScreen();
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => screen),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,6 +62,10 @@ class _JournalListScreenState extends State<JournalListScreen> {
 
     if (_selectedCategory == 'Favorites') {
       entries = journalProvider.favoriteEntries;
+    } else if (_selectedCategory == 'AI Journal') {
+      entries = entries.where((entry) => !_isReflection(entry)).toList();
+    } else if (_selectedCategory == 'Reflections') {
+      entries = entries.where(_isReflection).toList();
     } else if (_selectedCategory != 'All') {
       final cleanCat = _selectedCategory.toLowerCase();
       entries = entries
@@ -66,10 +86,44 @@ class _JournalListScreenState extends State<JournalListScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          copy('Journal reflections', 'Mga pagninilay'),
+          copy('Journal', 'Journal'),
           style: AppTypography.heading3(context, isDark: isDark),
         ),
         centerTitle: true,
+        actions: [
+          PopupMenuButton<String>(
+            key: const ValueKey('journal-new-entry-menu'),
+            tooltip: copy('New journal entry', 'Bagong tala'),
+            onSelected: _openNewEntry,
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'ai-journal',
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.auto_awesome_outlined),
+                  title: Text(copy('AI Journal', 'AI Journal')),
+                  subtitle: Text(copy(
+                    'Write freely and talk it through with Kai.',
+                    'Malayang magsulat at magnilay kasama si Kai.',
+                  )),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'reflection',
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.nightlight_outlined),
+                  title: Text(copy('Start Reflection', 'Magsimula ng pagninilay')),
+                  subtitle: Text(copy(
+                    'Use a guided evening reflection.',
+                    'Gumamit ng gabay para sa pagninilay sa gabi.',
+                  )),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: SafeArea(
         child: Column(
@@ -81,10 +135,10 @@ class _JournalListScreenState extends State<JournalListScreen> {
                   'A place for the honest draft',
                   'Lugar para sa tapat na saloobin',
                 ),
-                title: copy('Your reflections', 'Iyong mga pagninilay'),
+                title: copy('Your journal', 'Iyong journal'),
                 subtitle: copy(
-                  'Keep what mattered. Return when you are ready.',
-                  'Itabi ang mahalaga. Balikan kapag handa ka na.',
+                  'Keep your AI conversations and daily reflections together.',
+                  'Pagsamahin ang iyong AI journal at mga pagninilay.',
                 ),
                 assetPath: 'assets/feature icons/Journal.png',
                 placeholderLabel: 'journal-landscape',
@@ -163,9 +217,8 @@ class _JournalListScreenState extends State<JournalListScreen> {
                             ? switch (cat) {
                                 'All' => 'Lahat',
                                 'Favorites' => 'Paborito',
-                                'Daily' => 'Araw-araw',
-                                'Gratitude' => 'Pasasalamat',
-                                _ => 'Pagninilay',
+                                'AI Journal' => 'AI Journal',
+                                _ => 'Mga Pagninilay',
                               }
                             : cat,
                       ),
@@ -453,16 +506,11 @@ class _JournalListScreenState extends State<JournalListScreen> {
         backgroundColor: AppColors.honeyAmber,
         icon: const Icon(Icons.edit_note_rounded, color: Colors.white),
         label: Text(
-          copy('Write reflection', 'Magsulat ng pagninilay'),
+          copy('Write AI journal', 'Magsulat sa AI journal'),
           style:
               const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
         ),
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const JournalEditorScreen()),
-          );
-        },
+        onPressed: () => _openNewEntry('ai-journal'),
       ),
     );
   }

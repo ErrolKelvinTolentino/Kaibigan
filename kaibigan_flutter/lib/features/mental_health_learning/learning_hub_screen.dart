@@ -932,14 +932,18 @@ class _FriendSupportEntryCard extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: palette.accentSubtle,
+                  color: palette.surfaceSubtle,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: palette.accent.withValues(alpha: 0.25),
+                    color: palette.accent.withValues(alpha: 0.28),
                   ),
                 ),
                 alignment: Alignment.center,
-                child: const Text('💛', style: TextStyle(fontSize: 24)),
+                child: Icon(
+                  Icons.support_agent_rounded,
+                  color: palette.accentStrong,
+                  size: 26,
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -995,9 +999,9 @@ class _FriendSupportEntryCard extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Icon(
-                Icons.arrow_forward_ios_rounded,
-                size: 16,
-                color: palette.accent,
+                Icons.chevron_right_rounded,
+                size: 24,
+                color: palette.accentStrong,
               ),
             ],
           ),

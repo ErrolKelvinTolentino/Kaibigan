@@ -161,7 +161,10 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
         ),
       StepType.journalFocus => TodaysFocusScreen(onCompleted: onCompleted),
       StepType.journalHighlight =>
-        TodaysHighlightScreen(onCompleted: onCompleted),
+        TodaysHighlightScreen(
+          existingHighlight: context.read<RoutinesProvider>().todayHighlight,
+          onCompleted: onCompleted,
+        ),
       StepType.moodTracker => MoodTrackerScreen(onCompleted: onCompleted),
       StepType.grounding => GroundingSessionScreen(
           onCompleted: onCompleted,

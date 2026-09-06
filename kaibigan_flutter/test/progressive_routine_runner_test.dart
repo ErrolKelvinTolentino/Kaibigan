@@ -28,11 +28,16 @@ void main() {
     SharedPreferences.setMockInitialValues({'preferred_language': 'english'});
   });
 
-  Widget testApp({RoutineConfig? config}) {
+  Widget testApp({RoutineConfig? config, Iterable<RoutineLog> initialLogs = const []}) {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => UserProvider()),
-        ChangeNotifierProvider(create: (_) => RoutinesProvider()),
+        ChangeNotifierProvider(
+          create: (_) => RoutinesProvider(
+            initialLogs: initialLogs,
+            syncOnCreate: initialLogs.isEmpty,
+          ),
+        ),
         ChangeNotifierProvider(create: (_) => GratitudeProvider()),
         ChangeNotifierProvider(create: (_) => MoodProvider()),
         ChangeNotifierProvider(create: (_) => JournalProvider()),
@@ -50,12 +55,13 @@ void main() {
   Future<void> pumpRoutine(
     WidgetTester tester, {
     RoutineConfig? config,
+    Iterable<RoutineLog> initialLogs = const [],
   }) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(390, 844);
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
-    await tester.pumpWidget(testApp(config: config));
+    await tester.pumpWidget(testApp(config: config, initialLogs: initialLogs));
     await tester.pumpAndSettle();
   }
 
@@ -136,6 +142,43 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Routine completed! ✨'), findsOneWidget);
     expect(find.byKey(const ValueKey('finish-routine')), findsOneWidget);
+  });
+
+  testWidgets('routine highlight reopens with today\'s saved text',
+      (tester) async {
+    final now = DateTime.now();
+    final config = configFor(StepType.journalHighlight);
+
+    await pumpRoutine(
+      tester,
+      config: config,
+      initialLogs: [
+        RoutineLog(
+          id: 'today-highlight',
+          routineId: 'highlight_${now.millisecondsSinceEpoch}',
+          routineType: RoutineType.night,
+          completedAt: now,
+          focusOrHighlight: 'I put the kettle on and felt calm.',
+        ),
+      ],
+    );
+
+    final field = find.byType(TextField);
+    expect(field, findsOneWidget);
+    expect(tester.widget<TextField>(field).controller?.text,
+        'I put the kettle on and felt calm.');
+    expect(find.text('Update this moment'), findsOneWidget);
+  });
+
+  testWidgets('today\'s focus explains its purpose', (tester) async {
+    await pumpRoutine(tester, config: configFor(StepType.journalFocus));
+
+    expect(
+      find.text(
+        'Purpose: choose one meaningful intention to gently guide your attention today.',
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('every routine activity can be skipped without being completed',

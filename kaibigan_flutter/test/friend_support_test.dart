@@ -285,6 +285,16 @@ void main() {
       expect(find.text('Listen before trying to fix'), findsOneWidget);
       expect(find.byKey(const ValueKey('friend-support-practice-more-btn')),
           findsOneWidget);
+
+      final practiceMore =
+          find.byKey(const ValueKey('friend-support-practice-more-btn'));
+      await tester.ensureVisible(practiceMore);
+      await tester.tap(practiceMore);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(FriendSupportQuizScreen), findsOneWidget);
+      expect(find.text('Question 1 of 3'), findsOneWidget);
+      expect(find.text('Lesson Completed'), findsNothing);
     });
 
     testWidgets('Filipino localization renders correct terms', (tester) async {

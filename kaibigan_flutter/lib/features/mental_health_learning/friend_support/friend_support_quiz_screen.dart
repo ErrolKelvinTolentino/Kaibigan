@@ -169,13 +169,13 @@ class _FriendSupportQuizScreenState extends State<FriendSupportQuizScreen> {
       if (!mounted) return;
       await Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(
-          builder: (_) => FriendSupportCompletionScreen(
+          builder: (completionContext) => FriendSupportCompletionScreen(
             lesson: widget.lesson,
             score: _correctCount,
             total: widget.lesson.questions.length,
             language: language,
             onPracticeAgain: () {
-              Navigator.of(context).pushReplacement(
+              Navigator.of(completionContext).pushReplacement(
                 MaterialPageRoute<void>(
                   builder: (_) => FriendSupportQuizScreen(
                     lesson: widget.lesson,

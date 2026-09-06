@@ -390,7 +390,9 @@ List<_Practice> _practices(BuildContext context) => [
       Icons.local_florist_outlined, const GardenScreen()),
   _Practice(routineText(context, "Today's highlight", 'Mahalagang sandali ngayon'),
       routineText(context, 'Remember a small moment', 'Alalahanin ang munting sandali'),
-      Icons.wb_twilight_rounded, const TodaysHighlightScreen()),
+      Icons.wb_twilight_rounded,
+      TodaysHighlightScreen(
+          existingHighlight: context.read<RoutinesProvider>().todayHighlight)),
   _Practice(routineText(context, 'Daily reflection', 'Pagninilay ngayong araw'),
       routineText(context, 'Make room to reflect', 'Bigyan ng oras ang pagninilay'),
       Icons.auto_stories_outlined, const DailyReflectionScreen()),
