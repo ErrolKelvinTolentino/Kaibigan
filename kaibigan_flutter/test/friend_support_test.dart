@@ -5,7 +5,6 @@ import 'package:kaibigan_flutter/features/mental_health_learning/friend_support/
 import 'package:kaibigan_flutter/features/mental_health_learning/friend_support/friend_support_hub_screen.dart';
 import 'package:kaibigan_flutter/features/mental_health_learning/friend_support/friend_support_lesson_screen.dart';
 import 'package:kaibigan_flutter/features/mental_health_learning/friend_support/friend_support_quiz_screen.dart';
-import 'package:kaibigan_flutter/features/mental_health_learning/friend_support/friend_support_safety_sheet.dart';
 import 'package:kaibigan_flutter/features/mental_health_learning/learning_hub_screen.dart';
 import 'package:kaibigan_flutter/features/mental_health_learning/learning_progress_store.dart';
 import 'package:kaibigan_flutter/features/settings/user_provider.dart';
@@ -143,13 +142,15 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Friend Support Lessons'), findsOneWidget);
-      expect(find.byKey(const ValueKey('friend-support-hub-hero')), findsOneWidget);
+      expect(find.byKey(const ValueKey('friend-support-hub-hero')),
+          findsOneWidget);
       expect(find.text('Listen Before You Fix'), findsOneWidget);
       expect(find.text('Take Suicidal Thoughts Seriously'), findsOneWidget);
       expect(find.text('You Don\'t Have to Handle It Alone'), findsOneWidget);
 
       // Tap Need Help button
-      await tester.tap(find.byKey(const ValueKey('friend-support-hub-need-help')));
+      await tester
+          .tap(find.byKey(const ValueKey('friend-support-hub-need-help')));
       await tester.pumpAndSettle();
 
       // Crisis resources bottom sheet is visible
@@ -207,7 +208,8 @@ void main() {
       expect(find.text('Question 1 of 3'), findsOneWidget);
 
       // Tap 💡 Help hint button
-      await tester.tap(find.byKey(const ValueKey('friend-support-quiz-hint-btn')));
+      await tester
+          .tap(find.byKey(const ValueKey('friend-support-quiz-hint-btn')));
       await tester.pumpAndSettle();
       expect(find.text('Helpful Guidance'), findsOneWidget);
       expect(
@@ -228,7 +230,8 @@ void main() {
       // Feedback panel appears
       expect(find.byKey(const ValueKey('quiz-feedback-panel')), findsOneWidget);
       expect(find.text('Correct Answer: C'), findsOneWidget);
-      expect(find.textContaining('“Everyone feels overwhelmed” may be true'), findsOneWidget);
+      expect(find.textContaining('“Everyone feels overwhelmed” may be true'),
+          findsOneWidget);
 
       // Attempt to tap option B - should remain locked
       final optB = find.byKey(const ValueKey('quiz-option-B'));
@@ -280,7 +283,8 @@ void main() {
       );
       expect(find.text('Quiz Score: 2 / 3'), findsOneWidget);
       expect(find.text('Listen before trying to fix'), findsOneWidget);
-      expect(find.byKey(const ValueKey('friend-support-practice-more-btn')), findsOneWidget);
+      expect(find.byKey(const ValueKey('friend-support-practice-more-btn')),
+          findsOneWidget);
     });
 
     testWidgets('Filipino localization renders correct terms', (tester) async {
@@ -314,7 +318,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey('friend-support-entry-card')), findsOneWidget);
+      expect(find.byKey(const ValueKey('friend-support-entry-card')),
+          findsOneWidget);
       expect(find.text('Friend Support Lessons'), findsOneWidget);
       expect(find.text('3 Interactive Lessons & Quizzes'), findsOneWidget);
 
