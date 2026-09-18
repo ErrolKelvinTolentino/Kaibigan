@@ -67,10 +67,13 @@ class JournalAppearanceScreen extends StatelessWidget {
               switchInCurve: Curves.easeOutCubic,
               child: JournalPaperSurface(
                 key: ValueKey(
-                  '${user.journalPaperStyle.name}-${accent.toARGB32()}',
+                  '${user.journalPaperStyle.name}-${accent.toARGB32()}'
+                  '-${user.journalTextSize.name}',
                 ),
                 style: user.journalPaperStyle,
                 accentColor: accent,
+                lineHeight: user.journalTextSize.lineHeight,
+                firstLineOffset: 29 + 31 + user.journalTextSize.lineHeight,
                 padding: const EdgeInsets.fromLTRB(22, 29, 22, 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -92,8 +95,9 @@ class JournalAppearanceScreen extends StatelessWidget {
                         'Gumaan ang araw nang binigyan ko ang sarili ko ng sandaling huminga.',
                       ),
                       style: GoogleFonts.lora(
-                        fontSize: 14,
-                        height: 1.75,
+                        fontSize: 14 * user.journalTextSize.scale,
+                        height: user.journalTextSize.lineHeight /
+                            (14 * user.journalTextSize.scale),
                         color: isDark
                             ? AppColors.textPrimaryDark
                             : AppColors.textPrimaryLight,
@@ -104,13 +108,17 @@ class JournalAppearanceScreen extends StatelessWidget {
                       children: [
                         Icon(Icons.eco_rounded, size: 15, color: accent),
                         const SizedBox(width: 6),
-                        Text(
-                          copy('Your journal, your rhythm',
-                              'Iyong tala, iyong ritmo'),
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w700,
-                            color: accent,
+                        Expanded(
+                          child: Text(
+                            copy('Your journal, your rhythm',
+                                'Iyong tala, iyong ritmo'),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: accent,
+                            ),
                           ),
                         ),
                       ],
@@ -149,6 +157,84 @@ class JournalAppearanceScreen extends StatelessWidget {
                   }).toList(),
                 );
               },
+            ),
+            const SizedBox(height: 28),
+            _SectionLabel(
+              title: copy('Text size', 'Laki ng teksto'),
+              subtitle: copy(
+                'Applies while you write and when you read entries back',
+                'Gagamitin sa pagsulat at sa pagbabalik-basa ng mga tala',
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: JournalTextSize.values.map((choice) {
+                final selected = user.journalTextSize == choice;
+                return Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      right: choice == JournalTextSize.large ? 0 : 10,
+                    ),
+                    child: Semantics(
+                      button: true,
+                      selected: selected,
+                      child: Material(
+                        color: selected
+                            ? accent.withValues(alpha: isDark ? 0.22 : 0.13)
+                            : (isDark ? AppColors.darkCard : Colors.white),
+                        borderRadius: BorderRadius.circular(18),
+                        child: InkWell(
+                          key: ValueKey('journal-size-${choice.name}'),
+                          borderRadius: BorderRadius.circular(18),
+                          onTap: () => user.setJournalTextSize(choice),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(
+                                color: selected
+                                    ? accent
+                                    : (isDark
+                                        ? AppColors.darkCardBorder
+                                        : Colors.black
+                                            .withValues(alpha: 0.055)),
+                                width: selected ? 1.8 : 1,
+                              ),
+                            ),
+                            child: Column(
+                              children: [
+                                Text(
+                                  'Aa',
+                                  style: GoogleFonts.lora(
+                                    fontSize: 15 * choice.scale,
+                                    fontWeight: FontWeight.w700,
+                                    color: isDark
+                                        ? AppColors.textPrimaryDark
+                                        : AppColors.textPrimaryLight,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  choice.label,
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: selected
+                                        ? accent
+                                        : (isDark
+                                            ? AppColors.textSecondaryDark
+                                            : AppColors.textSecondaryLight),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
             ),
             const SizedBox(height: 28),
             _SectionLabel(

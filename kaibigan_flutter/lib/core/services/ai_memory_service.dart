@@ -52,6 +52,10 @@ class AIMemoryService {
   static final List<UserMemory> _memories = [];
   static String? _loadedUserId;
   static const String _enabledPreferenceKey = 'ai_memory_enabled';
+
+  /// Memory is meant to be a handful of things worth remembering, not a
+  /// transcript. Past this, the weakest and oldest note is dropped.
+  static const int maximumMemories = 12;
   static bool _isEnabled = true;
   static bool _preferenceLoaded = false;
 
@@ -119,15 +123,37 @@ class AIMemoryService {
     }
     _loadedUserId = currentUserId;
 
+    final clean = summary.trim();
+    // Seeing the same thing again is evidence it matters, not a reason to
+    // store a second near-identical note.
+    final duplicate = _memories.indexWhere(
+      (existing) =>
+          existing.category == category && isSameObservation(existing.summary, clean),
+    );
+    if (duplicate != -1) {
+      final existing = _memories[duplicate];
+      final strengthened = UserMemory(
+        id: existing.id,
+        category: existing.category,
+        summary: existing.summary,
+        relevanceScore: (existing.relevanceScore + 1).clamp(1, 10),
+        createdAt: existing.createdAt,
+      );
+      _memories[duplicate] = strengthened;
+      await _persistRelevance(strengthened, currentUserId);
+      return;
+    }
+
     final newMemory = UserMemory(
       id: UuidHelper.generateV4(),
       category: category,
-      summary: summary.trim(),
+      summary: clean,
       relevanceScore: relevance,
       createdAt: DateTime.now(),
     );
 
     _memories.insert(0, newMemory);
+    await _pruneToCapacity(currentUserId);
 
     if (SupabaseService.isInitialized) {
       try {
@@ -138,6 +164,71 @@ class AIMemoryService {
       } catch (e) {
         ApiLogger.logDatabase(
           operation: 'INSERT',
+          table: 'user_memories',
+          error: e.toString(),
+        );
+      }
+    }
+  }
+
+  /// Two notes describe the same thing when most of their meaningful words
+  /// overlap. Catches rephrasings without merging genuinely different themes.
+  static bool isSameObservation(String a, String b) {
+    if (a.trim().toLowerCase() == b.trim().toLowerCase()) return true;
+    final first = _meaningfulTokens(a);
+    final second = _meaningfulTokens(b);
+    if (first.isEmpty || second.isEmpty) return false;
+    final shared = first.intersection(second).length;
+    return shared / (first.length + second.length - shared) >= 0.6;
+  }
+
+  static Future<void> _persistRelevance(
+    UserMemory memory,
+    String? userId,
+  ) async {
+    if (!SupabaseService.isInitialized || userId == null) return;
+    if (!UuidHelper.isValidUuid(memory.id)) return;
+    try {
+      await SupabaseService.client
+          .from('user_memories')
+          .update({'relevance_score': memory.relevanceScore})
+          .eq('id', memory.id)
+          .eq('user_id', userId);
+    } catch (e) {
+      ApiLogger.logDatabase(
+        operation: 'UPDATE',
+        table: 'user_memories',
+        error: e.toString(),
+      );
+    }
+  }
+
+  /// Drops the least useful note once the list is full: weakest relevance
+  /// first, oldest as the tie-break.
+  static Future<void> _pruneToCapacity(String? userId) async {
+    while (_memories.length > maximumMemories) {
+      var weakest = 0;
+      for (var index = 1; index < _memories.length; index++) {
+        final candidate = _memories[index];
+        final current = _memories[weakest];
+        if (candidate.relevanceScore < current.relevanceScore ||
+            (candidate.relevanceScore == current.relevanceScore &&
+                candidate.createdAt.isBefore(current.createdAt))) {
+          weakest = index;
+        }
+      }
+      final removed = _memories.removeAt(weakest);
+      if (!SupabaseService.isInitialized || userId == null) continue;
+      if (!UuidHelper.isValidUuid(removed.id)) continue;
+      try {
+        await SupabaseService.client
+            .from('user_memories')
+            .delete()
+            .eq('id', removed.id)
+            .eq('user_id', userId);
+      } catch (e) {
+        ApiLogger.logDatabase(
+          operation: 'DELETE',
           table: 'user_memories',
           error: e.toString(),
         );
@@ -267,60 +358,188 @@ class AIMemoryService {
         .toSet();
   }
 
-  /// Analyzes a journal note to extract key user context automatically
+  /// One recognisable life theme and the note stored when it appears.
+  ///
+  /// Replaces what used to be three hard-coded `if` branches. The point is not
+  /// breadth for its own sake: a companion that can say "this is the third week
+  /// you have mentioned the thesis" is useful, one that only ever learned
+  /// "values intentional pauses" is not.
+  static const List<({
+    String id,
+    List<String> keywords,
+    String summary,
+    String category,
+    int relevance,
+  })> observableThemes = [
+    (
+      id: 'academic_pressure',
+      keywords: [
+        'deadline', 'exam', 'thesis', 'capstone', 'defense', 'requirements',
+        'school', 'semester', 'enrollment', 'grades', 'professor', 'quiz',
+        'pasado', 'bagsak', 'pasahan', 'proyekto',
+      ],
+      summary: 'Carries recurring pressure from school deadlines and academic '
+          'requirements.',
+      category: 'trigger',
+      relevance: 6,
+    ),
+    (
+      id: 'work_pressure',
+      keywords: [
+        'overtime', 'shift', 'workload', 'manager', 'client', 'quota',
+        'resign', 'promotion', 'trabaho', 'boss', 'sahod', 'duty',
+      ],
+      summary: 'Work demands — hours, workload, or a difficult manager — come '
+          'up repeatedly.',
+      category: 'trigger',
+      relevance: 6,
+    ),
+    (
+      id: 'money_pressure',
+      keywords: [
+        'budget', 'bills', 'tuition', 'rent', 'utang', 'bayarin', 'gastos',
+        'kulang', 'baon', 'allowance', 'sweldo',
+      ],
+      summary: 'Money and household expenses are an ongoing source of worry.',
+      category: 'trigger',
+      relevance: 7,
+    ),
+    (
+      id: 'sleep_difficulty',
+      keywords: [
+        'insomnia', 'puyat', 'hindi makatulog', 'cannot sleep', 'awake',
+        'tossing', 'nightmares', 'bangungot', 'walang tulog',
+      ],
+      summary: 'Struggles with sleep, and notices the difference it makes.',
+      category: 'trigger',
+      relevance: 7,
+    ),
+    (
+      id: 'restorative_habits',
+      keywords: [
+        'breathing', 'meditation', 'pahinga', 'walk', 'lakad', 'journal',
+        'stretch', 'prayer', 'dasal', 'music', 'kanta', 'hiking',
+      ],
+      summary: 'Uses deliberate pauses — breathing, walking, music, or prayer — '
+          'to steady themselves.',
+      category: 'coping_strategy',
+      relevance: 7,
+    ),
+    (
+      id: 'close_relationships',
+      keywords: [
+        'pamilya', 'family', 'magulang', 'nanay', 'tatay', 'kapatid',
+        'kaibigan', 'friend', 'barkada', 'tropa', 'partner', 'asawa',
+      ],
+      summary: 'Draws meaning and steadiness from close family and friendships.',
+      category: 'theme',
+      relevance: 6,
+    ),
+    (
+      id: 'social_strain',
+      keywords: [
+        'lonely', 'alone', 'mag-isa', 'nag-away', 'argument', 'fight',
+        'ghosted', 'ignored', 'left out', 'walang kausap', 'hiwalay',
+      ],
+      summary: 'Conflict or loneliness in relationships is a recurring weight.',
+      category: 'trigger',
+      relevance: 7,
+    ),
+    (
+      id: 'self_criticism',
+      keywords: [
+        'not good enough', 'failure', 'palpak', 'kasalanan ko', 'stupid',
+        'useless', 'walang silbi', 'disappointing', 'ashamed', 'hiya',
+      ],
+      summary: 'Tends toward harsh self-judgement when something goes wrong.',
+      category: 'theme',
+      relevance: 8,
+    ),
+    (
+      id: 'health_concern',
+      keywords: [
+        'sakit', 'sick', 'hospital', 'checkup', 'diagnosis', 'medication',
+        'gamot', 'therapy', 'doctor', 'lagnat', 'ospital',
+      ],
+      summary: 'Health — their own or a loved one\'s — is part of what they are '
+          'carrying.',
+      category: 'trigger',
+      relevance: 7,
+    ),
+    (
+      id: 'caregiving',
+      keywords: [
+        'taking care of', 'nag-aalaga', 'inaalagaan', 'responsible for',
+        'breadwinner', 'panganay', 'my lolo', 'my lola', 'my anak',
+      ],
+      summary: 'Carries caregiving or provider responsibility for someone else.',
+      category: 'theme',
+      relevance: 8,
+    ),
+  ];
+
+  /// Reads a saved entry for recurring life themes.
+  ///
+  /// This is keyword matching, and it is deliberately conservative: a theme is
+  /// only stored when the entry names it plainly, because a wrong memory is
+  /// worse than no memory when it is fed back into a reply later.
   static Future<void> extractMemoryFromNote(
-      String title, String content) async {
+    String title,
+    String content,
+  ) async {
     if (!_preferenceLoaded) await loadPreference();
     if (!_isEnabled) return;
-    final combined = "$title $content".toLowerCase();
+    final combined = '$title $content'.toLowerCase();
+    if (combined.trim().length < 25) return;
 
-    // 1. Academic & work deadlines
-    if (combined.contains('deadline') ||
-        combined.contains('exam') ||
-        combined.contains('school') ||
-        combined.contains('thesis') ||
-        combined.contains('capstone')) {
-      if (!_memories.any((m) =>
-          m.summary.toLowerCase().contains('deadline') ||
-          m.summary.toLowerCase().contains('school'))) {
-        await addMemory(
-            'Currently navigating academic projects and deadline demands.',
-            category: 'trigger',
-            relevance: 6);
-      }
+    for (final theme in observableThemes) {
+      if (!theme.keywords.any(combined.contains)) continue;
+      await addMemory(
+        theme.summary,
+        category: theme.category,
+        relevance: theme.relevance,
+      );
+    }
+  }
+
+  /// Stores what the companion itself observed during a reply.
+  ///
+  /// The model has already read the entry properly and returned the emotions
+  /// it recognised and the moments that stood out. Reusing that costs nothing
+  /// extra and is far more accurate than re-deriving themes from keywords.
+  static Future<void> noteCompanionObservation({
+    required List<String> detectedEmotions,
+    required List<String> standoutMoments,
+  }) async {
+    if (!_preferenceLoaded) await loadPreference();
+    if (!_isEnabled) return;
+
+    // A single reading of one entry is not a pattern. Only emotions that carry
+    // real weight are worth remembering at all.
+    const weighty = {
+      'anxious', 'overwhelmed', 'lonely', 'sad', 'frustrated', 'tired',
+      'uncertain', 'proud', 'hopeful', 'grateful', 'relieved',
+    };
+    final notable =
+        detectedEmotions.where(weighty.contains).take(2).toList(growable: false);
+    for (final emotion in notable) {
+      await addMemory(
+        'Has written from a place of feeling $emotion more than once.',
+        category: 'theme',
+        // Low on purpose: this is a soft signal and should be the first thing
+        // dropped when memory fills up.
+        relevance: 4,
+      );
     }
 
-    // 2. Restorative & grounding habits
-    if (combined.contains('breathing') ||
-        combined.contains('himala') ||
-        combined.contains('pahinga') ||
-        combined.contains('walk') ||
-        combined.contains('lakad') ||
-        combined.contains('meditation')) {
-      if (!_memories.any((m) =>
-          m.summary.toLowerCase().contains('breathing') ||
-          m.summary.toLowerCase().contains('walk'))) {
-        await addMemory(
-            'Values intentional pauses, breathing, and short walks to restore mental clarity.',
-            category: 'coping_strategy',
-            relevance: 7);
-      }
-    }
-
-    // 3. Family & social connections
-    if (combined.contains('pamilya') ||
-        combined.contains('family') ||
-        combined.contains('magulang') ||
-        combined.contains('kaibigan') ||
-        combined.contains('friend')) {
-      if (!_memories.any((m) =>
-          m.summary.toLowerCase().contains('family') ||
-          m.summary.toLowerCase().contains('friends'))) {
-        await addMemory(
-            'Draws comfort and meaning from close family and authentic friendships.',
-            category: 'theme',
-            relevance: 6);
-      }
+    for (final moment in standoutMoments.take(1)) {
+      final clean = moment.trim();
+      if (clean.length < 8 || clean.length > 120) continue;
+      await addMemory(
+        'Something that mattered to them recently: $clean',
+        category: 'milestone',
+        relevance: 5,
+      );
     }
   }
 

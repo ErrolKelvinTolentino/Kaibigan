@@ -7,6 +7,8 @@ import '../../core/utils/language_helper.dart';
 import '../../core/widgets/cozy_feature_banner.dart';
 import '../../core/widgets/cozy_motion.dart';
 import '../gratitude_garden/gratitude_provider.dart';
+import '../insights/plain_language_insights.dart';
+import '../insights/wellness_analytics.dart';
 import '../journaling/journal_provider.dart';
 import '../mood_tracking/mood_provider.dart';
 import '../settings/user_provider.dart';
@@ -33,6 +35,22 @@ class JourneyScreen extends StatelessWidget {
       ...mood.logs.map((entry) => entry.createdAt),
     ];
     final streak = _currentStreak(activityDates);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final weekStart = DateTime(today.year, today.month, today.day - 6);
+    final loggedToday = activityDates
+        .map(wellnessDay)
+        .any((date) => date == today);
+    final longestStreak =
+        WellnessStreak.fromDates(activityDates, now: now).longest;
+    int since(Iterable<DateTime> dates) => dates
+        .where((date) => !date.toLocal().isBefore(weekStart))
+        .length;
+    final weeklyMood = mood.weeklyMoodAverage;
+    final gratitudeThisWeek =
+        since(garden.entries.map((entry) => entry.createdAt));
+    final journalThisWeek =
+        since(journal.entries.map((entry) => entry.createdAt));
     final milestones = _buildMilestones(
       language: language,
       journalDates: journal.entries.map((entry) => entry.createdAt),
@@ -68,10 +86,20 @@ class JourneyScreen extends StatelessWidget {
                 child: _SectionHeading(
                   eyebrow: copy('At a glance', 'Sa isang tingin'),
                   title: copy('Your gentle rhythm', 'Iyong banayad na ritmo'),
-                  subtitle: copy(
-                    'No pressure—these numbers simply reflect the care you made time for.',
-                    'Walang pressure—ipinapakita lang nito ang oras na inilaan mo sa sarili.',
-                  ),
+                  subtitle: longestStreak > 1
+                      ? copy(
+                          'No pressure—these reflect the care you made time '
+                              'for. Your longest run so far is $longestStreak '
+                              'days, and it survived every gap before it.',
+                          'Walang pressure—ipinapakita lang nito ang oras na '
+                              'inilaan mo sa sarili. Ang pinakamahaba mong '
+                              'sunod-sunod ay $longestStreak araw, at '
+                              'nalampasan nito ang bawat pagitan.',
+                        )
+                      : copy(
+                          'No pressure—these numbers simply reflect the care you made time for.',
+                          'Walang pressure—ipinapakita lang nito ang oras na inilaan mo sa sarili.',
+                        ),
                 ),
               ),
             ),
@@ -91,26 +119,60 @@ class JourneyScreen extends StatelessWidget {
                             ? copy('Start today', 'Magsimula ngayon')
                             : copy('$streak day${streak == 1 ? '' : 's'}',
                                 '$streak araw'),
+                        // A streak number on its own invites a person to
+                        // read a missed day as a failure. The caption says
+                        // what it would actually take to keep it.
+                        caption: streak == 0
+                            ? copy('One saved moment starts it again',
+                                'Isang tala at magsisimula muli')
+                            : loggedToday
+                                ? copy('Today is already in',
+                                    'Kasama na ang ngayon')
+                                : copy('Anything today keeps it',
+                                    'Kahit ano ngayon, tuloy ito'),
                         icon: Icons.local_fire_department_rounded,
                         color: AppColors.honeyAmber,
                       ),
                       _MetricData(
                         label: copy('Garden blooms', 'Mga bulaklak'),
                         value: '${garden.flowerCount}',
+                        caption: gratitudeThisWeek == 0
+                            ? copy('none planted in the last 7 days',
+                                'wala sa huling 7 araw')
+                            : copy(
+                                '$gratitudeThisWeek in the last 7 days',
+                                '$gratitudeThisWeek sa huling 7 araw'),
                         icon: Icons.local_florist_rounded,
                         color: AppColors.softOlive,
                       ),
                       _MetricData(
                         label: copy('Reflections', 'Mga pagninilay'),
                         value: '${journal.entries.length}',
+                        caption: journalThisWeek == 0
+                            ? copy('none written in the last 7 days',
+                                'wala sa huling 7 araw')
+                            : copy(
+                                '$journalThisWeek in the last 7 days',
+                                '$journalThisWeek sa huling 7 araw'),
                         icon: Icons.auto_stories_rounded,
                         color: AppColors.sageGreen,
                       ),
                       _MetricData(
                         label: copy('Average mood', 'Karaniwang mood'),
-                        value: mood.logs.isEmpty
+                        // A week with no check-ins has no average. Showing
+                        // 0.0 would draw an empty week as the worst one.
+                        value: weeklyMood == null
                             ? '—'
-                            : '${mood.averageWeeklyScore.toStringAsFixed(1)} / 5',
+                            : '${weeklyMood.toStringAsFixed(1)} / 5',
+                        caption: weeklyMood == null
+                            ? (mood.logs.isEmpty
+                                ? copy('no check-ins yet',
+                                    'wala pang check-in')
+                                : copy('none in the last 7 days',
+                                    'wala sa huling 7 araw'))
+                            : PlainLanguageInsights.moodWord(
+                                    weeklyMood, language)
+                                .toLowerCase(),
                         icon: Icons.wb_sunny_rounded,
                         color: AppColors.honeyGold,
                       ),
@@ -303,12 +365,17 @@ class _SectionHeading extends StatelessWidget {
 class _MetricData {
   final String label;
   final String value;
+
+  /// The sentence that makes the figure mean something. Without it a tile
+  /// reports a number and leaves the reader to decide whether it is good.
+  final String caption;
   final IconData icon;
   final Color color;
 
   const _MetricData({
     required this.label,
     required this.value,
+    required this.caption,
     required this.icon,
     required this.color,
   });
@@ -372,6 +439,18 @@ class _MetricCard extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 5),
+          Text(
+            data.caption,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
+                  height: 1.3,
+                ),
           ),
         ],
       ),

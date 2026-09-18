@@ -22,6 +22,7 @@ import '../journaling/journal_provider.dart';
 import '../mood_tracking/mood_provider.dart';
 import '../mood_tracking/mood_model.dart';
 import '../routines/routines_provider.dart';
+import '../routines/screens/sleep_analytics_screen.dart';
 import '../settings/user_provider.dart';
 import 'weekly_reflection_service.dart';
 
@@ -553,11 +554,85 @@ ${narrative.experiment}
                     onFeatureTap: (id) => showWellnessDetails(
                         context, snapshot.wellness, language, id),
                   ),
+                if (snapshot.sleepDebtHours >= 4 &&
+                    snapshot.sleepDebtNights >= 2) ...[
+                  const SizedBox(height: 16),
+                  _sleepDebtCallout(snapshot, language, isDark),
+                ],
                 const SizedBox(height: 16),
                 _privacyNote(language, isDark),
                 const SizedBox(height: 18),
                 _aiSection(snapshot, user, isDark),
               ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Sleep debt is the one figure in this screen with a repayment attached
+  /// to it, so it gets its own callout and a way through to the detail
+  /// rather than sitting inside a grid of tiles.
+  Widget _sleepDebtCallout(
+    WeeklyReflectionSnapshot snapshot,
+    String language,
+    bool isDark,
+  ) {
+    final hours = snapshot.sleepDebtHours.toStringAsFixed(1);
+    return Material(
+      key: const ValueKey('weekly-sleep-debt-callout'),
+      color: AppColors.periwinkle.withValues(alpha: isDark ? 0.16 : 0.10),
+      borderRadius: BorderRadius.circular(20),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => const SleepAnalyticsScreen(),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.bedtime_outlined,
+                  color: AppColors.periwinkle, size: 21),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      snapshot.sleepStatusTitle,
+                      style: const TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _copy(
+                        language,
+                        '$hours hours of sleep missed across '
+                            '${snapshot.sleepDebtNights} logged nights. '
+                            '${snapshot.sleepRecoveryAction}',
+                        '$hours oras ng tulog ang kulang sa '
+                            '${snapshot.sleepDebtNights} gabing may tala. '
+                            '${snapshot.sleepRecoveryAction}',
+                      ),
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        height: 1.5,
+                        color: isDark ? Colors.white70 : AppColors.beeDark,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              const Icon(Icons.chevron_right_rounded,
+                  color: AppColors.periwinkle, size: 20),
             ],
           ),
         ),

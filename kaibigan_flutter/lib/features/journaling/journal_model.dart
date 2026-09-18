@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../../core/services/ai_service.dart';
 import '../../core/utils/uuid_helper.dart';
 
 class JournalConversationTurn {
@@ -43,6 +44,10 @@ class JournalEntry {
   final DateTime createdAt;
   final List<JournalConversationTurn> conversationTurns;
 
+  /// The look-back cards produced when the entry was saved. Kept with the
+  /// record so reopening it shows the same cards, not just the conversation.
+  final AIJournalSaveSummary? summary;
+
   JournalEntry({
     required this.id,
     required this.title,
@@ -55,6 +60,7 @@ class JournalEntry {
     this.isFavorite = false,
     required this.createdAt,
     this.conversationTurns = const [],
+    this.summary,
   });
 
   JournalEntry copyWith({
@@ -69,6 +75,7 @@ class JournalEntry {
     bool? isFavorite,
     DateTime? createdAt,
     List<JournalConversationTurn>? conversationTurns,
+    AIJournalSaveSummary? summary,
   }) {
     return JournalEntry(
       id: id ?? this.id,
@@ -82,6 +89,7 @@ class JournalEntry {
       isFavorite: isFavorite ?? this.isFavorite,
       createdAt: createdAt ?? this.createdAt,
       conversationTurns: conversationTurns ?? this.conversationTurns,
+      summary: summary ?? this.summary,
     );
   }
 
@@ -101,6 +109,7 @@ class JournalEntry {
       'reflection_mode': reflectionMode,
       'tags': tags,
       'is_favorite': isFavorite,
+      'summary': summary?.toJson(),
       'created_at': createdAt.toUtc().toIso8601String(),
     };
     if (userId != null && userId.isNotEmpty) {
@@ -135,6 +144,7 @@ class JournalEntry {
           ? DateTime.parse(map['created_at']).toLocal()
           : DateTime.now(),
       conversationTurns: decodedTurns,
+      summary: AIJournalSaveSummary.tryParse(map['summary']),
     );
   }
 

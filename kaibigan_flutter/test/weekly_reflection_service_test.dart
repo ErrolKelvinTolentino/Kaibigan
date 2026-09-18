@@ -378,4 +378,81 @@ that the day doesn't need to be perfect for me to feel satisfaction from it
     expect(local.pattern, contains('low battery'));
     expect(local.experiment, contains('recharge'));
   });
+
+  group('sleep debt reaches the weekly reflection', () {
+    final now = DateTime(2026, 8, 29, 18);
+
+    List<RoutineLog> shortNights(int count) => List.generate(
+          count,
+          (index) => RoutineLog(
+            id: 'sleep-$index',
+            routineId: 'sleep_$index',
+            routineType: RoutineType.morning,
+            sleepFeeling: SleepFeeling.groggy,
+            focusOrHighlight: 'Slept 6 hrs: Needed a bit more sleep',
+            completedAt: now.subtract(Duration(days: index)),
+          ),
+        );
+
+    test('the accumulated shortfall is carried on the snapshot', () {
+      final snapshot = WeeklyReflectionService.build(
+        now: now,
+        routines: shortNights(4),
+      );
+
+      expect(snapshot.sleepDebtHours, closeTo(8, 0.001));
+      expect(snapshot.sleepDebtNights, 4);
+      expect(snapshot.sleepStatusTitle, isNotEmpty);
+      expect(snapshot.sleepRecoveryAction, isNotEmpty);
+    });
+
+    test('the prompt states the debt and forbids treating it as the cause',
+        () {
+      final prompt = WeeklyReflectionService.build(
+        now: now,
+        routines: shortNights(4),
+      ).toCompactPrompt(language: 'english');
+
+      expect(prompt, contains('Sleep debt: 8.0 hours'));
+      expect(prompt, contains('never present it as the cause'));
+    });
+
+    test('nights without exact durations leave the debt unknown, not zero',
+        () {
+      final prompt = WeeklyReflectionService.build(
+        now: now,
+        routines: [
+          RoutineLog(
+            id: 'ranged',
+            routineId: 'sleep_ranged',
+            routineType: RoutineType.morning,
+            sleepFeeling: SleepFeeling.moderate,
+            focusOrHighlight: 'Slept 10+ hrs: Slept okay',
+            completedAt: now,
+          ),
+        ],
+      ).toCompactPrompt(language: 'english');
+
+      expect(prompt, contains('unknown rather than zero'));
+    });
+
+    test('a standing debt becomes the local pattern and a testable step', () {
+      final narrative = WeeklyReflectionService.buildLocalNarrative(
+        WeeklyReflectionService.build(now: now, routines: shortNights(4)),
+        language: 'english',
+      );
+
+      expect(narrative.pattern, contains('8.0 hours of missed sleep'));
+      expect(narrative.experiment, contains('30 minutes earlier'));
+    });
+
+    test('changing only the debt invalidates a saved reflection', () {
+      String signature(int nights) => WeeklyReflectionService.build(
+            now: now,
+            routines: shortNights(nights),
+          ).dataSignature;
+
+      expect(signature(3), isNot(signature(4)));
+    });
+  });
 }

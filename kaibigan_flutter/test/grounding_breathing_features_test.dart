@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kaibigan_flutter/core/services/ambient_sound_service.dart';
 import 'package:kaibigan_flutter/features/routines/routines_provider.dart';
 import 'package:kaibigan_flutter/features/routines/screens/grounding_session_screen.dart';
 import 'package:kaibigan_flutter/features/routines/screens/mindfulness_meditation_screen.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   Widget featureUnderTest(Widget child) {
@@ -174,5 +176,90 @@ void main() {
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
     expect(completed, isTrue);
+  });
+
+  testWidgets(
+      'each breathing option names its method and the need it answers',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.binding.setSurfaceSize(const Size(390, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      featureUnderTest(
+        MindfulnessMeditationScreen(
+          soundPlayer: SilentAmbientSoundController(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    for (final method in const [
+      'Extended exhale',
+      'Physiological sigh',
+      'Box breathing',
+      '4-7-8 breathing',
+      'Coherent breathing',
+    ]) {
+      await tester.scrollUntilVisible(find.text(method), 200);
+      expect(find.text(method), findsOneWidget);
+    }
+
+    // The need, the timing and the rate are all stated up front, so the choice
+    // is not made on a vague mood word.
+    expect(find.text('To quiet a racing mind at bedtime'), findsOneWidget);
+    expect(find.text('4-7-8'), findsOneWidget);
+    // 4-7-8 runs a 19-second cycle, about three breaths a minute.
+    expect(find.text('3/min'), findsOneWidget);
+    expect(
+      find.textContaining('slows your heart rate'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a background sound can be chosen and starts with the session',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.binding.setSurfaceSize(const Size(390, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final ambience = SilentAmbientSoundController();
+
+    await tester.pumpWidget(
+      featureUnderTest(
+        MindfulnessMeditationScreen(soundPlayer: ambience),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('breathing-sound-picker')),
+      200,
+    );
+    expect(find.byKey(const ValueKey('breathing-sound-none')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('breathing-sound-rain')));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('Covers noisy rooms'),
+      findsOneWidget,
+      reason: 'the picker says what each sound is good for',
+    );
+
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('begin-breathing-button')),
+      200,
+    );
+    await tester.tap(find.byKey(const ValueKey('begin-breathing-button')));
+    await tester.pump();
+
+    expect(ambience.requestedSoundIds, contains('rain'));
+    expect(ambience.current.id, 'rain');
+
+    // Muting mid-session is one tap and does not open the picker again.
+    await tester.tap(find.byKey(const ValueKey('breathing-sound-toggle')));
+    await tester.pump();
+    expect(ambience.current.id, 'none');
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
   });
 }

@@ -11,6 +11,7 @@ import 'user_provider.dart';
 import 'profile_screen.dart';
 import 'ai_memory_screen.dart';
 import 'journal_appearance_screen.dart';
+import 'sound_settings_screen.dart';
 import 'privacy_data_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -281,6 +282,28 @@ class SettingsScreen extends StatelessWidget {
                       ),
                     ),
                   ),
+                  const Divider(height: 1, indent: 72),
+                  _settingsTile(
+                    context: context,
+                    isDark: isDark,
+                    leading: const Icon(
+                      Icons.graphic_eq_rounded,
+                      color: AppColors.sageGreen,
+                      size: 22,
+                    ),
+                    iconColor: AppColors.sageGreen,
+                    title: copy('Sound', 'Tunog'),
+                    subtitle: copy(
+                      'Quiet cues for taps and saves',
+                      'Banayad na tunog sa pindot at pag-save',
+                    ),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => SoundSettingsScreen(language: language),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -467,21 +490,42 @@ class SettingsScreen extends StatelessWidget {
                     width: double.infinity,
                     height: 48,
                     child: OutlinedButton.icon(
-                      icon: const Icon(Icons.logout_rounded,
-                          color: Colors.redAccent, size: 18),
-                      label: Text(copy('Log out', 'Mag-log out'),
-                          style: const TextStyle(
-                              color: Colors.redAccent,
-                              fontWeight: FontWeight.w700)),
+                      key: const ValueKey('settings-manage-account'),
+                      icon: const Icon(Icons.manage_accounts_outlined,
+                          size: 18, color: AppColors.sageGreen),
+                      label: Text(
+                        copy('Manage account', 'Pamahalaan ang account'),
+                        style: const TextStyle(
+                          color: AppColors.sageGreen,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(
-                            color: Colors.redAccent, width: 1.2),
+                            color: AppColors.sageGreen, width: 1.2),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16)),
                       ),
-                      onPressed: () async {
-                        await _confirmLogout(context, userProvider);
-                      },
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ProfileScreen(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    copy(
+                      'Your name and sign-out live with your account.',
+                      'Nasa account ang pangalan mo at ang pag-sign out.',
+                    ),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: isDark
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondaryLight,
                     ),
                   ),
                 ],
@@ -1016,41 +1060,5 @@ class SettingsScreen extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  Future<void> _confirmLogout(
-      BuildContext context, UserProvider provider) async {
-    String copy(String english, String filipino) => LanguageHelper.pick(
-          provider.language,
-          english: english,
-          filipino: filipino,
-        );
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
-        title: Text(copy('Log out of Kaibigan?', 'Mag-log out sa Kaibigan?')),
-        content: Text(
-          copy(
-            'Your synced entries will stay safe. You can sign back in anytime.',
-            'Mananatiling ligtas ang mga naka-sync na tala. Maaari kang bumalik anumang oras.',
-          ),
-          textAlign: TextAlign.center,
-        ),
-        actionsAlignment: MainAxisAlignment.spaceBetween,
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(copy('Stay signed in', 'Manatiling naka-sign in')),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(copy('Log out', 'Mag-log out')),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) await provider.logout();
   }
 }

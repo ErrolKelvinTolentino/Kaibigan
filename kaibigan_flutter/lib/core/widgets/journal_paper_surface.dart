@@ -15,6 +15,8 @@ class JournalPaperSurface extends StatelessWidget {
     this.padding = const EdgeInsets.fromLTRB(18, 24, 18, 20),
     this.showBinding = true,
     this.minHeight,
+    this.lineHeight = 28,
+    this.firstLineOffset = 72,
   });
 
   final Widget child;
@@ -23,6 +25,13 @@ class JournalPaperSurface extends StatelessWidget {
   final EdgeInsetsGeometry padding;
   final bool showBinding;
   final double? minHeight;
+
+  /// Distance between ruled lines. Kept in step with the writing text size so
+  /// the words sit on the rules instead of drifting across them.
+  final double lineHeight;
+
+  /// Where the first rule is drawn, measured from the top of the paper.
+  final double firstLineOffset;
 
   @override
   Widget build(BuildContext context) {
@@ -69,6 +78,8 @@ class JournalPaperSurface extends StatelessWidget {
                   style: style,
                   accentColor: accentColor,
                   isDark: isDark,
+                  lineHeight: lineHeight,
+                  firstLineOffset: firstLineOffset,
                 ),
                 child: Padding(padding: padding, child: child),
               ),
@@ -116,11 +127,15 @@ class _JournalPaperPainter extends CustomPainter {
     required this.style,
     required this.accentColor,
     required this.isDark,
+    required this.lineHeight,
+    required this.firstLineOffset,
   });
 
   final JournalPaperStyle style;
   final Color accentColor;
   final bool isDark;
+  final double lineHeight;
+  final double firstLineOffset;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -146,8 +161,7 @@ class _JournalPaperPainter extends CustomPainter {
         canvas.drawRect(Offset.zero & size, glow);
         break;
       case JournalPaperStyle.ruled:
-        const lineHeight = 28.0;
-        for (double y = 72; y < size.height; y += lineHeight) {
+        for (double y = firstLineOffset; y < size.height; y += lineHeight) {
           canvas.drawLine(
               Offset(16, y), Offset(size.width - 16, y), patternPaint);
         }
@@ -207,6 +221,8 @@ class _JournalPaperPainter extends CustomPainter {
   bool shouldRepaint(covariant _JournalPaperPainter oldDelegate) {
     return oldDelegate.style != style ||
         oldDelegate.accentColor != accentColor ||
-        oldDelegate.isDark != isDark;
+        oldDelegate.isDark != isDark ||
+        oldDelegate.lineHeight != lineHeight ||
+        oldDelegate.firstLineOffset != firstLineOffset;
   }
 }

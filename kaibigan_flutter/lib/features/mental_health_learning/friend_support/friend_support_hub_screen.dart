@@ -10,6 +10,8 @@ import '../learning_progress_store.dart';
 import 'friend_support_catalog.dart';
 import 'friend_support_lesson_screen.dart';
 import 'friend_support_model.dart';
+import 'friend_support_practice_model.dart';
+import 'friend_support_practice_screen.dart';
 import 'friend_support_safety_sheet.dart';
 
 class FriendSupportHubScreen extends StatefulWidget {
@@ -63,6 +65,14 @@ class _FriendSupportHubScreenState extends State<FriendSupportHubScreen> {
       ),
     );
     await _loadProgress();
+  }
+
+  Future<void> _openPractice(PracticeScenario scenario) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => FriendSupportPracticeScreen(scenario: scenario),
+      ),
+    );
   }
 
   @override
@@ -312,6 +322,56 @@ class _FriendSupportHubScreenState extends State<FriendSupportHubScreen> {
                   ),
                   const SizedBox(height: 22),
 
+                  // Live practice: reading about a good reply and typing one
+                  // are different skills, so this sits above the lessons.
+                  Text(
+                    LanguageHelper.pick(
+                      language,
+                      english: 'Practise a real conversation',
+                      filipino: 'Magpraktis ng tunay na usapan',
+                    ),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    LanguageHelper.pick(
+                      language,
+                      english:
+                          'Kaibigan plays a friend who is struggling. You reply '
+                          'in the chat box, and every reply comes back with '
+                          'feedback.',
+                      filipino:
+                          'Gaganap ang Kaibigan bilang kaibigang nahihirapan. '
+                          'Sumagot ka sa chat box, at may feedback sa bawat '
+                          'sagot mo.',
+                    ),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: palette.textSecondary,
+                          height: 1.42,
+                        ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    key: const ValueKey('friend-support-practice-rail'),
+                    height: 156,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: PracticeScenarios.all.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 10),
+                      itemBuilder: (context, index) {
+                        final scenario = PracticeScenarios.all[index];
+                        return _PracticeCard(
+                          scenario: scenario,
+                          language: language,
+                          onTap: () => _openPractice(scenario),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
                   // Section Title
                   Text(
                     LanguageHelper.pick(
@@ -462,21 +522,25 @@ class _FriendSupportHubScreenState extends State<FriendSupportHubScreen> {
                                             color: palette.textMuted,
                                           ),
                                           const SizedBox(width: 5),
-                                          Text(
-                                            LanguageHelper.pick(
-                                              language,
-                                              english:
-                                                  '${lesson.questions.length} questions',
-                                              filipino:
-                                                  '${lesson.questions.length} tanong',
+                                          Flexible(
+                                            child: Text(
+                                              LanguageHelper.pick(
+                                                language,
+                                                english:
+                                                    '${lesson.questions.length} questions',
+                                                filipino:
+                                                    '${lesson.questions.length} tanong',
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .labelSmall
+                                                  ?.copyWith(
+                                                    color: palette.textMuted,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
                                             ),
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .labelSmall
-                                                ?.copyWith(
-                                                  color: palette.textMuted,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
                                           ),
                                         ],
                                       ),
@@ -533,6 +597,117 @@ class _FriendSupportHubScreenState extends State<FriendSupportHubScreen> {
                   const SizedBox(height: 20),
                 ],
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One scenario the user can rehearse, shown in the practice rail.
+class _PracticeCard extends StatelessWidget {
+  const _PracticeCard({
+    required this.scenario,
+    required this.language,
+    required this.onTap,
+  });
+
+  final PracticeScenario scenario;
+  final String language;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.kaibigan;
+    final text = Theme.of(context).textTheme;
+    return SizedBox(
+      width: 232,
+      child: Material(
+        color: palette.surfaceElevated,
+        borderRadius: BorderRadius.circular(KaibiganRadius.card),
+        child: InkWell(
+          key: ValueKey('practice-card-${scenario.id}'),
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(KaibiganRadius.card),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(15, 14, 15, 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(KaibiganRadius.card),
+              border: Border.all(color: palette.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: scenario.isSensitive
+                            ? palette.danger.withValues(alpha: 0.13)
+                            : palette.accentSubtle,
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      child: Icon(
+                        scenario.isSensitive
+                            ? Icons.health_and_safety_outlined
+                            : Icons.chat_bubble_outline_rounded,
+                        size: 16,
+                        color: scenario.isSensitive
+                            ? palette.danger
+                            : palette.accentStrong,
+                      ),
+                    ),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Text(
+                        scenario.friendName,
+                        style: text.titleSmall,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: Text(
+                    scenario.situation.resolve(language),
+                    maxLines: 4,
+                    overflow: TextOverflow.ellipsis,
+                    style: text.bodySmall?.copyWith(
+                      color: palette.textSecondary,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        LanguageHelper.pick(
+                          language,
+                          english: 'Start practice',
+                          filipino: 'Simulan',
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: text.labelMedium?.copyWith(
+                          color: palette.accentStrong,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.arrow_forward_rounded,
+                      size: 14,
+                      color: palette.accentStrong,
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ),

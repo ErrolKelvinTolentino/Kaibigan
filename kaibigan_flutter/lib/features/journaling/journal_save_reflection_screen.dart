@@ -7,6 +7,7 @@ import '../../core/utils/language_helper.dart';
 import '../../core/widgets/kaibigan_logo.dart';
 import '../companion/companion_model.dart';
 import 'journal_model.dart';
+import 'journal_reflection_insights.dart';
 
 typedef JournalSummaryLoader = Future<AIJournalSaveSummary> Function();
 
@@ -16,12 +17,33 @@ class JournalSaveReflectionScreen extends StatefulWidget {
   final String companionId;
   final JournalSummaryLoader? summaryLoader;
 
+  /// Called once the look-back is ready, so the caller can keep it with the
+  /// saved record. Omitted in tests, where nothing is persisted.
+  final ValueChanged<AIJournalSaveSummary>? onSummaryReady;
+
+  /// The entries already saved, used to say what keeps coming back. Reading
+  /// one entry alone throws away the thing journalling is best at showing.
+  final List<JournalEntry> previousEntries;
+
+  /// Opens the screen behind a suggested next move. Without it the
+  /// suggestions still appear, as text rather than as buttons.
+  final ValueChanged<JournalFollowUpKind>? onFollowUp;
+
+  /// Aggregate figures from the last seven days, so the recap's suggestion
+  /// can be grounded in the week rather than the entry alone. Empty when the
+  /// person has switched the context off.
+  final String wellbeingContext;
+
   const JournalSaveReflectionScreen({
     super.key,
     required this.entry,
     required this.language,
     required this.companionId,
     this.summaryLoader,
+    this.onSummaryReady,
+    this.previousEntries = const [],
+    this.onFollowUp,
+    this.wellbeingContext = '',
   });
 
   @override
@@ -33,6 +55,7 @@ class _JournalSaveReflectionScreenState
     extends State<JournalSaveReflectionScreen> {
   final PageController _pageController = PageController(viewportFraction: 0.9);
   AIJournalSaveSummary? _summary;
+  JournalContextReading? _context;
   bool _loading = true;
   int _page = 0;
 
@@ -45,6 +68,14 @@ class _JournalSaveReflectionScreenState
   @override
   void initState() {
     super.initState();
+    // The look-back across earlier entries is arithmetic on what is already
+    // saved, so it is ready before the network answers — and stays useful
+    // when the network never does.
+    _context = JournalReflectionInsights.read(
+      entry: widget.entry,
+      previousEntries: widget.previousEntries,
+      language: widget.language,
+    );
     _loadSummary();
   }
 
@@ -55,8 +86,22 @@ class _JournalSaveReflectionScreenState
             userText: widget.entry.content,
             companionId: widget.companionId,
             language: widget.language,
+            wellbeingContext: widget.wellbeingContext,
           ));
-      if (mounted) setState(() => _summary = summary);
+      if (mounted) {
+        setState(() {
+          _summary = summary;
+          // Recomputed with the emotions the companion recognised, which is
+          // what makes a repeated feeling visible across entries.
+          _context = JournalReflectionInsights.read(
+            entry: widget.entry,
+            previousEntries: widget.previousEntries,
+            language: widget.language,
+            summary: summary,
+          );
+        });
+      }
+      widget.onSummaryReady?.call(summary);
     } catch (_) {
       // The intentionally simple fallback below is the complete failure state.
     } finally {
@@ -212,6 +257,36 @@ class _JournalSaveReflectionScreenState
                     : AppColors.textSecondaryLight,
               ),
             ),
+            // A failed model call should not empty the page. Everything
+            // below is computed on the device, so it survives the failure.
+            if (_context?.hasContext ?? false) ...[
+              const SizedBox(height: 22),
+              _FallbackNote(
+                key: const ValueKey('journal-summary-fallback-context'),
+                text: [
+                  if (_context!.recurrenceNote != null)
+                    _context!.recurrenceNote!,
+                  if (_context!.continuityNote != null)
+                    _context!.continuityNote!,
+                ].join('\n\n'),
+                isDark: isDark,
+              ),
+            ],
+            if (_context?.followUps.isNotEmpty ?? false) ...[
+              const SizedBox(height: 14),
+              for (final followUp in _context!.followUps)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _FollowUpTile(
+                    followUp: followUp,
+                    isDark: isDark,
+                    accent: AppColors.sageGreen,
+                    onTap: widget.onFollowUp == null
+                        ? null
+                        : () => widget.onFollowUp!(followUp.kind),
+                  ),
+                ),
+            ],
             const SizedBox(height: 28),
             SizedBox(
               width: double.infinity,
@@ -227,6 +302,7 @@ class _JournalSaveReflectionScreenState
   }
 
   Widget _summaryView(AIJournalSaveSummary summary, bool isDark) {
+    final reading = _context!;
     final slides = <Widget>[
       _reflectionCard(
         eyebrow: _copy('A GENTLE LOOK BACK', 'BANAYAD NA PAGLINGON'),
@@ -246,6 +322,48 @@ class _JournalSaveReflectionScreenState
           isDark: isDark,
         ),
       ),
+      // A question sits between describing and advising: it keeps the entry
+      // open without telling the person what to do with it.
+      if (summary.hasQuestion)
+        _reflectionCard(
+          key: const ValueKey('journal-summary-question-card'),
+          eyebrow: _copy('A QUESTION TO SIT WITH', 'TANONG NA PAG-ISIPAN'),
+          title: _copy('No answer needed today', 'Walang kailangang sagot ngayon'),
+          body: summary.question,
+          emotions: const [],
+          icon: Icons.help_outline_rounded,
+          isDark: isDark,
+          accent: AppColors.skyBlue,
+          footnote: _copy(
+            'Only you can answer this one. It is fine to leave it open.',
+            'Ikaw lang ang makakasagot nito. Ayos lang kung iiwan mong bukas.',
+          ),
+        ),
+      // What this entry shares with the ones before it. Computed on the
+      // device from saved entries, so it is the one card that is never a
+      // guess — and it is the only place a repeated feeling becomes visible.
+      if (reading.hasContext) _contextCard(reading, isDark),
+      // The advice comes last and in a different colour: it is the one card
+      // that asks something of the reader instead of describing what they
+      // already wrote.
+      if (summary.hasAdvice)
+        _reflectionCard(
+          key: const ValueKey('journal-summary-advice-card'),
+          eyebrow: _copy('SOMETHING YOU COULD TRY', 'MAAARI MONG SUBUKAN'),
+          title: _copy('One small thing', 'Isang munting hakbang'),
+          body: summary.advice,
+          emotions: const [],
+          icon: Icons.tips_and_updates_rounded,
+          isDark: isDark,
+          accent: AppColors.sageGreen,
+          footnote: _copy(
+            'An option, not an instruction. Leave it if it does not fit.',
+            'Mungkahi lamang, hindi utos. Iwan ito kung hindi bagay.',
+          ),
+        ),
+      // Reflection that ends at the last word of a card leaves the person
+      // exactly where they started. This one hands them somewhere to go.
+      if (reading.followUps.isNotEmpty) _followUpCard(reading, isDark),
     ];
     final isLast = _page == slides.length - 1;
     return Column(
@@ -333,33 +451,46 @@ class _JournalSaveReflectionScreenState
     );
   }
 
-  Widget _reflectionCard({
-    required String eyebrow,
-    required String title,
-    required String body,
-    required List<String> emotions,
-    required IconData icon,
-    required bool isDark,
-  }) {
+  /// Where this entry sits among the others: how often you have been
+  /// writing, and which feeling keeps returning.
+  Widget _contextCard(JournalContextReading reading, bool isDark) {
+    final lines = [
+      if (reading.recurrenceNote != null) reading.recurrenceNote!,
+      if (reading.continuityNote != null) reading.continuityNote!,
+    ];
+    return _reflectionCard(
+      key: const ValueKey('journal-summary-context-card'),
+      eyebrow: _copy('ACROSS YOUR ENTRIES', 'SA MGA TALA MO'),
+      title: reading.recurringEmotions.isEmpty
+          ? _copy('Your writing rhythm', 'Ang ritmo ng pagsulat mo')
+          : _copy('This keeps coming back', 'Paulit-ulit itong bumabalik'),
+      body: lines.join('\n\n'),
+      emotions: reading.recurringEmotions,
+      icon: Icons.history_rounded,
+      isDark: isDark,
+      accent: AppColors.periwinkle,
+      footnote: _copy(
+        'Counted from your saved entries on this device — no AI involved.',
+        'Bilang mula sa mga naka-save mong tala sa device na ito — walang AI.',
+      ),
+    );
+  }
+
+  /// The suggestions that turn a reflection into something with a next step,
+  /// each carrying the reason it was offered so it can be declined on
+  /// grounds rather than out of vagueness.
+  Widget _followUpCard(JournalContextReading reading, bool isDark) {
+    final accent = AppColors.sageGreen;
     return Container(
+      key: const ValueKey('journal-summary-followup-card'),
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: isDark
-              ? [AppColors.darkHoneySurface, AppColors.darkCard]
-              : [Colors.white, AppColors.honeyLight],
-        ),
+        color: isDark
+            ? Color.alphaBlend(
+                accent.withValues(alpha: 0.16), AppColors.darkCard)
+            : Color.alphaBlend(accent.withValues(alpha: 0.10), Colors.white),
         borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: AppColors.honeyGold.withValues(alpha: 0.22)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.05),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
-          ),
-        ],
+        border: Border.all(color: accent.withValues(alpha: 0.3)),
       ),
       child: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
@@ -369,16 +500,138 @@ class _JournalSaveReflectionScreenState
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppColors.honeyGold.withValues(alpha: 0.13),
+                color: accent.withValues(alpha: isDark ? 0.2 : 0.14),
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: Icon(icon, color: AppColors.honeyAmber, size: 20),
+              child: Icon(Icons.explore_outlined, color: accent, size: 20),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              _copy('WHERE YOU COULD GO NEXT', 'SAAN KA MAAARING TUMULOY'),
+              style: TextStyle(
+                color: accent,
+                fontSize: 10,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.15,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _copy('Carry it forward', 'Dalhin ito pasulong'),
+              style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 12),
+            ...reading.followUps.map(
+              (followUp) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _FollowUpTile(
+                  followUp: followUp,
+                  isDark: isDark,
+                  accent: accent,
+                  onTap: widget.onFollowUp == null
+                      ? null
+                      : () => widget.onFollowUp!(followUp.kind),
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _copy(
+                'None of these are required. Closing this page is a complete ending too.',
+                'Wala sa mga ito ang sapilitan. Kumpletong pagtatapos na rin ang pagsara ng pahinang ito.',
+              ),
+              style: TextStyle(
+                fontSize: 10.5,
+                fontStyle: FontStyle.italic,
+                color: isDark
+                    ? AppColors.textSecondaryDark
+                    : AppColors.textSecondaryLight,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ).animate().fadeIn(duration: 320.ms).slideY(begin: 0.04);
+  }
+
+  Widget _reflectionCard({
+    Key? key,
+    required String eyebrow,
+    required String title,
+    required String body,
+    required List<String> emotions,
+    required IconData icon,
+    required bool isDark,
+    Color accent = AppColors.honeyAmber,
+    String? footnote,
+  }) {
+    return Container(
+      key: key,
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? [
+                  Color.alphaBlend(
+                    accent.withValues(alpha: 0.16),
+                    AppColors.darkCard,
+                  ),
+                  AppColors.darkCard,
+                ]
+              : [
+                  Colors.white,
+                  Color.alphaBlend(
+                    accent.withValues(alpha: 0.13),
+                    Colors.white,
+                  ),
+                ],
+        ),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: accent.withValues(alpha: 0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withValues(alpha: isDark ? 0.16 : 0.13),
+            blurRadius: 26,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              // spaceBetween rather than a Spacer: this card lives inside a
+              // scroll view, and the screen's tests guard against Spacer for
+              // exactly that reason.
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: isDark ? 0.2 : 0.14),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(icon, color: accent, size: 20),
+                ),
+                Container(
+                  width: 34,
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 18),
             Text(
               eyebrow,
-              style: const TextStyle(
-                color: AppColors.honeyAmber,
+              style: TextStyle(
+                color: accent,
                 fontSize: 10,
                 fontWeight: FontWeight.w900,
                 letterSpacing: 1.15,
@@ -423,10 +676,11 @@ class _JournalSaveReflectionScreenState
                 const SizedBox(width: 5),
                 Expanded(
                   child: Text(
-                    _copy(
-                      '✦ AI-generated reflection · for personal insight, not medical advice',
-                      '✦ Binuo ng AI na pagninilay · para sa pansariling pananaw, hindi medikal na payo',
-                    ),
+                    footnote ??
+                        _copy(
+                          '✦ AI-generated reflection · for personal insight, not medical advice',
+                          '✦ Binuo ng AI na pagninilay · para sa pansariling pananaw, hindi medikal na payo',
+                        ),
                     style: TextStyle(
                       fontSize: 10.5,
                       color: isDark
@@ -522,4 +776,128 @@ class _JournalSaveReflectionScreenState
         child: Icon(mascot.materialIcon,
             color: mascot.primaryColor, size: size * 0.43),
       );
+}
+
+/// One suggested next move. Tappable when the caller can route to it, plain
+/// text when it cannot — the reason for the suggestion is the useful part
+/// either way.
+class _FollowUpTile extends StatelessWidget {
+  const _FollowUpTile({
+    required this.followUp,
+    required this.isDark,
+    required this.accent,
+    this.onTap,
+  });
+
+  final JournalFollowUp followUp;
+  final bool isDark;
+  final Color accent;
+  final VoidCallback? onTap;
+
+  IconData get _icon => switch (followUp.kind) {
+        JournalFollowUpKind.breathing => Icons.air_rounded,
+        JournalFollowUpKind.grounding => Icons.spa_outlined,
+        JournalFollowUpKind.gratitude => Icons.local_florist_outlined,
+        JournalFollowUpKind.moodCheckIn =>
+          Icons.sentiment_satisfied_alt_rounded,
+        JournalFollowUpKind.sleepLog => Icons.bedtime_outlined,
+        JournalFollowUpKind.comfortCorner => Icons.favorite_outline_rounded,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final body = Padding(
+      padding: const EdgeInsets.all(13),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: isDark ? 0.22 : 0.15),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: Icon(_icon, size: 18, color: accent),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  followUp.title,
+                  style: const TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  followUp.rationale,
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.45,
+                    color: isDark
+                        ? AppColors.textSecondaryDark
+                        : AppColors.textSecondaryLight,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (onTap != null) ...[
+            const SizedBox(width: 6),
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Icon(Icons.chevron_right_rounded,
+                  size: 20, color: accent.withValues(alpha: 0.8)),
+            ),
+          ],
+        ],
+      ),
+    );
+
+    return Material(
+      color: isDark
+          ? Colors.white.withValues(alpha: 0.05)
+          : Colors.white.withValues(alpha: 0.75),
+      borderRadius: BorderRadius.circular(18),
+      clipBehavior: Clip.antiAlias,
+      child: onTap == null ? body : InkWell(onTap: onTap, child: body),
+    );
+  }
+}
+
+/// The on-device look-back shown when the model could not be reached.
+class _FallbackNote extends StatelessWidget {
+  const _FallbackNote({super.key, required this.text, required this.isDark});
+
+  final String text;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.periwinkle.withValues(alpha: isDark ? 0.16 : 0.10),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: AppColors.periwinkle.withValues(alpha: 0.28),
+        ),
+      ),
+      child: Text(
+        text,
+        textAlign: TextAlign.left,
+        style: TextStyle(
+          fontSize: 13.5,
+          height: 1.55,
+          color:
+              isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+        ),
+      ),
+    );
+  }
 }

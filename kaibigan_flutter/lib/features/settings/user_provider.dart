@@ -33,6 +33,7 @@ class UserProvider extends ChangeNotifier {
   GardenAppearance _gardenAppearance = GardenAppearance.syncWithTime;
   JournalPaperStyle _journalPaperStyle = JournalPaperStyle.ruled;
   JournalAccent _journalAccent = JournalAccent.honey;
+  JournalTextSize _journalTextSize = JournalTextSize.normal;
   AuthMode _authMode = AuthMode.pending;
   String? _userEmail;
   String? _authError;
@@ -52,6 +53,7 @@ class UserProvider extends ChangeNotifier {
   bool get hasSeenKaiValueDemo => _hasSeenKaiValueDemo;
   JournalPaperStyle get journalPaperStyle => _journalPaperStyle;
   JournalAccent get journalAccent => _journalAccent;
+  JournalTextSize get journalTextSize => _journalTextSize;
   AuthMode get authMode => _authMode;
   bool get isAuthenticated => _authMode == AuthMode.authenticated;
   String? get userEmail => _userEmail;
@@ -86,6 +88,9 @@ class UserProvider extends ChangeNotifier {
     );
     _journalAccent = JournalAccentX.fromStorage(
       prefs.getString('journal_accent'),
+    );
+    _journalTextSize = JournalTextSizeX.fromStorage(
+      prefs.getString('journal_text_size'),
     );
     _userEmail = prefs.getString('user_email');
     _hasSeenKaiValueDemo = prefs.getBool('kai_value_demo_seen_v1') ?? false;
@@ -595,13 +600,23 @@ class UserProvider extends ChangeNotifier {
     await prefs.setString('journal_accent', accent.name);
   }
 
+  Future<void> setJournalTextSize(JournalTextSize size) async {
+    if (_journalTextSize == size) return;
+    _journalTextSize = size;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('journal_text_size', size.name);
+  }
+
   Future<void> resetJournalAppearance() async {
     _journalPaperStyle = JournalPaperStyle.ruled;
     _journalAccent = JournalAccent.honey;
+    _journalTextSize = JournalTextSize.normal;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('journal_paper_style');
     await prefs.remove('journal_accent');
+    await prefs.remove('journal_text_size');
   }
 
   Future<bool> updateDisplayName(String name) async {

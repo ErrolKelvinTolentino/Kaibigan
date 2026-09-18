@@ -297,13 +297,21 @@ class _DailyReflectionScreenState extends State<DailyReflectionScreen> {
                   ],
                 ),
               ),
-              TextButton.icon(
-                onPressed: () => _showTemplatePicker(context, isDark),
-                icon: const Icon(Icons.auto_awesome_rounded, size: 16),
-                label: const Text('Templates'),
-                style: TextButton.styleFrom(
-                  foregroundColor: appearanceAccent,
-                  visualDensity: VisualDensity.compact,
+              // The label has to be allowed to shrink: at a large text size on
+              // a narrow phone it used to push this row off the screen.
+              Flexible(
+                child: TextButton.icon(
+                  onPressed: () => _showTemplatePicker(context, isDark),
+                  icon: const Icon(Icons.auto_awesome_rounded, size: 16),
+                  label: const Text(
+                    'Templates',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  style: TextButton.styleFrom(
+                    foregroundColor: appearanceAccent,
+                    visualDensity: VisualDensity.compact,
+                  ),
                 ),
               ),
             ],
@@ -313,6 +321,7 @@ class _DailyReflectionScreenState extends State<DailyReflectionScreen> {
         JournalPaperSurface(
           style: userProvider.journalPaperStyle,
           accentColor: appearanceAccent,
+          lineHeight: userProvider.journalTextSize.lineHeight,
           child: Column(
             children: [
               Text(
@@ -430,6 +439,7 @@ class _DailyReflectionScreenState extends State<DailyReflectionScreen> {
     required TextEditingController controller,
     bool showDivider = true,
   }) {
+    final textSize = context.watch<UserProvider>().journalTextSize;
     return Padding(
       padding: const EdgeInsets.only(top: 16),
       child: Column(
@@ -481,8 +491,9 @@ class _DailyReflectionScreenState extends State<DailyReflectionScreen> {
             maxLines: 5,
             textCapitalization: TextCapitalization.sentences,
             style: GoogleFonts.lora(
-              fontSize: 14,
-              height: 1.7,
+              fontSize: 14 * textSize.scale,
+              // Matches the ruled-line spacing so the words sit on the lines.
+              height: textSize.lineHeight / (14 * textSize.scale),
               color: isDark
                   ? AppColors.textPrimaryDark
                   : AppColors.textPrimaryLight,
@@ -490,8 +501,8 @@ class _DailyReflectionScreenState extends State<DailyReflectionScreen> {
             decoration: InputDecoration(
               hintText: hint,
               hintStyle: GoogleFonts.lora(
-                fontSize: 13,
-                height: 1.7,
+                fontSize: 13 * textSize.scale,
+                height: textSize.lineHeight / (14 * textSize.scale),
                 fontStyle: FontStyle.italic,
                 color: isDark
                     ? AppColors.textSecondaryDark.withValues(alpha: 0.52)

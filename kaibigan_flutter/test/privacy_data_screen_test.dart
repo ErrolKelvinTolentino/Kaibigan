@@ -23,6 +23,21 @@ void main() {
 
     expect(find.text('Saved to your account'), findsOneWidget);
     expect(find.text('When you ask Kai'), findsOneWidget);
+    // The AI card must name the seven-day summary that now travels with a
+    // journal reflection, and the boundary that still holds.
+    expect(
+      find.textContaining('a short summary of your last seven days'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('never receives the text of your other entries'),
+      findsOneWidget,
+    );
+    await tester.scrollUntilVisible(
+      find.text('You can turn that off'),
+      220,
+    );
+    expect(find.text('You can turn that off'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('Kept on this device'),
       220,

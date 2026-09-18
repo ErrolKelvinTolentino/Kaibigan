@@ -30,6 +30,16 @@ void main() {
     );
   }
 
+  /// The garden sways its blooms continuously, so tests that settle the tree
+  /// ask for reduced motion the same way the platform would.
+  Widget stillApp(Widget home) => MaterialApp(
+        home: home,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: true),
+          child: child!,
+        ),
+      );
+
   test('garden backgrounds follow local day and night hours', () {
     expect(
       GardenLayout.periodFor(DateTime(2026, 8, 25, 6)),
@@ -72,12 +82,11 @@ void main() {
     for (final plot in GardenLayout.plots) {
       expect(plot.x, inInclusiveRange(220, 850));
       expect(plot.groundY, inInclusiveRange(740, 1670));
-      expect(plot.perspectiveScale, inInclusiveRange(0.55, 1.05));
     }
-    expect(
-      GardenLayout.plots.first.perspectiveScale,
-      lessThan(GardenLayout.plots[8].perspectiveScale),
-    );
+  });
+
+  test('every plot renders its bloom at the same size', () {
+    expect(GardenLayout.flowerScale, inInclusiveRange(0.55, 1.05));
   });
 
   test('a new garden unlocks only after ten flowers', () {
@@ -186,7 +195,7 @@ void main() {
             create: (_) => _FakeGratitudeProvider(entries),
           ),
         ],
-        child: const MaterialApp(home: GardenScreen()),
+        child: stillApp(const GardenScreen()),
       ),
     );
     await tester.pumpAndSettle();
@@ -209,7 +218,10 @@ void main() {
       find.byType(PolishedFlowerAsset).first,
     );
     expect(firstFlower.glowOpacity, greaterThanOrEqualTo(0.3));
-    expect(firstFlower.width, closeTo(282 * 1.3 * 0.6 * 0.84, 0.01));
+    expect(
+      firstFlower.width,
+      closeTo(282 * 1.3 * GardenLayout.flowerScale * 0.84, 0.01),
+    );
     expect(
       tester.getTopLeft(find.byKey(const ValueKey('garden-navigator'))).dy,
       greaterThan(
@@ -265,8 +277,8 @@ void main() {
             create: (_) => _FakeGratitudeProvider([]),
           ),
         ],
-        child: MaterialApp(
-          home: Builder(
+        child: stillApp(
+          Builder(
             builder: (context) => Scaffold(
               body: TextButton(
                 key: const ValueKey('open-garden'),
@@ -326,7 +338,7 @@ void main() {
             create: (_) => _FakeGratitudeProvider([]),
           ),
         ],
-        child: const MaterialApp(home: GardenScreen()),
+        child: stillApp(const GardenScreen()),
       ),
     );
     await tester.pumpAndSettle();
@@ -365,9 +377,126 @@ void main() {
 
     expect(find.byKey(const ValueKey('gratitude-flower-carousel')),
         findsOneWidget);
-    expect(find.byKey(const ValueKey('flower-seed-anemone')), findsOneWidget);
-    expect(find.text('Anemone'), findsOneWidget);
+    // A quiet cup of tea reads as calm, so the carousel opens on Lavender and
+    // marks it, while every other bloom stays one swipe away.
+    expect(
+      find.byKey(const ValueKey('gratitude-flower-suggestion')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('flower-seed-lavender')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('flower-suggested-chip-lavender')),
+      findsOneWidget,
+    );
+    expect(find.text('Lavender'), findsOneWidget);
     expect(find.byKey(const ValueKey('confirm-plant-flower')), findsOneWidget);
+  });
+
+  testWidgets('planted flowers sway, and hold still under reduced motion',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({'preferred_language': 'english'});
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    Widget garden({required bool reduceMotion}) => MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (_) => UserProvider()),
+            ChangeNotifierProvider<GratitudeProvider>(
+              create: (_) => _FakeGratitudeProvider([entry(0)]),
+            ),
+          ],
+          child: MaterialApp(
+            home: const GardenScreen(),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(disableAnimations: reduceMotion),
+              child: child!,
+            ),
+          ),
+        );
+
+    // Only the stem's rotation puts a value in the matrix's shear slot, so
+    // this reads the sway without depending on the widget nesting order.
+    double angleOfFlower() {
+      final transforms = tester.widgetList<Transform>(
+        find.descendant(
+          of: find.byKey(const ValueKey('garden-flower-flower-0')),
+          matching: find.byType(Transform),
+        ),
+      );
+      return transforms.fold<double>(
+        0,
+        (total, widget) => total + widget.transform.storage[1],
+      );
+    }
+
+    await tester.pumpWidget(garden(reduceMotion: false));
+    // Past the one-shot entrance so only the ambient sway is left moving.
+    await tester.pump(const Duration(seconds: 2));
+    final first = angleOfFlower();
+    await tester.pump(const Duration(milliseconds: 900));
+    final second = angleOfFlower();
+    expect(
+      (second - first).abs(),
+      greaterThan(0.0001),
+      reason: 'the garden should breathe rather than sit perfectly still',
+    );
+
+    await tester.pumpWidget(garden(reduceMotion: true));
+    await tester.pumpAndSettle();
+    final restA = angleOfFlower();
+    await tester.pump(const Duration(seconds: 1));
+    expect(
+      angleOfFlower(),
+      restA,
+      reason: 'reduced motion means no ambient movement at all',
+    );
+  });
+
+  testWidgets('a flower planted on the matched bloom is marked in the garden',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({'preferred_language': 'english'});
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final matched = GratitudeEntry(
+      id: 'matched',
+      content: 'My barkada and I laughed all night.',
+      flowerType: 'chrysanthemum',
+      gardenIndex: 0,
+      plotIndex: 0,
+      createdAt: DateTime(2026, 8, 2),
+    );
+    final unmatched = GratitudeEntry(
+      id: 'unmatched',
+      content: 'My barkada and I laughed all night.',
+      flowerType: 'lavender',
+      gardenIndex: 0,
+      plotIndex: 1,
+      createdAt: DateTime(2026, 8, 3),
+    );
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => UserProvider()),
+          ChangeNotifierProvider<GratitudeProvider>(
+            create: (_) => _FakeGratitudeProvider([matched, unmatched]),
+          ),
+        ],
+        child: stillApp(const GardenScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('garden-flower-matched-matched')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('garden-flower-matched-unmatched')),
+      findsNothing,
+    );
   });
 }
 

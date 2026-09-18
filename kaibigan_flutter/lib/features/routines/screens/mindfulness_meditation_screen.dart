@@ -3,23 +3,33 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_typography.dart';
+import '../../../core/services/ambient_sound_service.dart';
+import '../../../core/services/ui_sound_service.dart';
+import '../../../core/widgets/kaibigan_sound_scope.dart';
 import '../../../core/widgets/cozy_confirm_sheet.dart';
 import '../../../core/widgets/cozy_feature_banner.dart';
 import '../../mood_tracking/mood_model.dart';
 import '../routine_model.dart';
 import '../routines_provider.dart';
 
+const String _soundPreferenceKey = 'breathing_ambient_sound';
+
 class MindfulnessMeditationScreen extends StatefulWidget {
   final VoidCallback? onCompleted;
   final bool routineMode;
+
+  /// Injected in tests so no real audio device is touched.
+  final AmbientSoundController? soundPlayer;
 
   const MindfulnessMeditationScreen({
     super.key,
     this.onCompleted,
     this.routineMode = false,
+    this.soundPlayer,
   });
 
   @override
@@ -30,38 +40,154 @@ class MindfulnessMeditationScreen extends StatefulWidget {
 class _MindfulnessMeditationScreenState
     extends State<MindfulnessMeditationScreen>
     with SingleTickerProviderStateMixin {
+  /// Named techniques rather than moods, so the choice can be made on what is
+  /// actually happening right now. Each card states the method and the need it
+  /// answers; the counts are the ones the technique is normally taught with.
   static const _patterns = [
     _BreathPattern(
-      id: 'calm',
-      title: 'Calm exhale',
-      subtitle: 'A longer exhale for settling down',
+      id: 'extended_exhale',
+      title: 'Extended exhale',
+      need: 'To come down after stress',
+      purpose:
+          'The out-breath is longer than the in-breath, which is the part of '
+          'the cycle that slows your heart rate. The everyday choice when you '
+          'are wound up and want to settle.',
       phases: [
-        _BreathPhase('Inhale', 4, 1.13),
-        _BreathPhase('Exhale', 6, 0.78),
+        _BreathPhase(
+          label: 'Inhale',
+          seconds: 4,
+          scale: 1.13,
+          guidance: 'Breathe in through your nose for 4, into your belly.',
+        ),
+        _BreathPhase(
+          label: 'Exhale',
+          seconds: 6,
+          scale: 0.78,
+          guidance: 'Out through your mouth for 6, slower than you came in.',
+        ),
+      ],
+    ),
+    _BreathPattern(
+      id: 'physiological_sigh',
+      title: 'Physiological sigh',
+      need: 'To drop a spike of panic fast',
+      purpose:
+          'Two stacked inhales reopen collapsed air sacs, then one long exhale '
+          'clears the CO₂ behind that spike. The quickest of these methods — '
+          'often enough after one or two rounds.',
+      phases: [
+        _BreathPhase(
+          label: 'Inhale',
+          seconds: 3,
+          scale: 1.08,
+          guidance: 'A normal breath in through your nose.',
+        ),
+        _BreathPhase(
+          label: 'Top up',
+          seconds: 1,
+          scale: 1.17,
+          guidance: 'A second short sniff on top, without letting any out.',
+        ),
+        _BreathPhase(
+          label: 'Exhale',
+          seconds: 7,
+          scale: 0.76,
+          guidance: 'Long, unforced sigh out through your mouth until empty.',
+        ),
       ],
     ),
     _BreathPattern(
       id: 'box',
       title: 'Box breathing',
-      subtitle: 'Even timing for focus and steadiness',
+      need: 'To stay clear-headed under pressure',
+      purpose:
+          'Four equal counts, taught to people who need to think straight while '
+          'stressed. Use it before an exam, a shift, or a hard conversation — '
+          'it steadies you without making you drowsy.',
       phases: [
-        _BreathPhase('Inhale', 4, 1.13),
-        _BreathPhase('Hold', 4, 1.13),
-        _BreathPhase('Exhale', 4, 0.78),
-        _BreathPhase('Rest', 4, 0.78),
+        _BreathPhase(
+          label: 'Inhale',
+          seconds: 4,
+          scale: 1.13,
+          guidance: 'In through your nose for 4, shoulders still.',
+        ),
+        _BreathPhase(
+          label: 'Hold',
+          seconds: 4,
+          scale: 1.13,
+          guidance: 'Hold with your chest open, not clamped shut.',
+        ),
+        _BreathPhase(
+          label: 'Exhale',
+          seconds: 4,
+          scale: 0.78,
+          guidance: 'Out for 4 at the same steady rate.',
+        ),
+        _BreathPhase(
+          label: 'Rest',
+          seconds: 4,
+          scale: 0.78,
+          guidance: 'Stay empty for 4. Do not rush the next breath in.',
+        ),
       ],
     ),
     _BreathPattern(
-      id: 'reset',
-      title: 'Gentle reset',
-      subtitle: 'A small pause before a slow release',
+      id: 'four_seven_eight',
+      title: '4-7-8 breathing',
+      need: 'To quiet a racing mind at bedtime',
+      purpose:
+          'A long hold and a very long exhale. The count is demanding enough to '
+          'occupy a mind that keeps looping, which is why it is usually taught '
+          'for falling asleep. Four rounds is the standard dose.',
       phases: [
-        _BreathPhase('Inhale', 4, 1.13),
-        _BreathPhase('Hold softly', 2, 1.13),
-        _BreathPhase('Exhale', 6, 0.78),
+        _BreathPhase(
+          label: 'Inhale',
+          seconds: 4,
+          scale: 1.13,
+          guidance: 'Quietly in through your nose for 4.',
+        ),
+        _BreathPhase(
+          label: 'Hold',
+          seconds: 7,
+          scale: 1.13,
+          guidance: 'Hold for 7. Stop early if you feel lightheaded.',
+        ),
+        _BreathPhase(
+          label: 'Exhale',
+          seconds: 8,
+          scale: 0.74,
+          guidance: 'Out through pursed lips for 8, with a soft whoosh.',
+        ),
+      ],
+    ),
+    _BreathPattern(
+      id: 'coherent',
+      title: 'Coherent breathing',
+      need: 'To steady ongoing anxiety',
+      purpose:
+          'Five in, five out — about six breaths a minute, the rate at which '
+          'heart rate and breath fall into step. Nothing dramatic happens fast; '
+          'this one rewards five or ten unbroken minutes.',
+      phases: [
+        _BreathPhase(
+          label: 'Inhale',
+          seconds: 5,
+          scale: 1.11,
+          guidance: 'In for 5, smooth and even the whole way.',
+        ),
+        _BreathPhase(
+          label: 'Exhale',
+          seconds: 5,
+          scale: 0.80,
+          guidance: 'Out for 5, the same speed. No pause at either end.',
+        ),
       ],
     ),
   ];
+
+  /// The routine reset uses the plainest method so the copy on that screen
+  /// stays true to what the session actually does.
+  static const _routinePatternId = 'extended_exhale';
 
   _BreathPattern _pattern = _patterns.first;
   int _durationMinutes = 1;
@@ -74,6 +200,11 @@ class _MindfulnessMeditationScreenState
   bool _recorded = false;
   late final AnimationController _breathController;
   Animation<double> _breathScale = const AlwaysStoppedAnimation(0.78);
+  late final AmbientSoundController _ambience =
+      widget.soundPlayer ?? AmbientSoundPlayer();
+  AmbientSound _sound = AmbientSounds.silence;
+  AmbientSound? _mutedSound;
+  bool _soundLoaded = false;
 
   _BreathPhase get _phase => _pattern.phases[_phaseIndex];
   int get _targetSeconds => widget.routineMode ? 30 : _durationMinutes * 60;
@@ -85,12 +216,63 @@ class _MindfulnessMeditationScreenState
       vsync: this,
       duration: const Duration(seconds: 4),
     );
+    if (widget.routineMode) {
+      _pattern = _patterns.firstWhere(
+        (pattern) => pattern.id == _routinePatternId,
+        orElse: () => _patterns.first,
+      );
+    }
+    _restoreSoundChoice();
+  }
+
+  Future<void> _restoreSoundChoice() async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      final saved = preferences.getString(_soundPreferenceKey);
+      if (!mounted || saved == null) {
+        if (mounted) setState(() => _soundLoaded = true);
+        return;
+      }
+      setState(() {
+        _sound = AmbientSounds.byId(saved);
+        _soundLoaded = true;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _soundLoaded = true);
+    }
+  }
+
+  /// Mid-session the volume button only has to answer "not this, not now", so
+  /// it mutes and restores the last real choice instead of opening the picker.
+  void _toggleSessionSound() {
+    if (!_sound.isSilent) {
+      _mutedSound = _sound;
+      unawaited(_selectSound(AmbientSounds.silence));
+      return;
+    }
+    unawaited(_selectSound(_mutedSound ?? AmbientSounds.all[1]));
+  }
+
+  Future<void> _selectSound(AmbientSound sound) async {
+    setState(() => _sound = sound);
+    unawaited(
+      _view == 1 && _running ? _ambience.play(sound) : _ambience.stop(),
+    );
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setString(_soundPreferenceKey, sound.id);
+    } catch (_) {
+      // A remembered preference is a convenience, not a requirement.
+    }
   }
 
   @override
   void dispose() {
     _timer?.cancel();
     _breathController.dispose();
+    unawaited(
+      widget.soundPlayer == null ? _ambience.dispose() : _ambience.stop(),
+    );
     super.dispose();
   }
 
@@ -119,6 +301,7 @@ class _MindfulnessMeditationScreenState
     });
     _animateCurrentPhase(from: 0.78);
     _startTimer();
+    unawaited(_ambience.play(_sound));
   }
 
   void _startTimer() {
@@ -152,16 +335,22 @@ class _MindfulnessMeditationScreenState
     if (_running) {
       _breathController.forward();
       _startTimer();
+      unawaited(_ambience.resume());
     } else {
       _timer?.cancel();
       _breathController.stop();
+      unawaited(_ambience.pause());
     }
   }
 
   Future<void> _complete() async {
     _timer?.cancel();
     _breathController.stop();
+    // Deliberately not awaited: a device whose audio stack is slow or missing
+    // must not hold up the completion screen.
+    unawaited(_ambience.stop());
     if (mounted) {
+      KaibiganSoundScope.play(context, UiSound.complete);
       setState(() {
         _running = false;
         _totalSecondsLeft = 0;
@@ -196,6 +385,7 @@ class _MindfulnessMeditationScreenState
       if (!leave || !mounted) return;
     }
     _timer?.cancel();
+    unawaited(_ambience.stop());
     if (mounted) Navigator.pop(context);
   }
 
@@ -257,7 +447,8 @@ class _MindfulnessMeditationScreenState
           const CozyFeatureBanner(
             eyebrow: 'Make room for one breath',
             title: 'Breathe with the rhythm',
-            subtitle: 'Choose a pace. The guide will do the counting.',
+            subtitle: 'Pick the method that fits the moment. '
+                'The guide does the counting.',
             assetPath: FeatureIconHelper.breathing,
             placeholderLabel: 'breathing-landscape',
             placeholderIcon: Icons.air_rounded,
@@ -265,11 +456,12 @@ class _MindfulnessMeditationScreenState
             height: 170,
           ),
           const SizedBox(height: 24),
-          Text('Choose your rhythm',
+          Text('Choose a method',
               style: AppTypography.titleMedium(context, isDark: isDark)),
           const SizedBox(height: 7),
           Text(
-            'Each pattern has a different job. Pick the one that matches this moment.',
+            'These are established breathing techniques, each one for a '
+            'different situation. Pick by what you need right now.',
             style: AppTypography.bodyMedium(context, isDark: isDark),
           ),
           const SizedBox(height: 16),
@@ -282,7 +474,23 @@ class _MindfulnessMeditationScreenState
                   onTap: () => setState(() => _pattern = pattern),
                 ),
               )),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
+          Text('BACKGROUND SOUND', style: _sectionLabel(isDark)),
+          const SizedBox(height: 7),
+          Text(
+            'Optional. Sound plays on a loop while you breathe and stops when '
+            'the session ends.',
+            style: AppTypography.bodySmall(context, isDark: isDark),
+          ),
+          const SizedBox(height: 11),
+          _SoundPicker(
+            key: const ValueKey('breathing-sound-picker'),
+            selected: _sound,
+            enabled: _soundLoaded,
+            isDark: isDark,
+            onSelected: _selectSound,
+          ),
+          const SizedBox(height: 20),
           Text('HOW LONG?', style: _sectionLabel(isDark)),
           const SizedBox(height: 10),
           Wrap(
@@ -366,14 +574,16 @@ class _MindfulnessMeditationScreenState
               ),
               const SizedBox(height: 9),
               Text(
-                'Three calm breaths with a longer exhale. The routine will continue automatically when you finish.',
+                'Three rounds of extended exhale: in for 4, out for 6. The '
+                'longer out-breath is what slows your heart rate. The routine '
+                'continues automatically when you finish.',
                 style: AppTypography.bodyMedium(context, isDark: isDark)
                     .copyWith(height: 1.5),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
               Text(
-                '30 SEC  •  CALM EXHALE',
+                '30 SEC  •  EXTENDED EXHALE 4-6',
                 style: _sectionLabel(isDark).copyWith(
                   color: AppColors.honeyAmber,
                 ),
@@ -429,6 +639,30 @@ class _MindfulnessMeditationScreenState
                   icon: Icons.schedule_rounded,
                   label: '$minutes:$seconds',
                   isDark: isDark,
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton.filledTonal(
+                key: const ValueKey('breathing-sound-toggle'),
+                tooltip: _sound.isSilent
+                    ? 'Turn on background sound'
+                    : 'Mute ${_sound.label}',
+                onPressed: _toggleSessionSound,
+                visualDensity: VisualDensity.compact,
+                style: IconButton.styleFrom(
+                  backgroundColor: isDark ? AppColors.darkCard : Colors.white,
+                  side: BorderSide(
+                    color: isDark
+                        ? AppColors.darkCardBorder
+                        : const Color(0xFFE8E0D6),
+                  ),
+                ),
+                icon: Icon(
+                  _sound.isSilent
+                      ? Icons.volume_off_rounded
+                      : Icons.volume_up_rounded,
+                  size: 18,
+                  color: AppColors.honeyAmber,
                 ),
               ),
             ],
@@ -844,36 +1078,77 @@ class _PatternCard extends StatelessWidget {
                       : const Color(0xFFE8E0D6)),
             ),
           ),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                selected ? Icons.radio_button_checked : Icons.radio_button_off,
-                color: selected
-                    ? AppColors.honeyAmber
-                    : AppColors.textSecondaryLight,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    selected
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_off,
+                    color: selected
+                        ? AppColors.honeyAmber
+                        : AppColors.textSecondaryLight,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          pattern.title,
+                          style: AppTypography.titleSmall(
+                            context,
+                            isDark: isDark,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          pattern.need,
+                          style: const TextStyle(
+                            color: AppColors.honeyAmber,
+                            fontSize: 11.5,
+                            height: 1.3,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        pattern.notation,
+                        style: const TextStyle(
+                          color: AppColors.honeyAmber,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${pattern.breathsPerMinute}/min',
+                        style: TextStyle(
+                          color: isDark
+                              ? AppColors.textSecondaryDark
+                              : AppColors.textSecondaryLight,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(pattern.title,
-                        style:
-                            AppTypography.titleSmall(context, isDark: isDark)),
-                    const SizedBox(height: 2),
-                    Text(pattern.subtitle,
-                        style:
-                            AppTypography.bodySmall(context, isDark: isDark)),
-                  ],
-                ),
-              ),
+              const SizedBox(height: 9),
               Text(
-                pattern.notation,
-                style: const TextStyle(
-                  color: AppColors.honeyAmber,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w900,
-                ),
+                pattern.purpose,
+                style: AppTypography.bodySmall(context, isDark: isDark)
+                    .copyWith(height: 1.45),
               ),
             ],
           ),
@@ -922,18 +1197,34 @@ class _SessionPill extends StatelessWidget {
 
 class _BreathPattern {
   final String id;
+
+  /// The name the technique is actually known by.
   final String title;
-  final String subtitle;
+
+  /// The situation this method is for, phrased as a need.
+  final String need;
+
+  /// How the method works and when to reach for it.
+  final String purpose;
+
   final List<_BreathPhase> phases;
 
   const _BreathPattern({
     required this.id,
     required this.title,
-    required this.subtitle,
+    required this.need,
+    required this.purpose,
     required this.phases,
   });
 
-  String get notation => phases.map((phase) => phase.seconds).join('–');
+  String get notation => phases.map((phase) => phase.seconds).join('-');
+
+  int get cycleSeconds =>
+      phases.fold(0, (total, phase) => total + phase.seconds);
+
+  /// Breaths per minute, rounded — the number that tells you how slow a method
+  /// really is.
+  int get breathsPerMinute => (60 / cycleSeconds).round().clamp(1, 60);
 }
 
 class _BreathPhase {
@@ -941,12 +1232,112 @@ class _BreathPhase {
   final int seconds;
   final double scale;
 
-  const _BreathPhase(this.label, this.seconds, this.scale);
+  /// A concrete instruction for this phase of this method.
+  final String guidance;
 
-  String get guidance => switch (label) {
-        'Inhale' => 'Let the breath arrive without pulling.',
-        'Exhale' => 'Release slowly. Let your shoulders follow.',
-        'Hold' || 'Hold softly' => 'Stay easy. There is nothing to force.',
-        _ => 'Rest here before the next breath.',
+  const _BreathPhase({
+    required this.label,
+    required this.seconds,
+    required this.scale,
+    required this.guidance,
+  });
+}
+
+/// Horizontal chooser for the looping background sound. Each option states
+/// what it is good for, so the pick is informed rather than a guess.
+class _SoundPicker extends StatelessWidget {
+  const _SoundPicker({
+    super.key,
+    required this.selected,
+    required this.enabled,
+    required this.isDark,
+    required this.onSelected,
+  });
+
+  final AmbientSound selected;
+  final bool enabled;
+  final bool isDark;
+  final ValueChanged<AmbientSound> onSelected;
+
+  IconData _iconFor(String id) => switch (id) {
+        'rain' => Icons.water_drop_outlined,
+        'ocean' => Icons.waves_rounded,
+        'synth' => Icons.graphic_eq_rounded,
+        'chimes' => Icons.notifications_none_rounded,
+        'hum' => Icons.blur_on_rounded,
+        _ => Icons.volume_off_rounded,
       };
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: AmbientSounds.all.map((sound) {
+            final isSelected = sound.id == selected.id;
+            return ChoiceChip(
+              key: ValueKey('breathing-sound-${sound.id}'),
+              selected: isSelected,
+              showCheckmark: false,
+              avatar: Icon(
+                _iconFor(sound.id),
+                size: 15,
+                color: isSelected
+                    ? Colors.white
+                    : (isDark
+                        ? AppColors.textSecondaryDark
+                        : AppColors.textSecondaryLight),
+              ),
+              label: Text(sound.label),
+              onSelected: enabled ? (_) => onSelected(sound) : null,
+              selectedColor: AppColors.honeyAmber,
+              backgroundColor: isDark ? AppColors.darkCard : Colors.white,
+              labelStyle: TextStyle(
+                color: isSelected
+                    ? Colors.white
+                    : (isDark
+                        ? AppColors.textPrimaryDark
+                        : AppColors.textPrimaryLight),
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+              side: BorderSide(
+                color: isSelected
+                    ? AppColors.honeyAmber
+                    : (isDark
+                        ? AppColors.darkCardBorder
+                        : const Color(0xFFE8E0D6)),
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 9),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          child: Row(
+            key: ValueKey('breathing-sound-description-${selected.id}'),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.info_outline_rounded,
+                size: 14,
+                color: AppColors.honeyAmber,
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  selected.description,
+                  style: AppTypography.bodySmall(context, isDark: isDark)
+                      .copyWith(height: 1.4),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }

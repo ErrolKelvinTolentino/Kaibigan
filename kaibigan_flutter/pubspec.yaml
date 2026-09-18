@@ -26,6 +26,9 @@ dependencies:
   fl_chart: ^0.70.0
   flutter_markdown: ^0.7.5
 
+  # Audio
+  audioplayers: ^6.1.0
+
   # Utilities & Networking
   http: ^1.2.2
   xml: ^7.0.1
@@ -83,3 +86,5 @@ flutter:
     - assets/mood tracker/
     - assets/sleep log/
     - assets/gratitude garden assets/
+    - assets/breathing sounds/
+    - assets/ui sounds/

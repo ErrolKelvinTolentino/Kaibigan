@@ -6,7 +6,7 @@ feature. There are eight active public tables after the September 3 alignment.
 | Table | Purpose / current reader and writer |
 | --- | --- |
 | `profiles` | Account identity and companion/language preferences (`UserProvider`). Its ID belongs to `auth.users`. |
-| `journal_entries` | Journal text, standalone AI replies, favorites/tags and ordered `conversation_turns` JSON (`JournalProvider`). |
+| `journal_entries` | Journal text, standalone AI replies, favorites/tags, ordered `conversation_turns` JSON, and the saved look-back `summary` JSON of recap/moments/advice (`JournalProvider`). |
 | `gratitude_entries` | Gratitude text, flower type and stable 10-slot garden placement (`GratitudeProvider`). No watering/growth mechanic. |
 | `mood_logs` | Mood, stress, energy, sleep quality and anxiety check-ins (`MoodProvider`). |
 | `future_letters` | Letters, delivery dates and opened status (`LettersProvider`). |

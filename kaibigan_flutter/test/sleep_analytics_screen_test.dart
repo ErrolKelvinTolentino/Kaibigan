@@ -155,8 +155,15 @@ void main() {
 
       expect(find.text('Sleep Analytics'), findsOneWidget);
       expect(find.byKey(const ValueKey('wellness-metric-sleep')), findsOneWidget);
-      expect(find.text('4.0 / 5'), findsOneWidget);
+      // The tile leads with the reading and keeps the figure as evidence.
+      expect(find.byKey(const ValueKey('wellness-plain-sleep')), findsOneWidget);
+      expect(find.text('Mostly rested'), findsOneWidget);
+      expect(find.textContaining('4.0/5'), findsOneWidget);
       expect(find.text('7.2 h average · 3 nights with duration'), findsOneWidget);
+      // Sleep debt is named before it has to be worked out from durations.
+      expect(find.byKey(const ValueKey('sleep-status-card')), findsOneWidget);
+      expect(find.byKey(const ValueKey('sleep-status-plan')), findsOneWidget);
+      expect(find.byKey(const ValueKey('sleep-tips-card')), findsOneWidget);
       expect(find.text('Your last 7 nights'), findsOneWidget);
       expect(find.text('Each row shows your latest sleep entry that day. Missing hours stay blank.'), findsOneWidget);
       expect(find.text('3 of 7 logged'), findsOneWidget);
@@ -249,14 +256,38 @@ void main() {
       await tester.tap(find.text('Continue'));
       await tester.pumpAndSettle();
 
-      expect(find.text('About how long did you sleep?'), findsOneWidget);
-      expect(find.text('Fully Energized  •  7 hours'), findsOneWidget);
-
-      await tester.tap(find.text('8 h'));
-      await tester.pump();
-
+      // Clock times lead, and the duration follows from them: 11 PM to 7 AM.
+      expect(find.text('When did you sleep?'), findsOneWidget);
+      expect(find.text('11:00 PM'), findsOneWidget);
+      expect(find.text('7:00 AM'), findsOneWidget);
       expect(find.text('8 hours'), findsOneWidget);
       expect(find.text('Fully Energized  •  8 hours'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('sleep-cycle-readout')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('sleep-cycle-calculator')),
+        findsOneWidget,
+      );
+
+      // The estimate path is still there for nights nobody can reconstruct.
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('sleep-estimate-toggle')),
+      );
+      await tester.tap(find.byKey(const ValueKey('sleep-estimate-toggle')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('sleep-cycle-calculator')),
+        findsNothing,
+      );
+      await tester.ensureVisible(find.text('6 h'));
+      await tester.tap(find.text('6 h'));
+      await tester.pump();
+
+      expect(find.text('6 hours'), findsOneWidget);
+      expect(find.text('Fully Energized  •  6 hours'), findsOneWidget);
     });
   });
 }

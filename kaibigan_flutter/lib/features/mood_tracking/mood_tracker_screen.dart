@@ -8,6 +8,7 @@ import '../../core/widgets/mobile_layout.dart';
 import '../../core/widgets/sync_status_banner.dart';
 import '../settings/user_provider.dart';
 import '../companion/companion_model.dart';
+import '../insights/wellness_analytics.dart';
 import '../insights/wellness_insights_button.dart';
 import 'mood_provider.dart';
 import 'mood_model.dart';
@@ -585,8 +586,69 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
     );
   }
 
+  /// Where today's score sits against the days already logged.
+  ///
+  /// A check-in that vanishes into a list teaches nothing. Comparing it with
+  /// the person's own recent days turns one tap into a small finding, while
+  /// staying inside what they actually recorded.
+  ({String headline, String detail})? _checkInContext(BuildContext context) {
+    final logs = Provider.of<MoodProvider>(context, listen: false).logs;
+    final now = DateTime.now();
+    final today = wellnessDay(now);
+    final windowStart = DateTime(today.year, today.month, today.day - 6);
+
+    final byDay = <DateTime, List<int>>{};
+    for (final log in logs) {
+      if (log.moodScore < 1 || log.moodScore > 5) continue;
+      final day = wellnessDay(log.createdAt);
+      if (day.isBefore(windowStart) || day.isAfter(today)) continue;
+      byDay.putIfAbsent(day, () => []).add(log.moodScore);
+    }
+
+    final earlier = <double>[
+      for (final entry in byDay.entries)
+        if (entry.key != today)
+          entry.value.reduce((a, b) => a + b) / entry.value.length,
+    ];
+    final checkInsThisWeek = byDay.length;
+
+    // Fewer than three prior days cannot say whether today is unusual.
+    if (earlier.length < 3) {
+      return (
+        headline: checkInsThisWeek <= 1
+            ? 'Your first check-in this week'
+            : 'Check-in $checkInsThisWeek of the last 7 days',
+        detail:
+            'After three logged days this screen can tell you whether a day '
+            'like today is usual for you or not.',
+      );
+    }
+
+    final average = earlier.reduce((a, b) => a + b) / earlier.length;
+    final difference = _selectedScore - average;
+    final rounded = average.toStringAsFixed(1);
+    if (difference.abs() < 0.5) {
+      return (
+        headline: 'About an ordinary day for you',
+        detail:
+            'Today sits close to your recent average of $rounded across '
+            '${earlier.length} logged days this week.',
+      );
+    }
+    final higher = difference > 0;
+    return (
+      headline: higher
+          ? 'A lighter day than your recent ones'
+          : 'A heavier day than your recent ones',
+      detail: 'Your recent average is $rounded across ${earlier.length} '
+          'logged days. What was different about today is the part worth '
+          'remembering.',
+    );
+  }
+
   Widget _buildStep4Success(
       BuildContext context, bool isDark, MascotInfo mascot) {
+    final checkIn = _checkInContext(context);
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -681,6 +743,54 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
             ],
           ),
         ).animate().fadeIn(delay: 100.ms),
+        if (checkIn != null) ...[
+          const SizedBox(height: 12),
+          Container(
+            key: const ValueKey('mood-checkin-context'),
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.periwinkle
+                  .withValues(alpha: isDark ? 0.16 : 0.10),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.insights_rounded,
+                        size: 17, color: AppColors.periwinkle),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        checkIn.headline,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: isDark
+                              ? AppColors.textPrimaryDark
+                              : AppColors.textPrimaryLight,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  checkIn.detail,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    height: 1.45,
+                    color: isDark
+                        ? AppColors.textSecondaryDark
+                        : AppColors.textSecondaryLight,
+                  ),
+                ),
+              ],
+            ),
+          ).animate().fadeIn(delay: 130.ms),
+        ],
         const SizedBox(height: 16),
         Container(
           padding: const EdgeInsets.all(16),

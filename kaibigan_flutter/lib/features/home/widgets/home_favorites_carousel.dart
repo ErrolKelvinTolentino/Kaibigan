@@ -52,7 +52,13 @@ class HomeFavoritesCarousel extends StatelessWidget {
 
     return SizedBox(
       key: const ValueKey('home-favorites-carousel'),
-      height: 194,
+      // The card art is a fixed size but the title and subtitle underneath are
+      // not, so the row grows a little with the reader's text size instead of
+      // clipping the second line.
+      height: 194 +
+          (MediaQuery.textScalerOf(context).scale(13.5) - 13.5)
+              .clamp(0.0, 22.0) *
+              2,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),

@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/services/ai_service.dart';
+import '../../core/theme/journal_appearance.dart';
 import '../../core/utils/language_helper.dart';
 import '../../core/widgets/cozy_confirm_sheet.dart';
 import '../companion/companion_model.dart';
@@ -623,9 +625,21 @@ class _JournalEntryBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final turns = entry.turnsForDisplay;
     final mascot = MascotInfo.getById(entry.companionId);
+    final summary = entry.summary;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // The look-back cards lead, because they are what the person was left
+        // holding when they saved. The conversation follows underneath.
+        if (summary != null) ...[
+          _SummaryCardDeck(
+            summary: summary,
+            entry: entry,
+            palette: palette,
+            isDark: isDark,
+          ),
+          const SizedBox(height: 26),
+        ],
         _Eyebrow('JOURNAL CONVERSATION', palette.accent),
         const SizedBox(height: 12),
         for (var index = 0; index < turns.length; index++) ...[
@@ -665,6 +679,263 @@ class _JournalEntryBody extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// The saved AI look-back, rendered as a stack of cards rather than a wall of
+/// text. Each card keeps the shape it had on the summary screen so a record
+/// reads the same way it did the day it was written.
+class _SummaryCardDeck extends StatelessWidget {
+  const _SummaryCardDeck({
+    required this.summary,
+    required this.entry,
+    required this.palette,
+    required this.isDark,
+  });
+
+  final AIJournalSaveSummary summary;
+  final JournalEntry entry;
+  final _DetailPalette palette;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final language = context.watch<UserProvider>().language;
+    final cards = <Widget>[
+      _SummaryCard(
+        key: const ValueKey('record-summary-recap-card'),
+        eyebrow: LanguageHelper.pick(
+          language,
+          english: 'A GENTLE LOOK BACK',
+          filipino: 'BANAYAD NA PAGLINGON',
+        ),
+        title: entry.displayTitle(language),
+        body: summary.summary,
+        emotions: summary.emotions,
+        icon: Icons.auto_awesome_rounded,
+        accent: AppColors.honeyAmber,
+        isDark: isDark,
+      ),
+      ...summary.moments.map(
+        (moment) => _SummaryCard(
+          eyebrow: LanguageHelper.pick(
+            language,
+            english: 'A MOMENT THAT STOOD OUT',
+            filipino: 'SANDALING NAMUKOD-TANGI',
+          ),
+          title: moment.title,
+          body: moment.reflection,
+          emotions: moment.emotions,
+          icon: Icons.bookmark_rounded,
+          accent: AppColors.softRose,
+          isDark: isDark,
+        ),
+      ),
+      if (summary.hasQuestion)
+        _SummaryCard(
+          key: const ValueKey('record-summary-question-card'),
+          eyebrow: LanguageHelper.pick(
+            language,
+            english: 'A QUESTION TO SIT WITH',
+            filipino: 'TANONG NA PAG-ISIPAN',
+          ),
+          title: LanguageHelper.pick(
+            language,
+            english: 'No answer needed today',
+            filipino: 'Walang kailangang sagot ngayon',
+          ),
+          body: summary.question,
+          emotions: const [],
+          icon: Icons.help_outline_rounded,
+          accent: AppColors.skyBlue,
+          isDark: isDark,
+        ),
+      if (summary.hasAdvice)
+        _SummaryCard(
+          key: const ValueKey('record-summary-advice-card'),
+          eyebrow: LanguageHelper.pick(
+            language,
+            english: 'SOMETHING YOU COULD TRY',
+            filipino: 'MAAARI MONG SUBUKAN',
+          ),
+          title: LanguageHelper.pick(
+            language,
+            english: 'One small thing',
+            filipino: 'Isang munting hakbang',
+          ),
+          body: summary.advice,
+          emotions: const [],
+          icon: Icons.tips_and_updates_rounded,
+          accent: AppColors.sageGreen,
+          isDark: isDark,
+        ),
+    ];
+
+    return Column(
+      key: const ValueKey('record-summary-deck'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _Eyebrow(
+          LanguageHelper.pick(
+            language,
+            english: 'WHAT THIS ENTRY LEFT YOU WITH',
+            filipino: 'ANG NAIWAN SA IYO NG TALANG ITO',
+          ),
+          AppColors.honeyAmber,
+        ),
+        const SizedBox(height: 12),
+        for (var index = 0; index < cards.length; index++) ...[
+          cards[index],
+          if (index < cards.length - 1) const SizedBox(height: 12),
+        ],
+      ],
+    );
+  }
+}
+
+class _SummaryCard extends StatelessWidget {
+  const _SummaryCard({
+    super.key,
+    required this.eyebrow,
+    required this.title,
+    required this.body,
+    required this.emotions,
+    required this.icon,
+    required this.accent,
+    required this.isDark,
+  });
+
+  final String eyebrow;
+  final String title;
+  final String body;
+  final List<String> emotions;
+  final IconData icon;
+  final Color accent;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final scale = context.watch<UserProvider>().journalTextSize.scale;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 17),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? [
+                  Color.alphaBlend(
+                    accent.withValues(alpha: 0.17),
+                    AppColors.darkCard,
+                  ),
+                  AppColors.darkCard,
+                ]
+              : [
+                  Colors.white,
+                  Color.alphaBlend(
+                    accent.withValues(alpha: 0.14),
+                    Colors.white,
+                  ),
+                ],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: accent.withValues(alpha: 0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withValues(alpha: isDark ? 0.14 : 0.11),
+            blurRadius: 20,
+            offset: const Offset(0, 7),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: isDark ? 0.22 : 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: accent, size: 17),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  eyebrow,
+                  style: TextStyle(
+                    color: accent,
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.1,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 17.5 * scale,
+              height: 1.25,
+              fontWeight: FontWeight.w900,
+              color: isDark
+                  ? AppColors.textPrimaryDark
+                  : AppColors.textPrimaryLight,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            body,
+            style: TextStyle(
+              fontSize: 14 * scale,
+              height: 1.5,
+              color: isDark
+                  ? AppColors.textPrimaryDark
+                  : AppColors.textPrimaryLight,
+            ),
+          ),
+          if (emotions.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 7,
+              runSpacing: 7,
+              children: emotions
+                  .map(
+                    (emotion) => Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: accent.withValues(alpha: isDark ? 0.2 : 0.13),
+                        borderRadius: BorderRadius.circular(99),
+                        border: Border.all(
+                          color: accent.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Text(
+                        emotion.isEmpty
+                            ? emotion
+                            : emotion[0].toUpperCase() + emotion.substring(1),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: accent,
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -1043,18 +1314,24 @@ class _MarkdownText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Reading follows the same size the entry was written at, so the person's
+    // choice in the editor carries through to every place they read it back.
+    final scale = context.watch<UserProvider>().journalTextSize.scale;
+    final body = TextStyle(
+      color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+      fontSize: size * scale,
+      height: 1.52,
+    );
     return MarkdownBody(
       data: data,
       selectable: true,
       styleSheet: MarkdownStyleSheet(
-        p: TextStyle(
-          color:
-              isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
-          fontSize: size,
-          height: 1.52,
-        ),
+        p: body,
         em: GoogleFonts.lora(fontStyle: FontStyle.italic),
         strong: const TextStyle(fontWeight: FontWeight.w800),
+        listBullet: body,
+        listIndent: 20 * scale,
+        blockSpacing: 10 * scale,
       ),
     );
   }

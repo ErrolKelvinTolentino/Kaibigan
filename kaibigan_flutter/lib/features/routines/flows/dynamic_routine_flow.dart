@@ -7,6 +7,8 @@ import '../../../core/constants/app_typography.dart';
 import '../../../core/utils/language_helper.dart';
 import '../../mood_tracking/mood_model.dart';
 import '../../mood_tracking/mood_tracker_screen.dart';
+import '../../../core/services/ui_sound_service.dart';
+import '../../../core/widgets/kaibigan_sound_scope.dart';
 import '../../settings/user_provider.dart';
 import '../routine_model.dart';
 import '../routines_provider.dart';
@@ -39,6 +41,7 @@ class DynamicRoutineFlow extends StatefulWidget {
 
 class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
   int _currentStepIndex = 0;
+  bool _completionCuePlayed = false;
   bool _isLaunching = false;
   bool _isPaused = false;
   bool _isFinishing = false;
@@ -303,7 +306,26 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
                 style: AppTypography.bodyMedium(context, isDark: isDark),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 26),
+              const SizedBox(height: 22),
+              RoutineProgressStrip(
+                keyPrefix: 'routine-progress',
+                steps: _activeSteps,
+                currentIndex: _currentStepIndex,
+                skippedStepIds: _skippedStepIds,
+                color: widget.config.primaryColor,
+                isDark: isDark,
+                height: 7,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                routineText(
+                  context,
+                  'Step ${_currentStepIndex + 1} of ${_activeSteps.length}',
+                  'Gawain ${_currentStepIndex + 1} sa ${_activeSteps.length}',
+                ),
+                style: AppTypography.bodySmall(context, isDark: isDark),
+              ),
+              const SizedBox(height: 18),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(18),
@@ -372,7 +394,17 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
     );
   }
 
+  /// Plays once as the closing screen appears, not on every rebuild of it.
+  void _playCompletionCue() {
+    if (_completionCuePlayed) return;
+    _completionCuePlayed = true;
+    KaibiganSoundScope.play(context, UiSound.complete);
+  }
+
   Widget _buildCompletion(bool isDark) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _playCompletionCue();
+    });
     final user = context.watch<UserProvider>();
     final language = user.language;
     final completedCount = _activeSteps.length - _skippedStepIds.length;

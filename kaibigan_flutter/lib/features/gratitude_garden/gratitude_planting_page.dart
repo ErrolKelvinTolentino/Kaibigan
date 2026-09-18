@@ -3,7 +3,10 @@ import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/widgets/journal_paper_surface.dart';
+import '../../core/services/ui_sound_service.dart';
+import '../../core/widgets/kaibigan_sound_scope.dart';
 import '../settings/user_provider.dart';
+import 'flower_suggestion.dart';
 import 'gratitude_model.dart';
 import 'gratitude_provider.dart';
 import 'polished_flower_asset.dart';
@@ -57,6 +60,18 @@ class _GratitudePlantingPageState extends State<GratitudePlantingPage> {
   late int _flowerIndex;
   bool _isSaving = false;
   String? _validationMessage;
+  FlowerSuggestion? _suggestion;
+
+  /// Index of the recommended bloom in the carousel, or -1 when the note gave
+  /// no clear signal to read.
+  int get _suggestedIndex {
+    final suggestion = _suggestion;
+    if (suggestion == null || !suggestion.isConfident) return -1;
+    return GratitudeEntry.availableFlowerTypes.indexOf(suggestion.flowerType);
+  }
+
+  bool get _followedSuggestion =>
+      _suggestedIndex != -1 && _flowerIndex == _suggestedIndex;
 
   @override
   void initState() {
@@ -86,10 +101,24 @@ class _GratitudePlantingPageState extends State<GratitudePlantingPage> {
       return;
     }
     FocusScope.of(context).unfocus();
+    final suggestion = FlowerMatcher.suggestFor(_entryController.text);
+    final suggestedIndex = suggestion.isConfident
+        ? GratitudeEntry.availableFlowerTypes.indexOf(suggestion.flowerType)
+        : -1;
     setState(() {
       _validationMessage = null;
+      _suggestion = suggestion;
       _stage = _PlantingStage.flower;
+      // Opening on the recommendation makes it the easy choice while leaving
+      // every other bloom one swipe away.
+      if (suggestedIndex != -1) _flowerIndex = suggestedIndex;
     });
+    if (suggestedIndex != -1) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_flowerController.hasClients) return;
+        _flowerController.jumpToPage(suggestedIndex);
+      });
+    }
   }
 
   Future<void> _plant() async {
@@ -106,6 +135,7 @@ class _GratitudePlantingPageState extends State<GratitudePlantingPage> {
     );
     if (!mounted) return;
     if (entry == null) {
+      KaibiganSoundScope.play(context, UiSound.gentle);
       setState(() {
         _isSaving = false;
         _validationMessage = provider.errorMessage ??
@@ -113,6 +143,7 @@ class _GratitudePlantingPageState extends State<GratitudePlantingPage> {
       });
       return;
     }
+    KaibiganSoundScope.play(context, UiSound.success);
     setState(() {
       _isSaving = false;
       _savedEntry = entry;
@@ -448,6 +479,23 @@ class _GratitudePlantingPageState extends State<GratitudePlantingPage> {
                       height: 1.45,
                     ),
                   ),
+                  if (_suggestion != null && _suggestion!.isConfident) ...[
+                    const SizedBox(height: 14),
+                    _SuggestionBanner(
+                      suggestion: _suggestion!,
+                      following: _followedSuggestion,
+                      isDark: isDark,
+                      primary: primary,
+                      secondary: secondary,
+                      onUseSuggestion: _followedSuggestion
+                          ? null
+                          : () => _flowerController.animateToPage(
+                                _suggestedIndex,
+                                duration: const Duration(milliseconds: 320),
+                                curve: Curves.easeOutCubic,
+                              ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -485,6 +533,7 @@ class _GratitudePlantingPageState extends State<GratitudePlantingPage> {
                       primary: primary,
                       secondary: secondary,
                       surface: surface,
+                      isSuggested: index == _suggestedIndex,
                     ),
                   );
                 },
@@ -669,6 +718,10 @@ class _GratitudePlantingPageState extends State<GratitudePlantingPage> {
         GratitudeEntry.availableFlowerTypes[_flowerIndex];
     final flowerName = GratitudeEntry.getFlowerName(flowerType);
     final meaning = GratitudeEntry.getFlowerMeaning(flowerType);
+    final matchedSuggestion = FlowerMatcher.isSuggestedFor(
+      entry?.content ?? _entryController.text,
+      flowerType,
+    );
 
     return ListView(
       key: const ValueKey('gratitude-bloomed-step'),
@@ -719,6 +772,44 @@ class _GratitudePlantingPageState extends State<GratitudePlantingPage> {
             height: 1.4,
           ),
         ),
+        if (matchedSuggestion) ...[
+          const SizedBox(height: 12),
+          Center(
+            key: const ValueKey('planted-matched-flower-note'),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+              decoration: BoxDecoration(
+                color: AppColors.honeyAmber
+                    .withValues(alpha: isDark ? 0.16 : 0.11),
+                borderRadius: BorderRadius.circular(99),
+                border: Border.all(
+                  color: AppColors.honeyAmber.withValues(alpha: 0.34),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.auto_awesome_rounded,
+                    size: 15,
+                    color: AppColors.honeyAmber,
+                  ),
+                  const SizedBox(width: 7),
+                  Flexible(
+                    child: Text(
+                      'You planted the matched flower',
+                      style: TextStyle(
+                        color: primary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 22),
         Container(
           padding: const EdgeInsets.all(18),
@@ -802,6 +893,7 @@ class _FlowerCarouselCard extends StatelessWidget {
     required this.primary,
     required this.secondary,
     required this.surface,
+    this.isSuggested = false,
   });
 
   final String type;
@@ -809,14 +901,16 @@ class _FlowerCarouselCard extends StatelessWidget {
   final Color primary;
   final Color secondary;
   final Color surface;
+  final bool isSuggested;
 
   @override
   Widget build(BuildContext context) {
     final accent = GratitudeEntry.getFlowerColor(type);
     return Semantics(
       selected: true,
-      label:
-          '${GratitudeEntry.getFlowerName(type)}, ${GratitudeEntry.getFlowerMeaning(type)}',
+      label: '${GratitudeEntry.getFlowerName(type)}, '
+          '${GratitudeEntry.getFlowerMeaning(type)}'
+          '${isSuggested ? ', recommended for your words' : ''}',
       child: Container(
         key: ValueKey('flower-seed-$type'),
         margin: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
@@ -824,11 +918,18 @@ class _FlowerCarouselCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: surface,
           borderRadius: BorderRadius.circular(30),
-          border: Border.all(color: accent.withValues(alpha: 0.6), width: 1.5),
+          border: Border.all(
+            color: isSuggested
+                ? AppColors.honeyAmber
+                : accent.withValues(alpha: 0.6),
+            width: isSuggested ? 2.4 : 1.5,
+          ),
           boxShadow: [
             BoxShadow(
-              color: accent.withValues(alpha: isDark ? 0.1 : 0.14),
-              blurRadius: 22,
+              color: isSuggested
+                  ? AppColors.honeyAmber.withValues(alpha: isDark ? 0.24 : 0.26)
+                  : accent.withValues(alpha: isDark ? 0.1 : 0.14),
+              blurRadius: isSuggested ? 28 : 22,
               offset: const Offset(0, 9),
             ),
           ],
@@ -836,19 +937,32 @@ class _FlowerCarouselCard extends StatelessWidget {
         child: Column(
           children: [
             Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: isDark ? 0.12 : 0.08),
-                  borderRadius: BorderRadius.circular(23),
-                ),
-                child: PolishedFlowerAsset(
-                  flowerType: type,
-                  glowOpacity: 0.18,
-                  glowBlur: 10,
-                  cacheWidth: 480,
-                  cacheHeight: 880,
-                ),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: accent.withValues(alpha: isDark ? 0.12 : 0.08),
+                        borderRadius: BorderRadius.circular(23),
+                      ),
+                      child: PolishedFlowerAsset(
+                        flowerType: type,
+                        glowOpacity: 0.18,
+                        glowBlur: 10,
+                        cacheWidth: 480,
+                        cacheHeight: 880,
+                      ),
+                    ),
+                  ),
+                  if (isSuggested)
+                    Positioned(
+                      top: 10,
+                      left: 10,
+                      child: _SuggestedChip(
+                        key: ValueKey('flower-suggested-chip-$type'),
+                      ),
+                    ),
+                ],
               ),
             ),
             const SizedBox(height: 14),
@@ -875,6 +989,184 @@ class _FlowerCarouselCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The badge that marks the bloom Kaibigan matched to the note.
+class _SuggestedChip extends StatelessWidget {
+  const _SuggestedChip({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppColors.honeyAmber,
+        borderRadius: BorderRadius.circular(99),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.honeyAmber.withValues(alpha: 0.35),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.auto_awesome_rounded,
+            size: 13,
+            color: AppColors.onHoney,
+          ),
+          const SizedBox(width: 5),
+          const Text(
+            'Matched',
+            style: TextStyle(
+              color: AppColors.onHoney,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Explains the recommendation above the carousel and offers a one-tap jump
+/// back to it after the user has swiped away.
+class _SuggestionBanner extends StatelessWidget {
+  const _SuggestionBanner({
+    required this.suggestion,
+    required this.following,
+    required this.isDark,
+    required this.primary,
+    required this.secondary,
+    this.onUseSuggestion,
+  });
+
+  final FlowerSuggestion suggestion;
+  final bool following;
+  final bool isDark;
+  final Color primary;
+  final Color secondary;
+  final VoidCallback? onUseSuggestion;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = GratitudeEntry.getFlowerColor(suggestion.flowerType);
+    return Container(
+      key: const ValueKey('gratitude-flower-suggestion'),
+      padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
+      decoration: BoxDecoration(
+        color: AppColors.honeyAmber.withValues(alpha: isDark ? 0.14 : 0.09),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: AppColors.honeyAmber.withValues(alpha: 0.32),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: isDark ? 0.28 : 0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: PolishedFlowerAsset(
+                  flowerType: suggestion.flowerType,
+                  glowOpacity: 0,
+                  glowBlur: 0,
+                  cacheWidth: 120,
+                  cacheHeight: 220,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'We matched ${suggestion.flowerName} to your words',
+                      style: TextStyle(
+                        color: primary,
+                        fontSize: 13,
+                        height: 1.3,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Your note reads like ${suggestion.theme}.',
+                      style: TextStyle(
+                        color: secondary,
+                        fontSize: 11.5,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 9),
+          Text(
+            suggestion.reason,
+            style: TextStyle(color: secondary, fontSize: 11.5, height: 1.4),
+          ),
+          const SizedBox(height: 9),
+          Row(
+            children: [
+              Icon(
+                following
+                    ? Icons.check_circle_rounded
+                    : Icons.swipe_left_alt_rounded,
+                size: 14,
+                color: AppColors.honeyAmber,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  following
+                      ? 'Planting the match adds a small badge to this flower.'
+                      : 'Any flower is welcome — the match is only a suggestion.',
+                  style: TextStyle(
+                    color: secondary,
+                    fontSize: 11,
+                    height: 1.3,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              if (onUseSuggestion != null)
+                TextButton(
+                  key: const ValueKey('use-suggested-flower'),
+                  onPressed: onUseSuggestion,
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(0, 30),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    foregroundColor: AppColors.honeyAmber,
+                  ),
+                  child: const Text(
+                    'Use it',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }

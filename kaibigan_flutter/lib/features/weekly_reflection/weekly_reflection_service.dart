@@ -4,6 +4,7 @@ import '../insights/wellness_analytics.dart';
 import '../journaling/journal_model.dart';
 import '../mood_tracking/mood_model.dart';
 import '../routines/routine_model.dart';
+import '../routines/sleep_insights.dart';
 import '../../core/services/ai_service.dart';
 
 class WeeklyReflectionNarrative {
@@ -94,6 +95,17 @@ class WeeklyReflectionSnapshot {
   final List<String> gratitudeExcerpts;
   final WellnessSnapshot wellness;
 
+  /// Accumulated sleep shortfall from the logged nights, and the plain-word
+  /// level that goes with it.
+  ///
+  /// Sleep is the one input in this app that is both measurable and known to
+  /// move mood, so a weekly reflection that ignores a standing debt is
+  /// missing the most actionable thing in the data.
+  final double sleepDebtHours;
+  final String sleepStatusTitle;
+  final String sleepRecoveryAction;
+  final int sleepDebtNights;
+
   const WeeklyReflectionSnapshot({
     required this.start,
     required this.endExclusive,
@@ -114,6 +126,10 @@ class WeeklyReflectionSnapshot {
     required this.journalExcerpts,
     required this.gratitudeExcerpts,
     required this.wellness,
+    this.sleepDebtHours = 0,
+    this.sleepStatusTitle = '',
+    this.sleepRecoveryAction = '',
+    this.sleepDebtNights = 0,
   });
 
   bool get hasData => activeDays > 0;
@@ -138,6 +154,8 @@ class WeeklyReflectionSnapshot {
         pairedSleepMoodDays,
         _contentSignature(journalExcerpts),
         _contentSignature(gratitudeExcerpts),
+        _signatureValue(sleepDebtHours),
+        sleepDebtNights,
         _contentSignature([wellness.toPromptContext()]),
       ].join('|');
 
@@ -190,7 +208,17 @@ class WeeklyReflectionSnapshot {
             'suporta lamang ang check-in data.'
         : 'Create a clear, human weekly reflection. Treat the user\'s own '
             'words as the primary context; use check-in data only as support.';
+    final sleepContext = sleepDebtNights == 0
+        ? 'Sleep debt: no nights with exact durations were logged, so the '
+            'shortfall is unknown rather than zero.'
+        : 'Sleep debt: ${sleepDebtHours.toStringAsFixed(1)} hours accumulated '
+            'across $sleepDebtNights logged nights ($sleepStatusTitle). '
+            'Repayment already suggested in the app: $sleepRecoveryAction '
+            'Only raise this if the user\'s own writing or scores give it '
+            'somewhere to connect; never present it as the cause of how they '
+            'felt.';
     return '$intro\n\n<user_writing>\n$journalContext\n\n$gratitudeContext\n</user_writing>\n\n'
+        '$sleepContext\n\n'
         'Check-in context: $counts. Average scores on five-point scales: '
         '$scores. Higher mood, energy and sleep quality mean more positive '
         'ratings; higher stress means more stress. Comparisons: $comparisons. '
@@ -348,6 +376,24 @@ class WeeklyReflectionService {
       experiment = filipino
           ? 'Subukan ang 3-3-3 grounding exercise: Kapag nakaramdam ng kaba, huminto at magbanggit ng 3 bagay na nakikita, 3 tunog na naririnig, at igalaw ang 3 bahagi ng katawan.'
           : 'Practice the 3-3-3 grounding pause: When pressure rises, pause and name 3 things you see, 3 sounds you hear, and move 3 parts of your body to ground yourself.';
+    } else if (snapshot.sleepDebtHours >= 4 && snapshot.sleepDebtNights >= 3) {
+      final debt = snapshot.sleepDebtHours.toStringAsFixed(1);
+      pattern = filipino
+          ? 'Umabot sa $debt oras ang kulang mo sa tulog sa '
+              '${snapshot.sleepDebtNights} gabing may tala. Iyan ang '
+              'pinakanasusukat na bagay sa linggo mo, at ito ang kadalasang '
+              'unang nakakaapekto sa timpla at pokus bago pa ang iba.'
+          : 'Your logged nights add up to $debt hours of missed sleep across '
+              '${snapshot.sleepDebtNights} nights. That is the most '
+              'measurable thing in your week, and short sleep usually reaches '
+              'mood and focus before it reaches anything else.';
+      experiment = filipino
+          ? 'Higa nang 30 minutong mas maaga sa susunod na tatlong gabi — mas '
+              'madali itong kontrolin kaysa sa pagpupuyat ng gising. Pansinin '
+              'kung paano ang hapon mo sa ikatlong araw.'
+          : 'Go to bed 30 minutes earlier for the next three nights — that is '
+              'easier to control than sleeping in. Notice how the third '
+              'afternoon feels compared with this week.';
     } else if (snapshot.sleepMoodDelta != null &&
         snapshot.sleepMoodDelta!.abs() >= 0.5) {
       pattern = filipino
@@ -487,9 +533,15 @@ class WeeklyReflectionService {
           _average(chronologicalMood.sublist(0, midpoint));
     }
 
+    final sleep = SleepInsights.build(routines.toList(), now: now);
+
     return WeeklyReflectionSnapshot(
       start: start,
       endExclusive: end,
+      sleepDebtHours: sleep.debtHours,
+      sleepDebtNights: sleep.debtWindowNights,
+      sleepStatusTitle: sleep.status.title,
+      sleepRecoveryAction: sleep.status.action,
       moodCheckIns: recentMoods.length,
       journalEntries: recentJournals.length,
       gratitudeEntries: recentGratitudes.length,

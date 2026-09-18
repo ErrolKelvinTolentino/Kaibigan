@@ -17,18 +17,48 @@ class MoodProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  double get averageWeeklyScore {
-    if (_logs.isEmpty) return 0;
-    final recent = _logs.take(7);
-    final total = recent.fold(0, (sum, item) => sum + item.moodScore);
-    return total / recent.length;
+  /// The mean mood of the last seven calendar days, or null when nothing
+  /// inside that window was logged.
+  ///
+  /// Each logged day counts once, matching how the insights screens read the
+  /// same data: a day with four check-ins is still one day. Days with
+  /// nothing saved are left out rather than counted as low.
+  double? get weeklyMoodAverage {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final start = DateTime(today.year, today.month, today.day - 6);
+    final byDay = <DateTime, List<int>>{};
+    for (final log in _logs) {
+      if (log.moodScore < 1 || log.moodScore > 5) continue;
+      final local = log.createdAt.toLocal();
+      if (local.isAfter(now)) continue;
+      final day = DateTime(local.year, local.month, local.day);
+      if (day.isBefore(start) || day.isAfter(today)) continue;
+      byDay.putIfAbsent(day, () => []).add(log.moodScore);
+    }
+    if (byDay.isEmpty) return null;
+    final daily = byDay.values
+        .map((scores) => scores.reduce((a, b) => a + b) / scores.length)
+        .toList();
+    return daily.reduce((a, b) => a + b) / daily.length;
   }
+
+  /// Zero when the window holds nothing, for callers that cannot take a
+  /// null. Prefer [weeklyMoodAverage] so an empty week is not drawn as a
+  /// terrible one.
+  double get averageWeeklyScore => weeklyMoodAverage ?? 0;
 
   EmotionalWeatherInfo get currentEmotionalWeather =>
       EmotionalWeatherInfo.getWeatherForScore(averageWeeklyScore);
 
-  MoodProvider() {
-    syncForCurrentUser();
+  /// [initialLogs] and [syncOnCreate] mirror [RoutinesProvider], so a screen
+  /// or a reading can be exercised against known history without a backend.
+  MoodProvider({
+    Iterable<MoodLog> initialLogs = const [],
+    bool syncOnCreate = true,
+  }) {
+    _logs.addAll(initialLogs);
+    if (syncOnCreate) syncForCurrentUser();
   }
 
   void syncForCurrentUser() {

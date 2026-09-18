@@ -31,6 +31,7 @@ class _LearningHubScreenState extends State<LearningHubScreen> {
   LearningCategory? _category;
   LearningPath? _path;
   String? _lastLessonId;
+  Map<String, int> _positions = const {};
   int _lastIdeaIndex = 0;
 
   @override
@@ -42,19 +43,31 @@ class _LearningHubScreenState extends State<LearningHubScreen> {
   Future<void> _loadProgress() async {
     final completed = await _progressStore.loadCompleted();
     final lastLessonId = await _progressStore.loadLastLessonId();
+    // Every started lesson is resumable from its own card, not only the most
+    // recent one. Someone dipping into three topics should not have to
+    // remember where they left each of them.
+    final positions = await _progressStore.loadIdeaPositions({
+      for (final lesson in LearningCatalog.lessons)
+        lesson.id: lesson.sections.length,
+    });
     final resumeLesson = _lessonForId(lastLessonId);
-    final lastIdeaIndex = resumeLesson == null
-        ? 0
-        : await _progressStore.loadIdeaIndex(
-            resumeLesson.id,
-            max: resumeLesson.sections.length,
-          );
     if (!mounted) return;
     setState(() {
       _completed = completed.where((id) => _lessonForId(id) != null).toSet();
       _lastLessonId = lastLessonId;
-      _lastIdeaIndex = lastIdeaIndex;
+      _lastIdeaIndex = resumeLesson == null ? 0 : positions[resumeLesson.id] ?? 0;
+      _positions = positions;
     });
+  }
+
+  /// How far into a lesson someone got, when they are partway through it.
+  /// A finished lesson and an untouched one both return null — neither needs
+  /// a "keep going" label.
+  ({int idea, int total})? _progressFor(LearningLesson lesson) {
+    if (_completed.contains(lesson.id)) return null;
+    final saved = _positions[lesson.id];
+    if (saved == null || saved <= 0) return null;
+    return (idea: saved + 1, total: lesson.sections.length);
   }
 
   LearningLesson? _lessonForId(String? id) {
@@ -300,6 +313,18 @@ class _LearningHubScreenState extends State<LearningHubScreen> {
                       ],
                     ),
                   ),
+                  // Always shown: progress matters most to someone who has
+                  // not started, and that is exactly when there is no lesson
+                  // to resume.
+                  const SizedBox(height: 14),
+                  _CatalogueProgress(
+                    completedCount: _completed.length,
+                    totalCount: LearningCatalog.lessons.length,
+                    inProgressCount: LearningCatalog.lessons
+                        .where((lesson) => _progressFor(lesson) != null)
+                        .length,
+                    language: language,
+                  ),
                   if (resumeLesson != null) ...[
                     const SizedBox(height: 12),
                     _ContinueLearningCard(
@@ -510,6 +535,7 @@ class _LearningHubScreenState extends State<LearningHubScreen> {
                   separatorBuilder: (_, __) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     final card = _LessonCard(
+                      progress: _progressFor(lessons[index]),
                       lesson: lessons[index],
                       language: language,
                       completed: _completed.contains(lessons[index].id),
@@ -580,6 +606,102 @@ class _LearningHubScreenState extends State<LearningHubScreen> {
       'saktan ang sarili',
     ];
     return safetyTerms.any(query.contains);
+  }
+}
+
+/// A single honest line about where someone is in the whole catalogue.
+///
+/// The friend-support hub already shows this; the larger library did not, so
+/// there was no sense of momentum anywhere in Learn.
+class _CatalogueProgress extends StatelessWidget {
+  const _CatalogueProgress({
+    required this.completedCount,
+    required this.totalCount,
+    required this.inProgressCount,
+    required this.language,
+  });
+
+  final int completedCount;
+  final int totalCount;
+  final int inProgressCount;
+  final String language;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.kaibigan;
+    final text = Theme.of(context).textTheme;
+    final fraction = totalCount == 0 ? 0.0 : completedCount / totalCount;
+
+    return Container(
+      key: const ValueKey('learning-catalogue-progress'),
+      padding: const EdgeInsets.fromLTRB(
+        KaibiganSpace.md,
+        KaibiganSpace.sm,
+        KaibiganSpace.md,
+        KaibiganSpace.sm,
+      ),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        borderRadius: BorderRadius.circular(KaibiganRadius.card),
+        border: Border.all(color: palette.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  completedCount == 0
+                      ? LanguageHelper.pick(
+                          language,
+                          english: 'Nothing finished yet — that is fine',
+                          filipino: 'Wala pa munang tapos — ayos lang iyon',
+                        )
+                      : LanguageHelper.pick(
+                          language,
+                          english:
+                              '$completedCount of $totalCount lessons finished',
+                          filipino:
+                              '$completedCount sa $totalCount aralin ang tapos',
+                        ),
+                  style: text.labelLarge?.copyWith(
+                    color: palette.textPrimary,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              if (inProgressCount > 0) ...[
+                const SizedBox(width: KaibiganSpace.xs),
+                Text(
+                  LanguageHelper.pick(
+                    language,
+                    english: '$inProgressCount in progress',
+                    filipino: '$inProgressCount ginagawa',
+                  ),
+                  style: text.labelSmall?.copyWith(color: palette.botanical),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: KaibiganSpace.xs),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(KaibiganRadius.control),
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: fraction),
+              duration: KaibiganMotion.standard,
+              curve: KaibiganMotion.enter,
+              builder: (context, value, _) => LinearProgressIndicator(
+                value: value,
+                minHeight: 6,
+                backgroundColor: palette.surfaceSubtle,
+                valueColor: AlwaysStoppedAnimation<Color>(palette.accent),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -819,12 +941,16 @@ class _LessonCard extends StatelessWidget {
     required this.language,
     required this.completed,
     required this.onTap,
+    this.progress,
   });
 
   final LearningLesson lesson;
   final String language;
   final bool completed;
   final VoidCallback onTap;
+
+  /// Set only while the lesson is partway through.
+  final ({int idea, int total})? progress;
 
   @override
   Widget build(BuildContext context) {
@@ -882,18 +1008,55 @@ class _LessonCard extends StatelessWidget {
                       ?.copyWith(color: palette.textSecondary),
                 ),
                 const SizedBox(height: 9),
-                Text(
-                  LanguageHelper.pick(
-                    language,
-                    english:
-                        '${lesson.readMinutes} min · ${lesson.category.label(language)}',
-                    filipino:
-                        '${lesson.readMinutes} min · ${lesson.category.label(language)}',
-                  ),
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: palette.accent,
-                        fontWeight: FontWeight.w700,
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        LanguageHelper.pick(
+                          language,
+                          english:
+                              '${lesson.readMinutes} min · ${lesson.category.label(language)}',
+                          filipino:
+                              '${lesson.readMinutes} min · ${lesson.category.label(language)}',
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: palette.accent,
+                              fontWeight: FontWeight.w700,
+                            ),
                       ),
+                    ),
+                    if (progress != null) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        key: ValueKey('lesson-resume-${lesson.id}'),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: palette.botanicalSubtle,
+                          borderRadius:
+                              BorderRadius.circular(KaibiganRadius.control),
+                        ),
+                        child: Text(
+                          LanguageHelper.pick(
+                            language,
+                            english:
+                                'Idea ${progress!.idea}/${progress!.total}',
+                            filipino:
+                                'Ideya ${progress!.idea}/${progress!.total}',
+                          ),
+                          style:
+                              Theme.of(context).textTheme.labelSmall?.copyWith(
+                                    color: palette.botanical,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),

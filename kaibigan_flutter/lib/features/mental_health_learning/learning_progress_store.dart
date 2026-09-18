@@ -162,6 +162,38 @@ class LearningProgressStore {
     return saved.clamp(0, max - 1);
   }
 
+  /// Reading position for several lessons at once.
+  ///
+  /// The hub needs this for every card. Asking lesson by lesson would mean one
+  /// round trip each; the synced path already returns every record in a single
+  /// read, so this collapses to one call there and to one preferences load
+  /// locally.
+  Future<Map<String, int>> loadIdeaPositions(
+    Map<String, int> lengthByLessonId,
+  ) async {
+    if (lengthByLessonId.isEmpty) return const {};
+    final positions = <String, int>{};
+    final owner = _sync.userId;
+
+    if (owner != null) {
+      final records = await _sync.load(owner);
+      for (final entry in lengthByLessonId.entries) {
+        final saved = records[entry.key]?['last_idea_index'] as int?;
+        if (saved == null || entry.value <= 0) continue;
+        positions[entry.key] = saved.clamp(0, entry.value - 1);
+      }
+      return positions;
+    }
+
+    final preferences = await SharedPreferences.getInstance();
+    for (final entry in lengthByLessonId.entries) {
+      final saved = preferences.getInt('$_ideaPositionPrefix${entry.key}');
+      if (saved == null || entry.value <= 0) continue;
+      positions[entry.key] = saved.clamp(0, entry.value - 1);
+    }
+    return positions;
+  }
+
   Future<void> rememberPosition(String lessonId, int ideaIndex) async {
     if (ideaIndex < 0) throw ArgumentError.value(ideaIndex, 'ideaIndex');
     final owner = _sync.userId;

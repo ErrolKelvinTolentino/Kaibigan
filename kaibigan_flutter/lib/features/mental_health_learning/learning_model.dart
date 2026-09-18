@@ -245,3 +245,32 @@ class TrustedArticle {
     return TrustedArticle(title: title, summary: summary, url: url);
   }
 }
+
+/// Why a particular lesson is being suggested next. Showing the reason turns
+/// a bare link into a choice the reader can judge.
+enum LearningNextReason { related, path, category, anything }
+
+extension LearningNextReasonCopy on LearningNextReason {
+  String label(String language) => switch (this) {
+        LearningNextReason.related => LanguageHelper.pick(
+            language,
+            english: 'CONTINUES THIS TOPIC',
+            filipino: 'PAGPAPATULOY NG PAKSANG ITO',
+          ),
+        LearningNextReason.path => LanguageHelper.pick(
+            language,
+            english: 'NEXT IN THIS PATH',
+            filipino: 'SUSUNOD SA LANDAS NA ITO',
+          ),
+        LearningNextReason.category => LanguageHelper.pick(
+            language,
+            english: 'MORE ON THIS SUBJECT',
+            filipino: 'IBA PA SA PAKSANG ITO',
+          ),
+        LearningNextReason.anything => LanguageHelper.pick(
+            language,
+            english: 'SOMEWHERE ELSE TO START',
+            filipino: 'IBANG PWEDENG SIMULAN',
+          ),
+      };
+}

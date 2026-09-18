@@ -6,9 +6,15 @@ import '../../../core/theme/kaibigan_tokens.dart';
 import '../../../core/widgets/kaibigan_surface.dart';
 import '../../../core/widgets/mobile_layout.dart';
 import '../../companion/companion_model.dart';
+import '../../../core/services/ui_sound_service.dart';
+import '../../../core/widgets/kaibigan_sound_scope.dart';
 import '../../settings/user_provider.dart';
 import '../routine_model.dart';
 import '../routines_provider.dart';
+import '../sleep_insights.dart';
+import 'sleep_energy_curve.dart';
+import 'sleep_feedback_card.dart';
+import 'sleep_status_card.dart';
 
 class SleepLogFlowScreen extends StatefulWidget {
   const SleepLogFlowScreen({super.key, this.onCompleted});
@@ -32,25 +38,42 @@ class _SleepLogFlowScreenState extends State<SleepLogFlowScreen> {
   int _step = 0;
   SleepFeeling _feeling = SleepFeeling.moderate;
   double _hours = 7;
+  TimeOfDay _bedtime = const TimeOfDay(hour: 23, minute: 0);
+  TimeOfDay _wakeTime = const TimeOfDay(hour: 7, minute: 0);
+
+  /// Clock times are the default because they unlock the cycle calculator and
+  /// the energy forecast. The slider stays for nights nobody can reconstruct.
+  bool _useClockTimes = true;
   bool _isSaving = false;
+  SleepInsights? _insights;
+
+  double get _effectiveHours => _useClockTimes
+      ? SleepCycleCalculator.hoursBetween(_bedtime, _wakeTime)
+      : _hours;
 
   Future<void> _save() async {
     if (_isSaving) return;
     setState(() => _isSaving = true);
     final provider = context.read<RoutinesProvider>();
-    final duration = _storageDuration(_hours);
+    final duration = _storageDuration(_effectiveHours);
     await provider.addLog(
       RoutineLog(
         id: '',
         routineId: 'sleep_${DateTime.now().millisecondsSinceEpoch}',
         routineType: RoutineType.morning,
         sleepFeeling: _feeling,
-        focusOrHighlight: 'Slept $duration hrs: ${_feeling.description}',
+        focusOrHighlight: SleepLogCodec.encode(
+          durationLabel: duration,
+          feeling: _feeling,
+          bedtime: _useClockTimes ? _bedtime : null,
+          wakeTime: _useClockTimes ? _wakeTime : null,
+        ),
         completedAt: DateTime.now(),
       ),
     );
     if (!mounted) return;
     if (provider.errorMessage != null) {
+      KaibiganSoundScope.play(context, UiSound.gentle);
       setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -60,9 +83,14 @@ class _SleepLogFlowScreenState extends State<SleepLogFlowScreen> {
       );
       return;
     }
+    KaibiganSoundScope.play(context, UiSound.success);
     setState(() {
       _isSaving = false;
       _step = 2;
+      _insights = SleepInsights.build(
+        provider.logs,
+        language: context.read<UserProvider>().language,
+      );
     });
   }
 
@@ -136,20 +164,32 @@ class _SleepLogFlowScreenState extends State<SleepLogFlowScreen> {
                   onSelected: (value) => setState(() => _feeling = value),
                   onContinue: () => setState(() => _step = 1),
                 ),
-              1 => _DurationStep(
+              1 => _ScheduleStep(
                   key: const ValueKey('sleep-duration-step'),
-                  hours: _hours,
+                  bedtime: _bedtime,
+                  wakeTime: _wakeTime,
+                  useClockTimes: _useClockTimes,
+                  hours: _effectiveHours,
                   feeling: _feeling,
                   saving: _isSaving,
-                  durationLabel: _durationLabel(_hours),
-                  onChanged: (value) => setState(() => _hours = value),
+                  durationLabel: _durationLabel(_effectiveHours),
+                  onBedtimeChanged: (value) =>
+                      setState(() => _bedtime = value),
+                  onWakeTimeChanged: (value) =>
+                      setState(() => _wakeTime = value),
+                  onUseClockTimesChanged: (value) => setState(() {
+                    if (!value) _hours = _effectiveHours.clamp(0.5, 10);
+                    _useClockTimes = value;
+                  }),
+                  onHoursChanged: (value) => setState(() => _hours = value),
                   onSave: _save,
                 ),
               _ => _SuccessStep(
                   key: const ValueKey('sleep-success-step'),
                   mascot: mascot,
                   feeling: _feeling,
-                  durationLabel: _durationLabel(_hours),
+                  durationLabel: _durationLabel(_effectiveHours),
+                  insights: _insights,
                   onDone: _close,
                 ),
             },
@@ -387,28 +427,59 @@ class _FeelingTile extends StatelessWidget {
   }
 }
 
-class _DurationStep extends StatelessWidget {
-  const _DurationStep({
+class _ScheduleStep extends StatelessWidget {
+  const _ScheduleStep({
     super.key,
+    required this.bedtime,
+    required this.wakeTime,
+    required this.useClockTimes,
     required this.hours,
     required this.feeling,
     required this.saving,
     required this.durationLabel,
-    required this.onChanged,
+    required this.onBedtimeChanged,
+    required this.onWakeTimeChanged,
+    required this.onUseClockTimesChanged,
+    required this.onHoursChanged,
     required this.onSave,
   });
 
+  final TimeOfDay bedtime;
+  final TimeOfDay wakeTime;
+  final bool useClockTimes;
   final double hours;
   final SleepFeeling feeling;
   final bool saving;
   final String durationLabel;
-  final ValueChanged<double> onChanged;
+  final ValueChanged<TimeOfDay> onBedtimeChanged;
+  final ValueChanged<TimeOfDay> onWakeTimeChanged;
+  final ValueChanged<bool> onUseClockTimesChanged;
+  final ValueChanged<double> onHoursChanged;
   final VoidCallback onSave;
+
+  Future<void> _pick(
+    BuildContext context, {
+    required TimeOfDay initial,
+    required ValueChanged<TimeOfDay> onPicked,
+    required String helpText,
+  }) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: initial,
+      helpText: helpText,
+      initialEntryMode: TimePickerEntryMode.dial,
+    );
+    if (picked != null) onPicked(picked);
+  }
 
   @override
   Widget build(BuildContext context) {
     final palette = context.kaibigan;
     final text = Theme.of(context).textTheme;
+    final cycles = SleepCycleCalculator.bedtimesFor(wakeTime);
+    // Whole cycles completed, which is what makes waking easy or groggy.
+    final completedCycles = useClockTimes ? (hours * 60 / 90) : null;
+
     return LayoutBuilder(
       builder: (context, constraints) => SingleChildScrollView(
         padding: MobileLayout.pageInsets(context, top: 10, bottom: 20),
@@ -420,79 +491,234 @@ class _DurationStep extends StatelessWidget {
               const _StepHeader(current: 2),
               const SizedBox(height: 24),
               const _NightHeader(
-                eyebrow: 'SLEEP DURATION',
-                title: 'About how long did you sleep?',
+                eyebrow: 'YOUR NIGHT',
+                title: 'When did you sleep?',
                 subtitle:
-                    'An estimate is completely fine. Choose what feels closest.',
+                    'Clock times let Kaibigan work out your sleep cycles and '
+                    'how today is likely to run. Estimates are fine.',
                 icon: Icons.bedtime_outlined,
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 22),
               KaibiganSurface(
                 tone: KaibiganSurfaceTone.elevated,
-                padding: const EdgeInsets.fromLTRB(18, 22, 18, 18),
+                padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
                 showShadow: true,
                 child: Column(
                   children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _TimeField(
+                            key: const ValueKey('sleep-bedtime-field'),
+                            label: 'WENT TO BED',
+                            icon: Icons.nightlight_round,
+                            time: bedtime,
+                            enabled: useClockTimes && !saving,
+                            onTap: () => _pick(
+                              context,
+                              initial: bedtime,
+                              onPicked: onBedtimeChanged,
+                              helpText: 'What time did you go to bed?',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _TimeField(
+                            key: const ValueKey('sleep-waketime-field'),
+                            label: 'WOKE UP',
+                            icon: Icons.wb_twilight_rounded,
+                            time: wakeTime,
+                            enabled: useClockTimes && !saving,
+                            onTap: () => _pick(
+                              context,
+                              initial: wakeTime,
+                              onPicked: onWakeTimeChanged,
+                              helpText: 'What time did you wake up?',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
                     Container(
+                      width: double.infinity,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 18,
-                        vertical: 9,
+                        vertical: 12,
                       ),
                       decoration: BoxDecoration(
                         color: palette.accentSubtle,
                         borderRadius: BorderRadius.circular(18),
                       ),
-                      child: Text(
-                        durationLabel,
-                        key: const ValueKey('selected-sleep-duration'),
-                        style: text.headlineSmall?.copyWith(
-                          color: palette.accentStrong,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    Semantics(
-                      label: 'Sleep duration, $durationLabel',
-                      slider: true,
-                      child: Slider(
-                        value: hours,
-                        min: .5,
-                        max: 10,
-                        divisions: 19,
-                        label: durationLabel,
-                        onChanged: saving ? null : onChanged,
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      child: Column(
                         children: [
-                          Text('Under 1h', style: text.bodySmall),
-                          Text('10h+', style: text.bodySmall),
+                          Text(
+                            durationLabel,
+                            key: const ValueKey('selected-sleep-duration'),
+                            textAlign: TextAlign.center,
+                            style: text.headlineSmall?.copyWith(
+                              color: palette.accentStrong,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          if (completedCycles != null) ...[
+                            const SizedBox(height: 3),
+                            Text(
+                              '${completedCycles.floor()} full sleep '
+                              '${completedCycles.floor() == 1 ? 'cycle' : 'cycles'}'
+                              '${_partialCycleNote(completedCycles)}',
+                              key: const ValueKey('sleep-cycle-readout'),
+                              textAlign: TextAlign.center,
+                              style: text.bodySmall?.copyWith(
+                                color: palette.textSecondary,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
-                    const SizedBox(height: 18),
-                    Wrap(
-                      alignment: WrapAlignment.center,
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: _SleepLogFlowScreenState.quickDurations
-                          .map(
-                            (value) => ChoiceChip(
-                              label: Text('${value.toInt()} h'),
-                              selected: hours == value,
-                              onSelected:
-                                  saving ? null : (_) => onChanged(value),
-                            ),
-                          )
-                          .toList(),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        key: const ValueKey('sleep-estimate-toggle'),
+                        onPressed: saving
+                            ? null
+                            : () => onUseClockTimesChanged(!useClockTimes),
+                        icon: Icon(
+                          useClockTimes
+                              ? Icons.tune_rounded
+                              : Icons.schedule_rounded,
+                          size: 17,
+                        ),
+                        label: Text(
+                          useClockTimes
+                              ? 'Not sure of the times? Estimate instead'
+                              : 'Use bed and wake times',
+                        ),
+                      ),
                     ),
+                    if (!useClockTimes) ...[
+                      Semantics(
+                        label: 'Sleep duration, $durationLabel',
+                        slider: true,
+                        child: Slider(
+                          value: hours,
+                          min: .5,
+                          max: 10,
+                          divisions: 19,
+                          label: durationLabel,
+                          onChanged: saving ? null : onHoursChanged,
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Under 1h', style: text.bodySmall),
+                            Text('10h+', style: text.bodySmall),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _SleepLogFlowScreenState.quickDurations
+                            .map(
+                              (value) => ChoiceChip(
+                                label: Text('${value.toInt()} h'),
+                                selected: hours == value,
+                                onSelected: saving
+                                    ? null
+                                    : (_) => onHoursChanged(value),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ],
                   ],
                 ),
               ),
+              if (useClockTimes) ...[
+                const SizedBox(height: 16),
+                KaibiganSurface(
+                  key: const ValueKey('sleep-cycle-calculator'),
+                  tone: KaibiganSurfaceTone.botanical,
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 15),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.calculate_outlined,
+                            size: 18,
+                            color: palette.botanical,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'To wake at '
+                              '${SleepInsights.formatTime(wakeTime)}, '
+                              'go to bed by',
+                              style: text.labelLarge,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: cycles
+                            .map(
+                              (option) => Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 11,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: palette.surfaceElevated,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: palette.border),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Text(
+                                      SleepInsights.formatTime(option.bedtime),
+                                      style: text.titleSmall,
+                                    ),
+                                    Text(
+                                      '${option.cycles} cycles · '
+                                      '${SleepInsights.formatHours(option.hours)}',
+                                      style: text.bodySmall?.copyWith(
+                                        color: palette.textMuted,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'Each cycle runs about 90 minutes, plus 15 minutes to '
+                        'fall asleep. Waking between cycles is easier than '
+                        'waking in the middle of one.',
+                        style: text.bodySmall?.copyWith(
+                          color: palette.textSecondary,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
               KaibiganSurface(
                 tone: KaibiganSurfaceTone.botanical,
@@ -558,6 +784,88 @@ class _DurationStep extends StatelessWidget {
       ),
     );
   }
+
+  static String _partialCycleNote(double cycles) {
+    final leftover = ((cycles - cycles.floor()) * 90).round();
+    if (leftover < 8) return '';
+    return ' + ${leftover}m';
+  }
+}
+
+class _TimeField extends StatelessWidget {
+  const _TimeField({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.time,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final TimeOfDay time;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.kaibigan;
+    final text = Theme.of(context).textTheme;
+    return Semantics(
+      button: true,
+      label: '$label, ${SleepInsights.formatTime(time)}',
+      child: Material(
+        color: palette.surfaceElevated,
+        borderRadius: BorderRadius.circular(KaibiganRadius.card),
+        child: InkWell(
+          onTap: enabled ? onTap : null,
+          borderRadius: BorderRadius.circular(KaibiganRadius.card),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(13, 11, 13, 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(KaibiganRadius.card),
+              border: Border.all(color: palette.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      icon,
+                      size: 14,
+                      color: enabled ? palette.accent : palette.textMuted,
+                    ),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: text.labelSmall?.copyWith(
+                          color: palette.textMuted,
+                          letterSpacing: 0.7,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  SleepInsights.formatTime(time),
+                  style: text.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: enabled ? palette.textPrimary : palette.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _SuccessStep extends StatelessWidget {
@@ -566,18 +874,21 @@ class _SuccessStep extends StatelessWidget {
     required this.mascot,
     required this.feeling,
     required this.durationLabel,
+    required this.insights,
     required this.onDone,
   });
 
   final MascotInfo mascot;
   final SleepFeeling feeling;
   final String durationLabel;
+  final SleepInsights? insights;
   final VoidCallback onDone;
 
   @override
   Widget build(BuildContext context) {
     final palette = context.kaibigan;
     final text = Theme.of(context).textTheme;
+    final language = context.watch<UserProvider>().language;
     return LayoutBuilder(
       builder: (context, constraints) => SingleChildScrollView(
         padding: MobileLayout.pageInsets(context, top: 16, bottom: 24),
@@ -587,9 +898,9 @@ class _SuccessStep extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 190,
-                height: 190,
-                padding: const EdgeInsets.all(16),
+                width: 150,
+                height: 150,
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: palette.accentSubtle,
                   shape: BoxShape.circle,
@@ -611,18 +922,25 @@ class _SuccessStep extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
               Text(
                 'Sleep recorded',
-                style: text.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+                style:
+                    text.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 7),
               Text(
-                'One gentle check-in at a time builds a clearer picture of your rest.',
+                insights?.headline ??
+                    'One gentle check-in at a time builds a clearer picture '
+                        'of your rest.',
+                key: const ValueKey('sleep-headline'),
                 textAlign: TextAlign.center,
-                style: text.bodyMedium?.copyWith(color: palette.textSecondary),
+                style: text.bodyMedium?.copyWith(
+                  color: palette.textSecondary,
+                  height: 1.45,
+                ),
               ),
-              const SizedBox(height: 22),
+              const SizedBox(height: 20),
               KaibiganSurface(
                 tone: KaibiganSurfaceTone.elevated,
                 padding: const EdgeInsets.all(18),
@@ -634,6 +952,18 @@ class _SuccessStep extends StatelessWidget {
                   ],
                 ),
               ),
+              if (insights != null) ...[
+                const SizedBox(height: 12),
+                SleepStatusCard(insights: insights!, language: language),
+                const SizedBox(height: 12),
+                SleepMetricsRow(insights: insights!, language: language),
+                const SizedBox(height: 12),
+                SleepTipsCard(insights: insights!, language: language),
+                const SizedBox(height: 12),
+                SleepEnergyCurveCard(insights: insights!),
+                const SizedBox(height: 12),
+                SleepFeedbackCard(insights: insights!, language: language),
+              ],
               const SizedBox(height: 14),
               KaibiganSurface(
                 tone: KaibiganSurfaceTone.botanical,

@@ -22,6 +22,8 @@ CREATE TABLE public.journal_entries (
     ai_response TEXT,
     conversation_turns JSONB NOT NULL DEFAULT '[]'::JSONB
         CHECK (jsonb_typeof(conversation_turns) = 'array'),
+    summary JSONB
+        CHECK (summary IS NULL OR jsonb_typeof(summary) = 'object'),
     reflection_mode TEXT NOT NULL DEFAULT 'auto',
     companion_id TEXT NOT NULL DEFAULT 'kai',
     mood TEXT NOT NULL DEFAULT '',

@@ -12,6 +12,7 @@ import '../../core/theme/journal_appearance.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../core/utils/language_helper.dart';
 import '../../core/services/pdf_service.dart';
+import '../../core/services/ai_memory_service.dart';
 import '../../core/services/ai_service.dart';
 import '../../core/services/ai_response_feedback_service.dart';
 import '../../core/services/journal_draft_service.dart';
@@ -19,9 +20,21 @@ import '../../core/services/supabase_service.dart';
 import '../companion/companion_model.dart';
 import '../settings/user_provider.dart';
 import '../comfort_corner/akbay_safety_sheet.dart';
+import '../comfort_corner/comfort_corner_screen.dart';
+import '../insights/wellbeing_context.dart';
+import '../mood_tracking/mood_provider.dart';
+import '../routines/routines_provider.dart';
+import '../mood_tracking/mood_tracker_screen.dart';
+import '../routines/screens/gratitude_planting_screen.dart';
+import '../routines/screens/grounding_session_screen.dart';
+import '../routines/screens/mindfulness_meditation_screen.dart';
+import '../routines/screens/sleep_log_flow_screen.dart';
 import '../../core/widgets/cozy_confirm_sheet.dart';
+import '../../core/widgets/journal_format_toolbar.dart';
 import '../../core/widgets/journal_paper_surface.dart';
 import 'journal_provider.dart';
+import 'journal_reflection_insights.dart';
+import 'journal_reply_starters.dart';
 import 'journal_model.dart';
 import 'journal_save_reflection_screen.dart';
 
@@ -332,6 +345,21 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
     return history;
   }
 
+  /// The companion's view of how this week has actually gone.
+  ///
+  /// Aggregates only — counts, averages and the sleep shortfall the insights
+  /// screens already display. No other entry's text is included, and the
+  /// person can switch this off in AI memory & privacy.
+  WellbeingContext _wellbeingContext() {
+    if (!WellbeingContextService.isEnabled) return WellbeingContext.none;
+    return WellbeingContextService.build(
+      now: DateTime.now(),
+      moods: context.read<MoodProvider?>()?.logs ?? const [],
+      routines: context.read<RoutinesProvider?>()?.logs ?? const [],
+      language: context.read<UserProvider>().language,
+    );
+  }
+
   Future<void> _triggerAiReflection() async {
     final lastTurn = _turns.last;
     final textToReflectOn = lastTurn.userController.text.trim();
@@ -386,6 +414,8 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     final companionId = _activeCompanionId ?? userProvider.selectedCompanion;
     final language = userProvider.language;
+    // Read before the await: the widget may be gone by the time it returns.
+    final wellbeing = _wellbeingContext();
 
     try {
       final aiReply = await AIService.generateCompanionReply(
@@ -395,9 +425,22 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
         mode: CompanionMode.auto,
         conversationHistory: _conversationHistoryBeforeTurn(_turns.length - 1),
         cancellationToken: cancellationToken,
+        wellbeingContext: wellbeing.promptBlock,
       );
 
       if (mounted && !cancellationToken.isCancelled) {
+        // The companion has already read this entry carefully; reusing what it
+        // recognised is more accurate than re-deriving themes from keywords.
+        if (!aiReply.isOffline) {
+          unawaited(
+            AIMemoryService.noteCompanionObservation(
+              detectedEmotions: aiReply.detectedEmotions,
+              standoutMoments: aiReply.journalMoments
+                  .map((moment) => moment.title)
+                  .toList(growable: false),
+            ),
+          );
+        }
         setState(() {
           lastTurn.aiResponse = aiReply.text;
           lastTurn.suggestedReplies = aiReply.suggestedReplies;
@@ -641,6 +684,7 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
 
     final user = context.read<UserProvider>();
     final companionId = turn.companionId ?? user.selectedCompanion;
+    final wellbeing = _wellbeingContext();
     try {
       final reply = await AIService.generateCompanionReply(
         userText: text,
@@ -651,6 +695,7 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
         cancellationToken: cancellationToken,
         adjustment: _adjustmentFor(reason),
         previousResponse: turn.aiResponse,
+        wellbeingContext: wellbeing.promptBlock,
       );
       if (!mounted || cancellationToken.isCancelled) return;
       setState(() {
@@ -700,34 +745,26 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
         reply.contains('Hotline') ||
         reply.contains('Crisis');
 
+    // A translucent wash rather than a solid card: the reply belongs to the
+    // page, so the ruled paper stays visible underneath it. A solid white fill
+    // here read as a box dropped into the middle of the notebook.
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 12),
       decoration: BoxDecoration(
-        color: isDark
-            ? Color.alphaBlend(
-                mascot.primaryColor.withValues(alpha: 0.12),
-                AppColors.darkCard,
-              )
-            : Colors.white,
+        color: mascot.primaryColor.withValues(alpha: isDark ? 0.15 : 0.07),
         borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(8),
-          topRight: Radius.circular(26),
-          bottomLeft: Radius.circular(26),
-          bottomRight: Radius.circular(26),
+          topLeft: Radius.circular(6),
+          topRight: Radius.circular(22),
+          bottomLeft: Radius.circular(22),
+          bottomRight: Radius.circular(22),
         ),
         border: Border.all(
-          color: mascot.primaryColor.withValues(alpha: isDark ? 0.28 : 0.16),
+          color: mascot.primaryColor.withValues(alpha: isDark ? 0.34 : 0.24),
+          width: 1.2,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.16 : 0.045),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
-          ),
-        ],
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 14, 14, 18),
+        padding: const EdgeInsets.fromLTRB(17, 13, 14, 17),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1108,10 +1145,47 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                 ),
               ],
             ),
+            if (_startersToShow(turn, turnIndex).isNotEmpty) ...[
+              const SizedBox(height: 14),
+              JournalReplyStarters(
+                starters: _startersToShow(turn, turnIndex),
+                isDark: isDark,
+                label: _t(
+                  language,
+                  english: 'IF IT HELPS TO START',
+                  filipino: 'KUNG NAHIHIRAPANG MAGSIMULA',
+                ),
+                onSelected: _useStarter,
+              ),
+            ],
           ],
         ),
       ),
     ).animate().fadeIn(duration: 350.ms).slideY(begin: 0.05, end: 0);
+  }
+
+  List<String> _startersToShow(JournalTurn turn, int turnIndex) {
+    return JournalReplyStarters.visibleStarters(
+      turn.suggestedReplies,
+      // The answering turn is the last one with a reply; a blank turn is
+      // always appended after it.
+      isAnsweringTurn: turnIndex == _turns.length - 2,
+      activeTurnIsEmpty: _turns.last.userController.text.trim().isEmpty,
+      isBusy: _isGeneratingAi || _isSaving,
+    );
+  }
+
+  void _useStarter(String starter) {
+    final active = _turns.last.userController;
+    final existing = active.text.trim();
+    final text = existing.isEmpty ? starter : '$existing $starter';
+    active.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+    setState(() {});
+    _activeFocusNode.requestFocus();
+    _scheduleDraftSave();
   }
 
   Widget _buildThinkingIndicator(MascotInfo mascot, bool isDark) {
@@ -1255,6 +1329,11 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
     final activeId = _activeCompanionId ?? userProvider.selectedCompanion;
     final mascot = MascotInfo.getById(activeId);
     final journalAccent = userProvider.journalAccent.color;
+    final textSize = userProvider.journalTextSize;
+    // The writing font and the ruled lines are derived from one number so the
+    // words sit on the rules instead of drifting between them.
+    final bodyFontSize = 16.5 * textSize.scale;
+    final ruleHeight = textSize.lineHeight;
     final journalPaperMinHeight = (MediaQuery.sizeOf(context).height * 0.58)
         .clamp(420.0, 620.0)
         .toDouble();
@@ -1534,6 +1613,10 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                       style: userProvider.journalPaperStyle,
                       accentColor: journalAccent,
                       minHeight: journalPaperMinHeight,
+                      lineHeight: ruleHeight,
+                      // Clears the title field so the first rule lands under
+                      // the first line of the entry itself.
+                      firstLineOffset: 26 + 34 * textSize.scale + ruleHeight,
                       padding: const EdgeInsets.fromLTRB(20, 26, 20, 20),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1606,8 +1689,8 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                                     keyboardType: TextInputType.multiline,
                                     onChanged: (_) => setState(() {}),
                                     style: GoogleFonts.lora(
-                                      fontSize: 16.5,
-                                      height: 1.7,
+                                      fontSize: bodyFontSize,
+                                      height: ruleHeight / bodyFontSize,
                                       color: isDark
                                           ? AppColors.textPrimaryDark
                                           : AppColors.textPrimaryLight,
@@ -1628,8 +1711,8 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                                                   'Magpatuloy kasama si ${turnMascot.name}…',
                                             ),
                                       hintStyle: GoogleFonts.lora(
-                                        fontSize: 15.5,
-                                        height: 1.65,
+                                        fontSize: bodyFontSize - 1,
+                                        height: ruleHeight / bodyFontSize,
                                         color: isDark
                                             ? Colors.white24
                                             : Colors.black26,
@@ -1669,6 +1752,12 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                   ],
                 ),
               ),
+            ),
+            JournalFormatToolbar(
+              controller: _turns.isEmpty ? null : _turns.last.userController,
+              textSize: textSize,
+              enabled: !_isGeneratingAi && !_isSaving,
+              onTextSizeChanged: userProvider.setJournalTextSize,
             ),
             Container(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
@@ -1877,17 +1966,51 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
     if (userId != null) await JournalDraftService.clear(userId);
     if (!mounted) return;
     if (showReflection && content.isNotEmpty && contentChanged) {
+      // Snapshotted before navigation so the look-back compares this entry
+      // with the ones that existed before it.
+      final earlier = provider.allEntries
+          .where((item) => item.id != savedEntry!.id)
+          .toList(growable: false);
+      final wellbeing = _wellbeingContext();
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => JournalSaveReflectionScreen(
             entry: savedEntry!,
             language: userProvider.language,
             companionId: activeCompanion,
+            previousEntries: earlier,
+            onFollowUp: _openFollowUp,
+            wellbeingContext: wellbeing.promptBlock,
+            // Kept with the record so reopening it later shows the same cards
+            // rather than the conversation alone.
+            onSummaryReady: (summary) => provider.updateJournalEntry(
+              savedEntry!.copyWith(summary: summary),
+            ),
           ),
         ),
       );
       return;
     }
     Navigator.pop(context);
+  }
+
+  /// Opens the practice a reflection card suggested.
+  ///
+  /// Pushed on top of the reflection page rather than replacing it, so
+  /// declining the practice returns the person to their own words.
+  void _openFollowUp(JournalFollowUpKind kind) {
+    final navigator = Navigator.of(context);
+    navigator.push(
+      MaterialPageRoute<void>(
+        builder: (_) => switch (kind) {
+          JournalFollowUpKind.breathing => const MindfulnessMeditationScreen(),
+          JournalFollowUpKind.grounding => const GroundingSessionScreen(),
+          JournalFollowUpKind.gratitude => const GratitudePlantingScreen(),
+          JournalFollowUpKind.moodCheckIn => const MoodTrackerScreen(),
+          JournalFollowUpKind.sleepLog => const SleepLogFlowScreen(),
+          JournalFollowUpKind.comfortCorner => const ComfortCornerScreen(),
+        },
+      ),
+    );
   }
 }

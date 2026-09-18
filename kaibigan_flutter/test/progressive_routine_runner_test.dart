@@ -14,6 +14,7 @@ import 'package:kaibigan_flutter/features/mood_tracking/mood_tracker_screen.dart
 import 'package:kaibigan_flutter/features/routines/flows/progressive_routine_runner.dart';
 import 'package:kaibigan_flutter/features/routines/routine_model.dart';
 import 'package:kaibigan_flutter/features/routines/routines_provider.dart';
+import 'package:kaibigan_flutter/features/routines/widgets/routine_activity_frame.dart';
 import 'package:kaibigan_flutter/features/routines/screens/grounding_session_screen.dart';
 import 'package:kaibigan_flutter/features/routines/screens/mindfulness_meditation_screen.dart';
 import 'package:kaibigan_flutter/features/routines/screens/sleep_log_flow_screen.dart';
@@ -99,9 +100,21 @@ void main() {
     expect(find.text('Routine paused'), findsOneWidget);
     expect(
         find.byKey(const ValueKey('resume-routine-activity')), findsOneWidget);
-    for (var index = 0; index < 5; index++) {
+
+    // One progress segment per activity in the routine, so the count follows
+    // the routine's real shape rather than a number frozen into the test.
+    final strip = tester.widget<RoutineProgressStrip>(
+      find.byType(RoutineProgressStrip),
+    );
+    final stepCount = strip.steps.length;
+    expect(stepCount, greaterThan(1));
+    for (var index = 0; index < stepCount; index++) {
       expect(find.byKey(ValueKey('routine-progress-$index')), findsOneWidget);
     }
+    expect(
+      find.byKey(ValueKey('routine-progress-$stepCount')),
+      findsNothing,
+    );
   });
 
   testWidgets('autoplay advances only after an activity reports completion',
@@ -217,7 +230,10 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('skip-routine-activity')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Routine completed! ✨'), findsOneWidget);
+    // Skipping everything is not a completed routine, and the closing screen
+    // says so rather than congratulating work that never happened.
+    expect(find.text('A pause is okay, too'), findsOneWidget);
+    expect(find.text('Routine completed! ✨'), findsNothing);
     expect(find.textContaining('skipped 2 activities'), findsOneWidget);
   });
 

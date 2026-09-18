@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/kaibigan_tokens.dart';
 import '../../core/utils/language_helper.dart';
+import 'plain_language_insights.dart';
 import 'wellness_analytics.dart';
 
 /// Shared, readable statistics for weekly insights and individual activities.
@@ -193,6 +194,236 @@ class WellnessInsightsPanel extends StatelessWidget {
     );
   }
 
+  /// The week stated before it is measured.
+  ///
+  /// People open this screen with one question — "how did the week go, and
+  /// is that better or worse than before?" — and the tiles below answer it
+  /// only after some arithmetic. This card answers it first.
+  Widget _buildHeadline(BuildContext context, WeekReading reading) {
+    final palette = context.kaibigan;
+    final text = Theme.of(context).textTheme;
+    return Container(
+      key: const ValueKey('wellness-plain-headline'),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: palette.surfaceElevated,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: palette.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            reading.headline,
+            style: text.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 7),
+          Text(
+            reading.subhead,
+            style: text.bodyMedium?.copyWith(
+              color: palette.textSecondary,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                decoration: BoxDecoration(
+                  color: palette.accentSubtle,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(
+                  reading.keyFigure,
+                  style: text.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    color: palette.accentStrong,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  reading.keyFigureLabel,
+                  style: text.bodySmall?.copyWith(
+                    color: palette.textSecondary,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The easiest and hardest logged days side by side, with what else was
+  /// saved on each. This is the comparison people make by scrolling their
+  /// history; doing it for them costs one card.
+  Widget _buildContrast(BuildContext context, DayContrast contrast) {
+    final palette = context.kaibigan;
+    final text = Theme.of(context).textTheme;
+    final formatter = DateFormat('EEEE, MMM d');
+
+    Widget side({
+      required String caption,
+      required DateTime day,
+      required double score,
+      required List<String> companions,
+      required Color colour,
+      required IconData icon,
+    }) =>
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Icon(icon, size: 16, color: colour),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    caption,
+                    style: text.labelSmall?.copyWith(
+                      color: colour,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 6),
+              Text(
+                formatter.format(day),
+                style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${score.toStringAsFixed(1)}/5',
+                style: text.bodySmall?.copyWith(color: palette.textMuted),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                companions.isEmpty
+                    ? copy('nothing else logged', 'wala nang ibang tala')
+                    : companions.map(_label).join(' · '),
+                style: text.bodySmall?.copyWith(
+                  color: palette.textSecondary,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        );
+
+    return Container(
+      key: const ValueKey('wellness-day-contrast'),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: palette.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            copy('Your lightest and heaviest day',
+                'Pinakamagaan at pinakamabigat mong araw'),
+            style: text.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            copy(
+              'What else you logged on each. Worth comparing — not proof that one caused the other.',
+              'Ano pa ang naitala mo sa bawat isa. Maganda itong ihambing — hindi patunay na isa ang sanhi ng isa.',
+            ),
+            style: text.bodySmall?.copyWith(color: palette.textMuted),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              side(
+                caption: copy('LIGHTEST', 'PINAKAMAGAAN'),
+                day: contrast.bestDay,
+                score: contrast.bestScore,
+                companions: contrast.bestCompanions,
+                colour: palette.botanical,
+                icon: Icons.wb_sunny_outlined,
+              ),
+              const SizedBox(width: 14),
+              side(
+                caption: copy('HEAVIEST', 'PINAKAMABIGAT'),
+                day: contrast.hardestDay,
+                score: contrast.hardestScore,
+                companions: contrast.hardestCompanions,
+                colour: palette.warning,
+                icon: Icons.cloud_outlined,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLinks(BuildContext context, List<InsightLink> links) {
+    final palette = context.kaibigan;
+    final text = Theme.of(context).textTheme;
+    return Container(
+      key: const ValueKey('wellness-links'),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: palette.botanicalSubtle,
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(Icons.link_rounded, size: 19, color: palette.accentStrong),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                copy('What moved together this week',
+                    'Ano ang magkasabay ngayong linggo'),
+                style: text.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ]),
+          for (final link in links) ...[
+            const SizedBox(height: 12),
+            Text(
+              link.statement,
+              key: ValueKey('wellness-link-${link.id}'),
+              style: text.bodyMedium?.copyWith(height: 1.5),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              copy(
+                '${link.withDays} days against ${link.withoutDays} days.',
+                '${link.withDays} araw laban sa ${link.withoutDays} araw.',
+              ),
+              style: text.bodySmall?.copyWith(color: palette.textMuted),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Text(
+            links.first.caveat,
+            style: text.bodySmall?.copyWith(
+              color: palette.textSecondary,
+              height: 1.45,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildVerbalInsight(BuildContext context) {
     final palette = context.kaibigan;
     final text = Theme.of(context).textTheme;
@@ -274,8 +505,11 @@ class WellnessInsightsPanel extends StatelessWidget {
     final palette = context.kaibigan;
     final text = Theme.of(context).textTheme;
     final ids = feature == null ? snapshot.metrics.keys : [feature!];
+    final reading = PlainLanguageInsights.read(snapshot, language: language);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       if (feature == null) ...[
+        _buildHeadline(context, reading),
+        const SizedBox(height: 20),
         Container(
           key: const ValueKey('wellness-week-overview'),
           padding: const EdgeInsets.all(20),
@@ -336,6 +570,14 @@ class WellnessInsightsPanel extends StatelessWidget {
         const SizedBox(height: 20),
       ],
       _buildVerbalInsight(context),
+      if (feature == null && reading.links.isNotEmpty) ...[
+        const SizedBox(height: 20),
+        _buildLinks(context, reading.links),
+      ],
+      if (feature == null && reading.contrast != null) ...[
+        const SizedBox(height: 20),
+        _buildContrast(context, reading.contrast!),
+      ],
       const SizedBox(height: 20),
       Text(
         copy('The numbers behind it', 'Mga bilang na pinagbabatayan'),
@@ -353,6 +595,7 @@ class WellnessInsightsPanel extends StatelessWidget {
             runSpacing: 12,
             children: ids.map((id) {
               final metric = snapshot.metrics[id]!;
+              final plain = reading.metric(id)!;
               return SizedBox(
                   width: width,
                   child: Material(
@@ -382,23 +625,14 @@ class WellnessInsightsPanel extends StatelessWidget {
                                         size: 18, color: palette.textMuted),
                                 ]),
                                 const SizedBox(height: 14),
-                                Text(
-                                    metric.average != null
-                                        ? '${metric.average!.toStringAsFixed(1)} / 5'
-                                        : '${metric.count}',
-                                    style: text.headlineSmall?.copyWith(
-                                        fontWeight: FontWeight.w700)),
-                                const SizedBox(height: 4),
-                                Text(
-                                    metric.average != null
-                                        ? copy(
-                                            'Daily average · ${metric.numericDays} days',
-                                            'Karaniwan · ${metric.numericDays} araw',
-                                            'Daily average · ${metric.numericDays} days')
-                                        : copy(
-                                            '${metric.count == 1 ? "Saved entry" : "Saved entries"} · ${metric.days} days',
-                                            'Mga tala · ${metric.days} araw',
-                                            'Saved entries · ${metric.days} days'),
+                                // The plain reading is the headline; the
+                                // figure underneath is the evidence for it.
+                                Text(plain.headline,
+                                    key: ValueKey('wellness-plain-$id'),
+                                    style: text.titleMedium?.copyWith(
+                                        fontWeight: FontWeight.w900)),
+                                const SizedBox(height: 3),
+                                Text('${plain.value} · ${plain.support}',
                                     style: text.bodySmall?.copyWith(
                                         color: palette.textSecondary)),
                                 if (metric.average != null) ...[
@@ -410,7 +644,7 @@ class WellnessInsightsPanel extends StatelessWidget {
                                           : copy('1 struggling → 5 great',
                                               '1 nahihirapan → 5 maganda'),
                                       style: text.bodySmall?.copyWith(
-                                          color: palette.textSecondary)),
+                                          color: palette.textMuted)),
                                 ],
                                 if (id == 'sleep' &&
                                     snapshot.sleepHours != null) ...[
@@ -431,20 +665,9 @@ class WellnessInsightsPanel extends StatelessWidget {
                                       style: text.bodySmall),
                                 ],
                                 const SizedBox(height: 10),
-                                Text(
-                                    metric.change != null
-                                        ? copy(
-                                            '${metric.change! >= 0 ? "+" : ""}${metric.change!.toStringAsFixed(1)} points vs previous 7 days',
-                                            '${metric.change! >= 0 ? "+" : ""}${metric.change!.toStringAsFixed(1)} puntos kumpara sa nakaraang 7 araw')
-                                        : metric.average != null
-                                            ? copy(
-                                                'More logged days needed to compare',
-                                                'Kailangan pa ng mga araw na may tala para maihambing')
-                                            : copy(
-                                                'Previous 7 days: ${metric.previousCount}',
-                                                'Nakaraang 7 araw: ${metric.previousCount}'),
-                                    style: text.bodySmall?.copyWith(
-                                        color: palette.textSecondary)),
+                                _TrendChip(
+                                    direction: plain.direction,
+                                    label: plain.trendLabel),
                               ])),
                     ),
                   ));
@@ -508,5 +731,42 @@ class WellnessInsightsPanel extends StatelessWidget {
         ],
       ),
     ]);
+  }
+}
+
+/// The week-on-week comparison as a direction and a sentence. A signed
+/// decimal ("+0.3 points") asks the reader to decide whether that is a lot.
+class _TrendChip extends StatelessWidget {
+  const _TrendChip({required this.direction, required this.label});
+
+  final InsightDirection direction;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.kaibigan;
+    final text = Theme.of(context).textTheme;
+    final (colour, icon) = switch (direction) {
+      InsightDirection.better => (palette.botanical, Icons.north_east_rounded),
+      InsightDirection.worse => (palette.warning, Icons.south_east_rounded),
+      InsightDirection.steady => (palette.textSecondary, Icons.east_rounded),
+      InsightDirection.unknown => (palette.textMuted, Icons.more_horiz_rounded),
+    };
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Icon(icon, size: 14, color: colour),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            label,
+            style: text.bodySmall?.copyWith(color: colour, height: 1.35),
+          ),
+        ),
+      ],
+    );
   }
 }

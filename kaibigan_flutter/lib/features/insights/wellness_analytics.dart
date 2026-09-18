@@ -140,7 +140,9 @@ class WellnessSnapshot {
       required this.feedbackCount,
       required this.helpedCount,
       required this.stress,
-      required this.energy});
+      required this.energy,
+      this.dayScores = const {},
+      this.activityDays = const {}});
   final DateTime start;
   final DateTime endExclusive;
   final Map<String, WellnessMetric> metrics;
@@ -153,7 +155,67 @@ class WellnessSnapshot {
   final int helpedCount;
   final double? stress;
   final double? energy;
+
+  /// Daily averages inside the current window, keyed by series
+  /// ('mood', 'sleep', 'hours', 'stress', 'energy') and then by calendar day.
+  ///
+  /// The panel needs individual days, not only their mean: "your two hardest
+  /// days were both after a short night" is a usable observation and
+  /// "mood 3.2/5" is not.
+  final Map<String, Map<DateTime, double>> dayScores;
+
+  /// Calendar days inside the current window on which each activity was
+  /// saved, keyed by the same identifiers as [metrics].
+  final Map<String, Set<DateTime>> activityDays;
+
   bool get hasData => activeDays > 0;
+
+  /// The daily mood averages in calendar order, for the days that have one.
+  List<MapEntry<DateTime, double>> get moodByDay {
+    final entries = (dayScores['mood'] ?? const <DateTime, double>{})
+        .entries
+        .toList()
+      ..sort((left, right) => left.key.compareTo(right.key));
+    return entries;
+  }
+
+  /// A day-by-day line for each day in the window.
+  ///
+  /// Aggregates hide the thing a weekly reflection is for: which days were
+  /// hard, and what else was true on those days. The timeline gives the
+  /// model the evidence to say so instead of restating an average.
+  String dayTimeline() {
+    final days = dayCounts.keys.toList()..sort();
+    final lines = <String>[];
+    for (final day in days) {
+      final date = '${day.year}-${day.month.toString().padLeft(2, '0')}-'
+          '${day.day.toString().padLeft(2, '0')}';
+      final parts = <String>[];
+      final mood = dayScores['mood']?[day];
+      if (mood != null) parts.add('mood ${mood.toStringAsFixed(1)}/5');
+      final energy = dayScores['energy']?[day];
+      if (energy != null) parts.add('energy ${energy.toStringAsFixed(1)}/5');
+      final stressed = dayScores['stress']?[day];
+      if (stressed != null) {
+        parts.add('stress ${stressed.toStringAsFixed(1)}/5');
+      }
+      final sleepQuality = dayScores['sleep']?[day];
+      if (sleepQuality != null) {
+        parts.add('sleep quality ${sleepQuality.toStringAsFixed(1)}/5');
+      }
+      final hours = dayScores['hours']?[day];
+      if (hours != null) parts.add('slept ${hours.toStringAsFixed(1)}h');
+      final activities = [
+        for (final entry in activityDays.entries)
+          if (entry.key != 'mood' && entry.key != 'sleep' &&
+              entry.value.contains(day))
+            entry.key,
+      ]..sort();
+      if (activities.isNotEmpty) parts.add('logged ${activities.join("/")}');
+      lines.add('$date: ${parts.isEmpty ? "nothing logged" : parts.join(", ")}');
+    }
+    return lines.join('\n');
+  }
 
   String toPromptContext() => [
         'Deterministic wellness analytics, local calendar window '
@@ -170,6 +232,8 @@ class WellnessSnapshot {
             'from $sleepDurationDays days with exact durations. Sleep quality is separate.',
         'Self-reported helpful feedback: $helpedCount of $feedbackCount responses. '
             'Not an effectiveness rating; feedback is optional and device-local.',
+        'Day-by-day record (a day with nothing logged is unknown, not a bad '
+            'day):\n${dayTimeline()}',
         'Rules: ${observations.map((o) => o.english).join(" ")}',
         'Describe observations tentatively. Counts do not prove symptom relief; '
             'do not diagnose, infer causation, or invent missing durations or emotions.',
@@ -347,9 +411,26 @@ abstract final class WellnessAnalytics {
     }
     final responses =
         feedback.where((f) => inWindow(f.createdAt, start, end)).toList();
+    Map<DateTime, double> dailyMap(String kind) => {
+          for (final entry in scores[kind]!.entries)
+            if (!entry.key.isBefore(start) && entry.key.isBefore(end))
+              entry.key: entry.value.reduce((a, b) => a + b) /
+                  entry.value.length,
+        };
+
     return WellnessSnapshot(
         start: start,
         endExclusive: end,
+        dayScores: {
+          for (final kind in scores.keys) kind: dailyMap(kind),
+        },
+        activityDays: {
+          for (final entry in dates.entries)
+            entry.key: entry.value
+                .where((date) => inWindow(date, start, end))
+                .map(wellnessDay)
+                .toSet(),
+        },
         metrics: metrics,
         activeDays: dayCounts.values.where((v) => v > 0).length,
         dayCounts: dayCounts,

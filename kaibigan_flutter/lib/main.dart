@@ -7,6 +7,9 @@ import 'core/theme/app_theme.dart';
 import 'core/utils/env_config.dart';
 import 'core/services/supabase_service.dart';
 import 'core/services/notification_service.dart';
+import 'features/insights/wellbeing_context.dart';
+import 'core/services/ui_sound_service.dart';
+import 'core/widgets/kaibigan_sound_scope.dart';
 import 'core/widgets/cozy_app_frame.dart';
 import 'core/widgets/kaibigan_loading_screen.dart';
 
@@ -59,6 +62,9 @@ class _KaibiganBootstrapState extends State<KaibiganBootstrap> {
     await Future.wait([
       SupabaseService.init(),
       NotificationService.init(),
+      // Read before any journal screen can open: the default is on, so a
+      // user who turned it off must not have one request slip through.
+      WellbeingContextService.loadPreference(),
       minimumSplash,
     ]);
     if (mounted) setState(() => _isReady = true);
@@ -154,8 +160,32 @@ class _AuthGateState extends State<AuthGate> {
   }
 }
 
-class KaibiganApp extends StatelessWidget {
-  const KaibiganApp({super.key});
+class KaibiganApp extends StatefulWidget {
+  const KaibiganApp({super.key, this.soundController});
+
+  /// Injected by tests so no audio device is touched.
+  final UiSoundController? soundController;
+
+  @override
+  State<KaibiganApp> createState() => _KaibiganAppState();
+}
+
+class _KaibiganAppState extends State<KaibiganApp> {
+  late final UiSoundController _sound =
+      widget.soundController ?? UiSoundPlayer();
+
+  @override
+  void initState() {
+    super.initState();
+    // Reads the saved level; the default is already usable if this fails.
+    _sound.load();
+  }
+
+  @override
+  void dispose() {
+    if (widget.soundController == null) _sound.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -211,8 +241,12 @@ class KaibiganApp extends StatelessWidget {
             title: 'Kaibigan - Mental Wellness Companion',
             debugShowCheckedModeBanner: false,
             scrollBehavior: AppScrollBehavior(),
+            navigatorObservers: [KaibiganSoundNavigatorObserver(_sound)],
             builder: (context, child) {
               final isDark = Theme.of(context).brightness == Brightness.dark;
+              // One scope above every route: this is what makes "every tap"
+              // true for screens that have not been written yet.
+              child = KaibiganSoundScope(controller: _sound, child: child!);
               return AnnotatedRegion<SystemUiOverlayStyle>(
                 value: SystemUiOverlayStyle(
                   statusBarColor: Colors.transparent,
@@ -227,9 +261,7 @@ class KaibiganApp extends StatelessWidget {
                   systemStatusBarContrastEnforced: false,
                   systemNavigationBarContrastEnforced: false,
                 ),
-                child: CozyAppFrame(
-                  child: child ?? const SizedBox.shrink(),
-                ),
+                child: CozyAppFrame(child: child),
               );
             },
             theme: AppTheme.lightTheme,

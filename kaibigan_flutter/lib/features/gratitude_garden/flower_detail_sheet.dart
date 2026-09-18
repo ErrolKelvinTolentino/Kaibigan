@@ -6,6 +6,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../core/utils/language_helper.dart';
 import '../../core/widgets/cozy_confirm_sheet.dart';
+import 'flower_suggestion.dart';
 import 'gratitude_model.dart';
 import 'gratitude_provider.dart';
 import 'polished_flower_asset.dart';
@@ -29,6 +30,10 @@ class FlowerDetailSheet {
         final current = provider.entries.firstWhere(
           (candidate) => candidate.id == entry.id,
           orElse: () => entry,
+        );
+        final matchedSuggestion = FlowerMatcher.isSuggestedFor(
+          current.content,
+          current.flowerType,
         );
         return Container(
           key: const ValueKey('flower-detail-sheet'),
@@ -98,6 +103,51 @@ class FlowerDetailSheet {
                     fontSize: 11.5,
                   ),
                 ),
+                if (matchedSuggestion) ...[
+                  const SizedBox(height: 11),
+                  Container(
+                    key: const ValueKey('flower-matched-badge'),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 13,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.honeyAmber
+                          .withValues(alpha: isDark ? 0.17 : 0.12),
+                      borderRadius: BorderRadius.circular(99),
+                      border: Border.all(
+                        color: AppColors.honeyAmber.withValues(alpha: 0.36),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.auto_awesome_rounded,
+                          size: 14,
+                          color: AppColors.honeyAmber,
+                        ),
+                        const SizedBox(width: 7),
+                        Flexible(
+                          child: Text(
+                            LanguageHelper.pick(
+                              language,
+                              english: 'Matched to what you wrote',
+                              filipino: 'Tugma sa iyong isinulat',
+                            ),
+                            style: TextStyle(
+                              color: isDark
+                                  ? AppColors.textPrimaryDark
+                                  : AppColors.textPrimaryLight,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 14),
                 Container(
                   width: double.infinity,

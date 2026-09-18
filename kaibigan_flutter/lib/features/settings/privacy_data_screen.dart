@@ -67,8 +67,19 @@ class _PrivacyDataScreenState extends State<PrivacyDataScreen> {
               color: AppColors.honeyAmber,
               title: copy('When you ask Kai', 'Kapag tinanong mo si Kai'),
               body: copy(
-                'The text needed for a reflection or lesson answer is sent through Kaibigan’s authenticated AI service to the configured AI provider. Learning questions are not added to your journal or AI memory. Avoid sharing details you do not want processed by that provider.',
-                'Ang text na kailangan para sa reflection o sagot sa lesson ay ipinapadala sa authenticated AI service ng Kaibigan at sa naka-configure na AI provider. Hindi idinadagdag sa journal o AI memory ang mga tanong sa lesson. Iwasang magbahagi ng detalyeng ayaw mong maproseso ng provider.',
+                'What you wrote is sent through Kaibigan’s authenticated AI service to the configured AI provider, along with a short summary of your last seven days: average mood, energy and stress, your sleep debt and most recent night, and how many entries, sessions and gratitude notes you saved. Kai never receives the text of your other entries. Learning questions are answered without any of this and are not added to your journal or AI memory. Avoid sharing details you do not want processed by that provider.',
+                'Ipinapadala ang isinulat mo sa authenticated AI service ng Kaibigan at sa naka-configure na AI provider, kasama ang maikling buod ng huling pitong araw mo: karaniwang mood, lakas at stress, ang sleep debt at pinakahuling gabi mo, at kung ilan ang naitala mong entry, session at gratitude note. Hindi natatanggap ni Kai ang teksto ng ibang tala mo. Ang mga tanong sa lesson ay sinasagot nang wala ang mga ito at hindi idinadagdag sa journal o AI memory. Iwasang magbahagi ng detalyeng ayaw mong maproseso ng provider.',
+              ),
+            ),
+            const SizedBox(height: 12),
+            _dataCard(
+              isDark: isDark,
+              icon: Icons.tune_rounded,
+              color: AppColors.periwinkle,
+              title: copy('You can turn that off', 'Puwede mo itong patayin'),
+              body: copy(
+                'The seven-day summary is what lets Kai notice that a tiring week is a pattern rather than one bad day. Switch it off in AI memory & privacy and Kai answers from your words alone; your insights screens keep working either way, because they never leave this device.',
+                'Ang buod ng pitong araw ang dahilan kung bakit napapansin ni Kai na pattern ang isang nakakapagod na linggo at hindi lang isang masamang araw. Patayin ito sa AI memory & privacy at ang mga salita mo lang ang pagbabatayan ni Kai; gagana pa rin ang mga insight screen dahil hindi naman umaalis ang mga iyon sa device na ito.',
               ),
             ),
             const SizedBox(height: 12),

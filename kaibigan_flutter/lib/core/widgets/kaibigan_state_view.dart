@@ -37,17 +37,15 @@ class KaibiganStateView extends StatelessWidget {
       KaibiganStateTone.success => palette.success,
       _ => palette.accent,
     };
-    return Semantics(
-      liveRegion: loading || tone == KaibiganStateTone.error,
-      label: '$title. $message',
-      child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: compact ? 14 : 24,
-          vertical: compact ? 16 : 28,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+    final content = Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 14 : 24,
+        vertical: compact ? 16 : 28,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
             if (loading)
               KaibiganLoadingMark(color: accent)
             else
@@ -82,13 +80,33 @@ class KaibiganStateView extends StatelessWidget {
             ),
             if (actionLabel != null && onAction != null) ...[
               const SizedBox(height: 18),
-              FilledButton.tonal(
-                onPressed: onAction,
-                child: Text(actionLabel!),
-              ),
-            ],
+            FilledButton.tonal(
+              onPressed: onAction,
+              child: Text(actionLabel!),
+            ),
           ],
-        ),
+        ],
+      ),
+    );
+
+    return Semantics(
+      liveRegion: loading || tone == KaibiganStateTone.error,
+      label: '$title. $message',
+      // On a small phone at a large text size this content can be taller than
+      // the slot it is dropped into, which used to overflow the screen. When
+      // the height is bounded it scrolls; when it is not (inside a list, say)
+      // it is left exactly as it was.
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (!constraints.hasBoundedHeight) return content;
+          return SingleChildScrollView(
+            physics: const ClampingScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: content,
+            ),
+          );
+        },
       ),
     );
   }

@@ -122,7 +122,12 @@ class _ComfortCornerScreenState extends State<ComfortCornerScreen>
                 child: Column(
                   children: [
                     SizedBox(
-                      height: 176,
+                      // Grows with the reader's text size so the quote is not
+                      // clipped by a height that only suited the default.
+                      height: 176 *
+                          MediaQuery.textScalerOf(context)
+                              .scale(1)
+                              .clamp(1.0, 1.7),
                       child: PageView.builder(
                         controller: _quoteController,
                         itemCount: comfort.quotes.length,
@@ -504,11 +509,13 @@ class _QuoteCard extends StatelessWidget {
               size: 58,
             ),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
+          Positioned.fill(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: Text(
                 quote,
                 maxLines: 4,
                 overflow: TextOverflow.ellipsis,
@@ -517,16 +524,18 @@ class _QuoteCard extends StatelessWidget {
                       height: 1.45,
                     ),
               ),
-              const SizedBox(height: 10),
-              Text(
-                '— $author',
-                style: TextStyle(
-                  color: accent,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w900,
                 ),
-              ),
-            ],
+                const SizedBox(height: 10),
+                Text(
+                  '— $author',
+                  style: TextStyle(
+                    color: accent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

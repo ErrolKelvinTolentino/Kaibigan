@@ -5,12 +5,13 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../core/constants/app_colors.dart';
 import '../../core/theme/kaibigan_tokens.dart';
 import '../../core/utils/language_helper.dart';
 import '../../core/widgets/kaibigan_state_view.dart';
 import '../../core/widgets/kaibigan_surface.dart';
 import '../../core/widgets/mobile_layout.dart';
+import '../../core/services/ui_sound_service.dart';
+import '../../core/widgets/kaibigan_sound_scope.dart';
 import '../settings/user_provider.dart';
 import 'learning_ask_kai_sheet.dart';
 import 'learning_catalog.dart';
@@ -35,6 +36,7 @@ class _LearningLessonScreenState extends State<LearningLessonScreen> {
   final _readerKey = GlobalKey();
   bool _reflecting = false;
   bool _completed = false;
+  Set<String> _completedLessonIds = {};
   bool _saving = false;
   int _currentIdea = 0;
   int _navigationDirection = 1;
@@ -63,7 +65,8 @@ class _LearningLessonScreenState extends State<LearningLessonScreen> {
     final savedIdea = results[3] as int;
     final viewed = Set<int>.from(results[2] as Set<int>)..add(savedIdea);
     setState(() {
-      _completed = (results[0] as Set<String>).contains(widget.lesson.id);
+      _completedLessonIds = results[0] as Set<String>;
+      _completed = _completedLessonIds.contains(widget.lesson.id);
       _helpfulIdeas = results[1] as Set<int>;
       _viewedIdeas = viewed;
       _currentIdea = savedIdea;
@@ -82,13 +85,19 @@ class _LearningLessonScreenState extends State<LearningLessonScreen> {
     if (_saving) return;
     setState(() => _saving = true);
     final next = !_completed;
-    await _progressStore.setCompleted(widget.lesson.id, next);
+    final completedIds =
+        await _progressStore.setCompleted(widget.lesson.id, next);
     if (!mounted) return;
     setState(() {
       _completed = next;
+      _completedLessonIds = completedIds;
       _saving = false;
     });
-    if (next) HapticFeedback.mediumImpact();
+    if (next) {
+      HapticFeedback.mediumImpact();
+      // A lesson is a real piece of work, so it gets the fuller cue.
+      KaibiganSoundScope.play(context, UiSound.complete);
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -156,14 +165,45 @@ class _LearningLessonScreenState extends State<LearningLessonScreen> {
       .where((entry) => entry.value.essential)
       .every((entry) => _viewedIdeas.contains(entry.key));
 
-  LearningLesson? get _nextLesson {
+  /// Where to go after this lesson, and why.
+  ///
+  /// The previous version returned the first related lesson whether or not it
+  /// had already been finished, so completing a lesson could hand you back
+  /// something you had read weeks ago. Completed lessons are now skipped at
+  /// every stage, and the reason for the suggestion is shown with it.
+  ({LearningLesson lesson, LearningNextReason reason})? get _nextStep {
+    bool unread(LearningLesson lesson) =>
+        lesson.id != widget.lesson.id &&
+        !_completedLessonIds.contains(lesson.id);
+
     for (final id in widget.lesson.relatedLessonIds) {
       final lesson = LearningCatalog.byId(id);
-      if (lesson.id == id) return lesson;
+      if (lesson.id == id && unread(lesson)) {
+        return (lesson: lesson, reason: LearningNextReason.related);
+      }
     }
-    final current = LearningCatalog.lessons.indexOf(widget.lesson);
-    if (current >= 0 && current + 1 < LearningCatalog.lessons.length) {
-      return LearningCatalog.lessons[current + 1];
+
+    // A path the current lesson belongs to is the strongest signal of order.
+    for (final path in LearningCatalog.paths) {
+      if (!path.lessonIds.contains(widget.lesson.id)) continue;
+      for (final id in path.lessonIds) {
+        final lesson = LearningCatalog.byId(id);
+        if (lesson.id == id && unread(lesson)) {
+          return (lesson: lesson, reason: LearningNextReason.path);
+        }
+      }
+    }
+
+    for (final lesson in LearningCatalog.lessons) {
+      if (lesson.category == widget.lesson.category && unread(lesson)) {
+        return (lesson: lesson, reason: LearningNextReason.category);
+      }
+    }
+
+    for (final lesson in LearningCatalog.lessons) {
+      if (unread(lesson)) {
+        return (lesson: lesson, reason: LearningNextReason.anything);
+      }
     }
     return null;
   }
@@ -171,6 +211,7 @@ class _LearningLessonScreenState extends State<LearningLessonScreen> {
   Future<void> _toggleIdeaHelpful(int index) async {
     final next = !_helpfulIdeas.contains(index);
     HapticFeedback.lightImpact();
+    if (next) KaibiganSoundScope.play(context, UiSound.select);
     setState(() {
       if (next) {
         _helpfulIdeas.add(index);
@@ -204,7 +245,7 @@ class _LearningLessonScreenState extends State<LearningLessonScreen> {
     final palette = context.kaibigan;
     final lesson = widget.lesson;
     final padding = MobileLayout.horizontalPadding(context);
-    final nextLesson = _nextLesson;
+    final nextStep = _nextStep;
 
     return Scaffold(
       backgroundColor: palette.background,
@@ -356,20 +397,61 @@ class _LearningLessonScreenState extends State<LearningLessonScreen> {
                               .bodyMedium
                               ?.copyWith(
                                   color: palette.textSecondary, height: 1.5)),
-                      if (nextLesson != null) ...[
-                        const SizedBox(height: 12),
-                        TextButton(
-                          key: const ValueKey('open-next-lesson'),
-                          onPressed: () => Navigator.of(context)
-                              .pushReplacement<void, void>(MaterialPageRoute(
-                            builder: (_) =>
-                                LearningLessonScreen(lesson: nextLesson),
-                          )),
-                          child: Text(LanguageHelper.pick(language,
-                              english:
-                                  'Explore: ${nextLesson.title.resolve(language)}',
-                              filipino:
-                                  'Tuklasin: ${nextLesson.title.resolve(language)}')),
+                      if (nextStep != null) ...[
+                        const SizedBox(height: KaibiganSpace.md),
+                        Text(
+                          nextStep.reason.label(language),
+                          style: Theme.of(context)
+                              .textTheme
+                              .labelSmall
+                              ?.copyWith(
+                                color: palette.textMuted,
+                                letterSpacing: 0.6,
+                              ),
+                        ),
+                        const SizedBox(height: KaibiganSpace.xs),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            key: const ValueKey('open-next-lesson'),
+                            onPressed: () => Navigator.of(context)
+                                .pushReplacement<void, void>(MaterialPageRoute(
+                              builder: (_) =>
+                                  LearningLessonScreen(lesson: nextStep.lesson),
+                            )),
+                            icon: const Icon(Icons.arrow_forward_rounded,
+                                size: 18),
+                            label: Text(
+                              nextStep.lesson.title.resolve(language),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                            ),
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size(0, 48),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: KaibiganSpace.sm,
+                                vertical: KaibiganSpace.xs,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ] else ...[
+                        const SizedBox(height: KaibiganSpace.sm),
+                        Text(
+                          LanguageHelper.pick(
+                            language,
+                            english:
+                                'That is every lesson in the library read. '
+                                'Revisit any of them whenever it would help.',
+                            filipino:
+                                'Nabasa mo na ang lahat ng aralin. Balikan '
+                                'ang alinman kapag makakatulong ito.',
+                          ),
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: palette.textSecondary),
                         ),
                       ],
                     ],
@@ -668,9 +750,7 @@ class _LearningLessonScreenState extends State<LearningLessonScreen> {
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: Theme.of(context).brightness == Brightness.dark
-                          ? [palette.accent, palette.accentStrong]
-                          : [AppColors.honeyGold, AppColors.honeyAmber],
+                      colors: [palette.accent, palette.accentStrong],
                     ),
                   ),
                 ),
@@ -783,14 +863,15 @@ class _LearningLessonScreenState extends State<LearningLessonScreen> {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: AppColors.honeyAmber,
-                    borderRadius: BorderRadius.circular(13),
+                    color: palette.accent,
+                    borderRadius:
+                        BorderRadius.circular(KaibiganRadius.control),
                   ),
                   alignment: Alignment.center,
-                  child: const Text(
+                  child: Text(
                     'K',
                     style: TextStyle(
-                      color: AppColors.onHoney,
+                      color: palette.onAccent,
                       fontSize: 18,
                       fontWeight: FontWeight.w900,
                     ),

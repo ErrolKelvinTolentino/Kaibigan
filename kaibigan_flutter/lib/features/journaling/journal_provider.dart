@@ -173,7 +173,11 @@ class JournalProvider extends ChangeNotifier {
         try {
           await SupabaseService.client.from('journal_entries').insert(map);
         } catch (insertError) {
-          if (map.containsKey('conversation_turns')) {
+          // Retry without the columns added by later migrations, so an entry
+          // is never lost just because the database is a version behind.
+          if (map.containsKey('summary') ||
+              map.containsKey('conversation_turns')) {
+            map.remove('summary');
             map.remove('conversation_turns');
             await SupabaseService.client.from('journal_entries').insert(map);
           } else {
@@ -310,7 +314,9 @@ class JournalProvider extends ChangeNotifier {
                 .eq('user_id', userId)
                 .select();
           } catch (updateError) {
-            if (updatePayload.containsKey('conversation_turns')) {
+            if (updatePayload.containsKey('summary') ||
+                updatePayload.containsKey('conversation_turns')) {
+              updatePayload.remove('summary');
               updatePayload.remove('conversation_turns');
               response = await SupabaseService.client
                   .from('journal_entries')

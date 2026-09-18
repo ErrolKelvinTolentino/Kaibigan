@@ -82,9 +82,24 @@ class RoutineActivityFrame extends StatelessWidget {
                       ),
                     ),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: Row(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
+                      // Where you are in the routine, without opening the plan.
+                      RoutineProgressStrip(
+                        key: const ValueKey('routine-activity-progress-bar'),
+                        keyPrefix: 'routine-activity-progress',
+                        steps: steps,
+                        currentIndex: currentIndex,
+                        skippedStepIds: skippedStepIds,
+                        color: routine.primaryColor,
+                        isDark: isDark,
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
                       Expanded(
                         child: Semantics(
                           label: '$stepLabel, ${routine.title}',
@@ -120,7 +135,13 @@ class RoutineActivityFrame extends StatelessWidget {
                                                 fontSize: 12,
                                                 fontWeight: FontWeight.w700)),
                                         Text(
-                                          routine.title,
+                                          // Both the routine and the activity
+                                          // you are in, so the dock answers
+                                          // "where am I" on its own.
+                                          currentIndex < steps.length
+                                              ? '${routine.title} • '
+                                                  '${steps[currentIndex].title}'
+                                              : routine.title,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           style: TextStyle(
@@ -150,6 +171,8 @@ class RoutineActivityFrame extends StatelessWidget {
                         ),
                         child: Text(routineText(context, 'Skip', 'Laktawan')),
                       ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -160,6 +183,79 @@ class RoutineActivityFrame extends StatelessWidget {
     );
   }
 }
+
+/// A segment per activity, filled for what is done and outlined for what is
+/// still ahead. Skipped activities read differently from completed ones so the
+/// bar never overstates what happened.
+class RoutineProgressStrip extends StatelessWidget {
+  const RoutineProgressStrip({
+    super.key,
+    required this.keyPrefix,
+    required this.steps,
+    required this.currentIndex,
+    required this.skippedStepIds,
+    required this.color,
+    required this.isDark,
+    this.height = 6,
+  });
+
+  final String keyPrefix;
+  final List<RoutineStep> steps;
+  final int currentIndex;
+  final Set<String> skippedStepIds;
+  final Color color;
+  final bool isDark;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    if (steps.isEmpty) return const SizedBox.shrink();
+    final track = isDark ? Colors.white12 : const Color(0xFFE8E0D6);
+
+    return Semantics(
+      label: routineText(
+        context,
+        'Activity ${currentIndex + 1} of ${steps.length}',
+        'Gawain ${currentIndex + 1} sa ${steps.length}',
+      ),
+      child: Row(
+        children: [
+          for (var index = 0; index < steps.length; index++)
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  right: index == steps.length - 1 ? 0 : 4,
+                ),
+                child: AnimatedContainer(
+                  key: ValueKey('$keyPrefix-$index'),
+                  duration: const Duration(milliseconds: 220),
+                  height: height,
+                  decoration: BoxDecoration(
+                    color: switch (_stateOf(index)) {
+                      _StepState.completed => color,
+                      _StepState.skipped => color.withValues(alpha: 0.3),
+                      _StepState.current => color.withValues(alpha: 0.72),
+                      _StepState.upcoming => track,
+                    },
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  _StepState _stateOf(int index) {
+    if (skippedStepIds.contains(steps[index].id)) return _StepState.skipped;
+    if (index < currentIndex) return _StepState.completed;
+    if (index == currentIndex) return _StepState.current;
+    return _StepState.upcoming;
+  }
+}
+
+enum _StepState { completed, skipped, current, upcoming }
 
 Future<void> showRoutinePlan(
   BuildContext context, {

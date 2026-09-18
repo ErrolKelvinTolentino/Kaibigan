@@ -16,7 +16,11 @@ import '../../insights/wellness_insights_panel.dart';
 import '../../settings/user_provider.dart';
 import '../routine_model.dart';
 import '../routines_provider.dart';
+import '../sleep_insights.dart';
+import 'sleep_energy_curve.dart';
+import 'sleep_feedback_card.dart';
 import 'sleep_log_flow_screen.dart';
+import 'sleep_status_card.dart';
 
 /// Stable adapter for legacy and current sleep-log storage formats.
 class ParsedSleepLog {
@@ -190,6 +194,7 @@ class _SleepAnalyticsScreenState extends State<SleepAnalyticsScreen>
                     colorForFeeling: (value) => _feelingColor(value, palette),
                     copy: _copy,
                     onLogSleep: _openLogger,
+                    language: user.language,
                   ),
                   _HistoryTab(
                     logs: logs,
@@ -310,6 +315,7 @@ class _AnalyticsTab extends StatelessWidget {
     required this.colorForFeeling,
     required this.copy,
     required this.onLogSleep,
+    required this.language,
   });
 
   final List<ParsedSleepLog> logs;
@@ -317,6 +323,7 @@ class _AnalyticsTab extends StatelessWidget {
   final Color Function(SleepFeeling) colorForFeeling;
   final String Function(String, String) copy;
   final VoidCallback onLogSleep;
+  final String language;
 
   @override
   Widget build(BuildContext context) {
@@ -328,34 +335,170 @@ class _AnalyticsTab extends StatelessWidget {
       );
     }
     final lastSeven = _lastSevenDays(logs);
-    final recent = lastSeven.map((day) => day.log).whereType<ParsedSleepLog>().toList();
-    final snapshot = WellnessAnalytics.build(now: DateTime.now(), routines: logs.map((log) => log.rawLog));
+    final recent =
+        lastSeven.map((day) => day.log).whereType<ParsedSleepLog>().toList();
+    final snapshot = WellnessAnalytics.build(
+      now: DateTime.now(),
+      routines: logs.map((log) => log.rawLog),
+    );
+    final insights = SleepInsights.build(
+      logs.map((log) => log.rawLog).toList(),
+      language: language,
+    );
     return MobileContent(
       child: SingleChildScrollView(
         padding: MobileLayout.pageInsets(context, top: 10, bottom: 104),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            WellnessInsightsPanel(snapshot: snapshot,
-              language: context.watch<UserProvider>().language, feature: 'sleep'),
-            const SizedBox(height: 16),            _WeeklyRhythmCard(
+            // The verdict comes before the figures: a person who is short on
+            // sleep should not have to work that out from three durations.
+            SleepStatusCard(insights: insights, language: language),
+            const SizedBox(height: 16),
+            SleepMetricsRow(insights: insights, language: language),
+            const SizedBox(height: 16),
+            SleepTipsCard(insights: insights, language: language),
+            const SizedBox(height: 16),
+            if (insights.hasEnergyCurve) ...[
+              SleepEnergyCurveCard(insights: insights),
+              const SizedBox(height: 16),
+            ],
+            SleepFeedbackCard(insights: insights, language: language),
+            const SizedBox(height: 16),
+            if (insights.lastNight?.wakeTime != null) ...[
+              _BedtimeCalculatorCard(
+                wakeTime: insights.lastNight!.wakeTime!,
+                copy: copy,
+              ),
+              const SizedBox(height: 16),
+            ],
+            _WeeklyRhythmCard(
               days: lastSeven,
               copy: copy,
             ),
             const SizedBox(height: 20),
             _QualityDistribution(
-              logs: recent.where((log) => log.rawLog.sleepFeeling != null).toList(),
+              logs: recent
+                  .where((log) => log.rawLog.sleepFeeling != null)
+                  .toList(),
               colorForFeeling: colorForFeeling,
               copy: copy,
             ),
             const SizedBox(height: 20),
-
+            WellnessInsightsPanel(
+              snapshot: snapshot,
+              language: language,
+              feature: 'sleep',
+            ),
+            const SizedBox(height: 20),
           ],
         ),
       ),
     );
   }
+}
 
+/// Works backwards from the wake time this person actually uses, so the
+/// suggested bedtimes are about their morning, not a generic one.
+class _BedtimeCalculatorCard extends StatelessWidget {
+  const _BedtimeCalculatorCard({
+    required this.wakeTime,
+    required this.copy,
+  });
+
+  final TimeOfDay wakeTime;
+  final String Function(String, String) copy;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.kaibigan;
+    final text = Theme.of(context).textTheme;
+    final options = SleepCycleCalculator.bedtimesFor(wakeTime);
+
+    return KaibiganSurface(
+      key: const ValueKey('sleep-bedtime-calculator'),
+      tone: KaibiganSurfaceTone.elevated,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      showShadow: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.calculate_outlined,
+                size: 18,
+                color: palette.accent,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  copy('Bedtime calculator', 'Kalkulador ng oras ng tulog'),
+                  style: text.titleSmall,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            copy(
+              'To wake at ${SleepInsights.formatTime(wakeTime)} at the end of '
+                  'a sleep cycle rather than the middle of one.',
+              'Para magising nang ${SleepInsights.formatTime(wakeTime)} sa '
+                  'dulo ng sleep cycle, hindi sa gitna nito.',
+            ),
+            style: text.bodySmall?.copyWith(
+              color: palette.textSecondary,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: options
+                .map(
+                  (option) => Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 9,
+                    ),
+                    decoration: BoxDecoration(
+                      color: option.cycles == 5
+                          ? palette.accentSubtle
+                          : palette.surfaceSubtle,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: option.cycles == 5
+                            ? palette.accent
+                            : palette.border,
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          SleepInsights.formatTime(option.bedtime),
+                          style: text.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          '${option.cycles} × 90m · '
+                          '${SleepInsights.formatHours(option.hours)}',
+                          style: text.bodySmall?.copyWith(
+                            color: palette.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _SleepDay {
@@ -905,13 +1048,16 @@ class _EmptySleepState extends StatelessWidget {
               const SizedBox(height: 12),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.timer_outlined,
                       size: 16, color: palette.textMuted),
                   const SizedBox(width: 6),
-                  Text(
-                    copy('Takes about 20 seconds', 'Mga 20 segundo lamang'),
-                    style: text.bodySmall?.copyWith(color: palette.textMuted),
+                  Flexible(
+                    child: Text(
+                      copy('Takes about 20 seconds', 'Mga 20 segundo lamang'),
+                      style: text.bodySmall?.copyWith(color: palette.textMuted),
+                    ),
                   ),
                 ],
               ),
