@@ -247,7 +247,7 @@ void main() {
       await pump(tester, loader: () async => rich);
       // The follow-up card is the last one, so the button changes to the
       // closing label once it is the settled page.
-      await advanceTo(tester, 'Keep this moment');
+      await advanceTo(tester, 'Done');
 
       expect(find.byKey(const ValueKey('journal-summary-followup-card')),
           findsOneWidget);

@@ -23,8 +23,8 @@ import struct
 import wave
 
 SAMPLE_RATE = 22050
-LOOP_SECONDS = 8.0
-FADE_SECONDS = 0.9
+LOOP_SECONDS = 36.0
+FADE_SECONDS = 3.5
 OUTPUT_DIR = os.path.join("assets", "breathing sounds")
 
 LOOP_SAMPLES = int(SAMPLE_RATE * LOOP_SECONDS)
@@ -33,7 +33,7 @@ FADE_SAMPLES = int(SAMPLE_RATE * FADE_SECONDS)
 
 def crossfade_tail(samples):
     """Wraps `LOOP_SAMPLES + FADE_SAMPLES` of audio into a seamless loop."""
-    out = samples[:LOOP_SAMPLES]
+    out = list(samples[:LOOP_SAMPLES])
     for i in range(FADE_SAMPLES):
         t = i / FADE_SAMPLES
         head = math.sin(t * math.pi / 2)
@@ -91,15 +91,14 @@ def rain():
 
     rng = random.Random(11)
     droplets = [0.0] * total
-    for _ in range(int(LOOP_SECONDS * 34)):
-        start = rng.randrange(0, total)
+    # Evenly distribute droplets without hard boundaries
+    for _ in range(int(LOOP_SECONDS * 30)):
+        start = rng.randrange(0, total - 450)
         length = rng.randint(140, 420)
         pitch = rng.uniform(900, 2600)
         gain = rng.uniform(0.15, 0.45)
         for i in range(length):
             index = start + i
-            if index >= total:
-                break
             decay = math.exp(-6.0 * i / length)
             droplets[index] += gain * decay * math.sin(
                 2 * math.pi * pitch * i / SAMPLE_RATE
@@ -120,18 +119,19 @@ def ocean():
         brown.append(state)
     brown = one_pole_lowpass(brown, 1100)
 
-    # Two swells per loop keeps the wrap point on a trough.
+    # 3 natural rolling swells over 36s (12s per wave), resting gently in troughs at seams.
     shaped = []
     for i, value in enumerate(brown):
-        phase = 2 * math.pi * 2 * i / LOOP_SAMPLES
-        swell = 0.42 + 0.58 * (0.5 - 0.5 * math.cos(phase)) ** 1.6
+        phase = 2 * math.pi * 3 * i / LOOP_SAMPLES
+        swell = 0.38 + 0.62 * (0.5 - 0.5 * math.cos(phase)) ** 1.6
         shaped.append(value * swell)
     return normalise(crossfade_tail(shaped), peak=0.70)
 
 
 def synth_pad():
-    """A warm drone. Every partial completes whole cycles inside the loop."""
-    base = 4 / LOOP_SECONDS  # 0.5 Hz grid keeps all partials loop-periodic.
+    """A warm drone with seamless tail crossfade and slow organic drift."""
+    total = LOOP_SAMPLES + FADE_SAMPLES
+    base = 4 / LOOP_SECONDS
 
     def snap(freq):
         return max(1, round(freq / base)) * base
@@ -144,27 +144,26 @@ def synth_pad():
         (snap(440.0), 0.07, 0.4),
         (snap(659.2), 0.04, 1.2),
     ]
-    tremolo = 1 / LOOP_SECONDS  # exactly one slow swell per loop
+    tremolo = 1 / LOOP_SECONDS
 
     out = []
-    for i in range(LOOP_SAMPLES):
+    for i in range(total):
         t = i / SAMPLE_RATE
         value = 0.0
         for freq, gain, phase in voices:
             value += gain * math.sin(2 * math.pi * freq * t + phase)
-        swell = 0.78 + 0.22 * math.sin(2 * math.pi * tremolo * t)
+        swell = 0.82 + 0.18 * math.sin(2 * math.pi * tremolo * t)
         out.append(value * swell)
-    return normalise(out, peak=0.52)
+    return normalise(crossfade_tail(out), peak=0.52)
 
 
 def chimes():
     """Wind chimes: decaying bell partials struck on the loop's own grid."""
     out = [0.0] * LOOP_SAMPLES
     rng = random.Random(777)
-    # A pentatonic set is forgiving — any two strikes still sound consonant.
     scale = [523.25, 587.33, 698.46, 783.99, 880.00, 1046.50]
 
-    for _ in range(14):
+    for _ in range(int(LOOP_SECONDS * 2)):
         start = rng.randrange(0, LOOP_SAMPLES)
         root = rng.choice(scale)
         gain = rng.uniform(0.20, 0.46)
@@ -178,7 +177,6 @@ def chimes():
                 + 0.42 * math.sin(2 * math.pi * root * 2.76 * t)
                 + 0.18 * math.sin(2 * math.pi * root * 5.4 * t)
             )
-            # Strikes wrap around the loop so nothing is cut off at the seam.
             out[(start + i) % LOOP_SAMPLES] += gain * decay * sample
     return normalise(out, peak=0.58)
 

@@ -636,14 +636,34 @@ class _LetterComposerState extends State<_LetterComposer> {
 
   Future<void> _pickDate(BuildContext context) async {
     final now = DateTime.now();
+    final today = DateUtils.dateOnly(now);
     final chosen = await showDatePicker(
       context: context,
-      initialDate: _deliveryDate,
-      firstDate: now.add(const Duration(days: 1)),
+      initialDate: _deliveryDate.isBefore(today) ? today : _deliveryDate,
+      firstDate: today,
       lastDate: now.add(const Duration(days: 3650)),
       helpText: 'WHEN SHOULD THIS ARRIVE?',
     );
-    if (chosen != null) setState(() => _customDate = chosen);
+    if (chosen == null || !context.mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialEntryMode: TimePickerEntryMode.input,
+      initialTime: TimeOfDay.fromDateTime(
+        _customDate ?? DateTime.now().add(const Duration(minutes: 5)),
+      ),
+      helpText: 'WHAT TIME SHOULD THIS ARRIVE?',
+    );
+    if (time == null || !mounted) return;
+    final delivery =
+        DateTime(chosen.year, chosen.month, chosen.day, time.hour, time.minute);
+    if (!delivery.isAfter(DateTime.now())) {
+      setState(() => _validation = 'Choose a delivery time later than now.');
+      return;
+    }
+    setState(() {
+      _customDate = delivery;
+      _validation = null;
+    });
   }
 }
 
@@ -959,6 +979,12 @@ class _MessagePageState extends State<_MessagePage> {
                           : const Color(0xFFA49A8A),
                     ),
                     border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    errorBorder: InputBorder.none,
+                    disabledBorder: InputBorder.none,
+                    filled: false,
+                    fillColor: Colors.transparent,
                     contentPadding: const EdgeInsets.fromLTRB(18, 0, 18, 20),
                   ),
                 ),
@@ -1033,7 +1059,7 @@ class _SchedulePage extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            'Or choose the exact day',
+            'Or choose the exact date and time',
             style: TextStyle(
               color: isDark
                   ? AppColors.textSecondaryDark
@@ -1049,7 +1075,7 @@ class _SchedulePage extends StatelessWidget {
             onPressed: onCustomDate,
             icon: const Icon(Icons.calendar_month_outlined),
             label: Text(
-              DateFormatter.formatShortDate(deliveryDate),
+              '${DateFormatter.formatShortDate(deliveryDate)} · ${DateFormatter.formatTimeOnly(deliveryDate)}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -1193,7 +1219,7 @@ class _ReviewPage extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Delivers ${DateFormatter.formatShortDate(deliveryDate)}',
+                    'Delivers ${DateFormatter.formatShortDate(deliveryDate)} at ${DateFormatter.formatTimeOnly(deliveryDate)}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: AppTypography.bodySmall(context, isDark: isDark),

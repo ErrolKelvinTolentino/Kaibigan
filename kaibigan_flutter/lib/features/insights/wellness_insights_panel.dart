@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import '../../core/services/pdf_service.dart';
+import '../../core/widgets/pdf_export_button.dart';
 import '../../core/theme/kaibigan_tokens.dart';
 import '../../core/utils/language_helper.dart';
+import '../settings/user_provider.dart';
 import 'plain_language_insights.dart';
 import 'wellness_analytics.dart';
 
@@ -455,7 +459,8 @@ class WellnessInsightsPanel extends StatelessWidget {
                 child: Text(
                   copy('What your logs are saying',
                       'Ano ang sinasabi ng iyong mga tala'),
-                  style: text.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                  style:
+                      text.titleMedium?.copyWith(fontWeight: FontWeight.w800),
                 ),
               ),
             ],
@@ -496,6 +501,159 @@ class WellnessInsightsPanel extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFeatureRhythm(BuildContext context) {
+    if (feature == null) return const SizedBox.shrink();
+    final palette = context.kaibigan;
+    final text = Theme.of(context).textTheme;
+    final dayScores = snapshot.dayScores[feature] ?? const <DateTime, double>{};
+    final activeSet = snapshot.activityDays[feature] ?? const <DateTime>{};
+
+    return Container(
+      key: ValueKey('wellness-feature-rhythm-$feature'),
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: palette.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(_icon(feature!), size: 18, color: palette.accentStrong),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  copy('${_label(feature!)} 7-day rhythm',
+                      '7-araw na takbo ng ${_label(feature!)}'),
+                  style:
+                      text.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: snapshot.dayCounts.keys.map((day) {
+              final hasScore = dayScores.containsKey(day);
+              final score = dayScores[day];
+              final hasActivity = activeSet.contains(day);
+              final dayName = DateFormat('E').format(day).substring(0, 1);
+
+              return Expanded(
+                child: Column(
+                  children: [
+                    Text(
+                      dayName,
+                      style: text.labelSmall?.copyWith(
+                        color: palette.textSecondary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      width: 32,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: hasScore || hasActivity
+                            ? palette.accentSubtle
+                            : palette.surfaceSubtle,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: hasScore || hasActivity
+                              ? palette.accent
+                              : palette.border,
+                          width: hasScore || hasActivity ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          hasScore
+                              ? score!.toStringAsFixed(score % 1 == 0 ? 0 : 1)
+                              : hasActivity
+                                  ? '✓'
+                                  : '·',
+                          style: text.labelSmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: hasScore || hasActivity
+                                ? palette.accentStrong
+                                : palette.textMuted,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${day.day}',
+                      style: text.bodySmall?.copyWith(
+                        fontSize: 10,
+                        color: palette.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExportButton(
+    BuildContext context,
+    KaibiganPalette palette,
+    TextTheme text,
+    WeekReading reading,
+  ) {
+    return Center(
+      child: PdfExportButton(
+        key: const ValueKey('wellness-export-summary-button'),
+        language: language,
+        onExport: () async {
+          String? userName;
+          try {
+            userName = context.read<UserProvider?>()?.displayName;
+          } catch (_) {}
+          final metricEntries = <MapEntry<String, String>>[];
+          for (final id in snapshot.metrics.keys) {
+            final metric = snapshot.metrics[id]!;
+            final plain = reading.metric(id);
+            if (plain != null) {
+              metricEntries.add(
+                  MapEntry(_label(id), '${plain.value} (${plain.headline})'));
+            } else if (metric.count > 0) {
+              metricEntries.add(MapEntry(_label(id), '${metric.count} logged'));
+            }
+          }
+          final observations =
+              snapshot.observations.map((o) => o.text(language)).toList();
+          return PdfService.exportWellnessReportPdf(
+            title:
+                copy('Weekly Wellness Summary', 'Lingguhang Buod ng Kaayusan'),
+            headline: reading.headline,
+            subhead: reading.subhead,
+            metrics: metricEntries,
+            observations: observations,
+            startDate: snapshot.start,
+            endDate: snapshot.endExclusive,
+            userName: userName,
+          );
+        },
+        label: copy('Export summary PDF', 'I-export ang buod (PDF)'),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: palette.accentStrong,
+          side: BorderSide(color: palette.border),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        ),
       ),
     );
   }
@@ -568,6 +726,8 @@ class WellnessInsightsPanel extends StatelessWidget {
           ]),
         ),
         const SizedBox(height: 20),
+      ] else ...[
+        _buildFeatureRhythm(context),
       ],
       _buildVerbalInsight(context),
       if (feature == null && reading.links.isNotEmpty) ...[
@@ -643,8 +803,8 @@ class WellnessInsightsPanel extends StatelessWidget {
                                               '1 hindi mapakali → 5 masigla')
                                           : copy('1 struggling → 5 great',
                                               '1 nahihirapan → 5 maganda'),
-                                      style: text.bodySmall?.copyWith(
-                                          color: palette.textMuted)),
+                                      style: text.bodySmall
+                                          ?.copyWith(color: palette.textMuted)),
                                 ],
                                 if (id == 'sleep' &&
                                     snapshot.sleepHours != null) ...[
@@ -730,6 +890,8 @@ class WellnessInsightsPanel extends StatelessWidget {
                   style: text.bodySmall?.copyWith(height: 1.6)))
         ],
       ),
+      const SizedBox(height: 24),
+      _buildExportButton(context, palette, text, reading),
     ]);
   }
 }

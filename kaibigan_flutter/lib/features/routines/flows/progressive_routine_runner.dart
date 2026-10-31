@@ -24,8 +24,22 @@ class ProgressiveRoutineRunner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final resolvedConfig = config ??
-        context.read<RoutinesProvider>().getRoutineById(routineType.name);
+    final provider = context.read<RoutinesProvider>();
+    return FutureBuilder<void>(
+      future: provider.ready,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(
+              body: Center(child: CircularProgressIndicator()));
+        }
+        return _buildReady(context, provider);
+      },
+    );
+  }
+
+  Widget _buildReady(BuildContext context, RoutinesProvider provider) {
+    final resolvedConfig =
+        provider.getRoutineById(config?.id ?? routineType.name) ?? config;
 
     if (resolvedConfig == null) {
       return Scaffold(

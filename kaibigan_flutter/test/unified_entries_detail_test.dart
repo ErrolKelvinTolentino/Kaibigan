@@ -5,7 +5,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:kaibigan_flutter/features/gratitude_garden/gratitude_model.dart';
 import 'package:kaibigan_flutter/features/gratitude_garden/gratitude_provider.dart';
-import 'package:kaibigan_flutter/features/journaling/journal_editor_screen.dart';
 import 'package:kaibigan_flutter/features/journaling/journal_model.dart';
 import 'package:kaibigan_flutter/features/journaling/journal_provider.dart';
 import 'package:kaibigan_flutter/features/mood_tracking/mood_model.dart';
@@ -116,9 +115,12 @@ void main() {
     expect(find.byKey(const ValueKey('flower-detail-sheet')), findsOneWidget);
     expect(find.text('“The warm meal my family shared.”'), findsOneWidget);
     expect(find.byKey(const ValueKey('edit-gratitude-button')), findsOneWidget);
-    expect(find.byKey(const ValueKey('delete-gratitude-button')), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('delete-gratitude-button')), findsOneWidget);
 
-    Navigator.of(tester.element(find.byKey(const ValueKey('flower-detail-sheet')))).pop();
+    Navigator.of(
+            tester.element(find.byKey(const ValueKey('flower-detail-sheet'))))
+        .pop();
     await tester.pumpAndSettle();
 
     // 2. Mood entry opens the MoodDetailSheet with mascot avatar, metrics, edit & delete
@@ -138,27 +140,30 @@ void main() {
     expect(find.byKey(const ValueKey('edit-mood-note-button')), findsOneWidget);
     expect(find.byKey(const ValueKey('delete-mood-button')), findsOneWidget);
 
-    Navigator.of(tester.element(find.byKey(const ValueKey('mood-detail-sheet')))).pop();
+    Navigator.of(
+            tester.element(find.byKey(const ValueKey('mood-detail-sheet'))))
+        .pop();
     await tester.pumpAndSettle();
 
-    // 3. Journal entry opens the JournalEditorScreen
+    // 3. Journal entry opens the UnifiedEntryDetailScreen
     await tester.enterText(find.byType(TextField).first, 'quiet realization');
     await tester.pumpAndSettle();
     await tester.tap(find.text('A quiet realization').last);
     await tester.pumpAndSettle();
 
-    expect(find.byType(JournalEditorScreen), findsOneWidget);
-    Navigator.of(tester.element(find.byType(JournalEditorScreen))).pop();
+    expect(find.byKey(const ValueKey('entry-detail-journal')), findsOneWidget);
+    await tester.tap(find.byTooltip('Back to all entries'));
     await tester.pumpAndSettle();
 
-    // 4. Reflection entry opens the JournalEditorScreen
+    // 4. Reflection entry opens the UnifiedEntryDetailScreen
     await tester.enterText(find.byType(TextField).first, 'evening reflection');
     await tester.pumpAndSettle();
     await tester.tap(find.text('Evening reflection').last);
     await tester.pumpAndSettle();
 
-    expect(find.byType(JournalEditorScreen), findsOneWidget);
-    Navigator.of(tester.element(find.byType(JournalEditorScreen))).pop();
+    expect(
+        find.byKey(const ValueKey('entry-detail-reflection')), findsOneWidget);
+    await tester.tap(find.byTooltip('Back to all entries'));
     await tester.pumpAndSettle();
 
     // 5. Routine focus opens the focus detail view
@@ -178,7 +183,8 @@ void main() {
     await tester.tap(find.text("Today's Highlight").last);
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('entry-detail-highlight')), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('entry-detail-highlight')), findsOneWidget);
     expect(find.text('THE MOMENT YOU KEPT'), findsOneWidget);
     await tester.tap(find.byTooltip('Back to all entries'));
     await tester.pumpAndSettle();
@@ -193,6 +199,108 @@ void main() {
     expect(find.text('REST & ENERGY'), findsOneWidget);
     await tester.tap(find.byTooltip('Back to all entries'));
     await tester.pumpAndSettle();
+  });
+
+  Future<void> pumpRecords(WidgetTester tester, List<RoutineLog> logs) async {
+    SharedPreferences.setMockInitialValues({'preferred_language': 'english'});
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => UserProvider()),
+        ChangeNotifierProvider<JournalProvider>(
+            create: (_) => _FakeJournalProvider([])),
+        ChangeNotifierProvider<GratitudeProvider>(
+            create: (_) => _FakeGratitudeProvider([])),
+        ChangeNotifierProvider<MoodProvider>(
+            create: (_) => _FakeMoodProvider([])),
+        ChangeNotifierProvider(
+            create: (_) =>
+                RoutinesProvider(initialLogs: logs, syncOnCreate: false)),
+      ],
+      child: const MaterialApp(home: UnifiedEntriesScreen()),
+    ));
+    await tester.pumpAndSettle();
+  }
+
+  RoutineLog savedLog(String routineId, String note, {SleepFeeling? feeling}) =>
+      RoutineLog.fromMap({
+        'id': 'saved-$routineId',
+        'routine_id': routineId,
+        'routine_type': 'morning',
+        'completed_at': '2026-10-19T08:00:00Z',
+        'focus_or_highlight': note,
+        'sleep_feeling': feeling?.name,
+      });
+
+  for (final activity in ['breathing', 'grounding']) {
+    testWidgets('saved $activity has its own record, filter and detail view',
+        (tester) async {
+      final breathing = activity == 'breathing';
+      final note = breathing
+          ? 'Completed 2 minute Box breathing breathing exercise.'
+          : 'Completed 5-4-3-2-1 grounding with 5 saved observations.';
+      final title = breathing ? 'Breathing Session' : 'Grounding Session';
+      await pumpRecords(tester, [
+        savedLog('${activity}_123', note),
+        savedLog('focus_456', 'My real focus'),
+      ]);
+      expect(find.text(title), findsOneWidget);
+      expect(find.text("Today's Highlight"), findsNothing);
+
+      final filter = find.byKey(ValueKey('records-filter-$activity'));
+      await tester.scrollUntilVisible(filter.hitTestable(), 150,
+          scrollable: find.descendant(
+              of: find.byType(ListView).first,
+              matching: find.byType(Scrollable)));
+      await tester.tap(filter);
+      await tester.pumpAndSettle();
+      expect(tester.widget<ChoiceChip>(filter).selected, isTrue);
+      expect(find.text(title), findsOneWidget);
+      expect(find.text("Today's Focus"), findsNothing);
+      expect(find.text('My real focus'), findsNothing);
+      await tester.tap(find.text(title));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('entry-detail-$activity')), findsOneWidget);
+      expect(find.text(breathing ? 'BREATHING SESSION' : 'GROUNDING SESSION'),
+          findsOneWidget);
+      expect(find.text('THE DIRECTION YOU CHOSE'), findsNothing);
+      expect(find.text('“$note”'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final routineId in ['sleep_123', 'morning']) {
+    testWidgets('$routineId sleep summary appears once as sleep, never focus',
+        (tester) async {
+      const summary = 'Slept 8 hrs (23:00->07:00): Woke up refreshed';
+      await pumpRecords(tester,
+          [savedLog(routineId, summary, feeling: SleepFeeling.wellRested)]);
+      expect(find.text('Sleep Status: Well Rested'), findsOneWidget);
+      expect(find.text(summary), findsOneWidget);
+      expect(find.text("Today's Focus"), findsNothing);
+      expect(find.text("Today's Highlight"), findsNothing);
+      await tester.tap(find.text('Sleep Status: Well Rested'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('entry-detail-sleep')), findsOneWidget);
+      expect(find.text(summary), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('combined morning routine retains a real focus and sleep log',
+      (tester) async {
+    await pumpRecords(tester, [
+      savedLog('morning', 'Finish my project calmly.',
+          feeling: SleepFeeling.wellRested)
+    ]);
+    expect(find.text("Today's Focus"), findsNWidgets(2));
+    expect(find.text('Sleep Status: Well Rested'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).first, 'Finish my project');
+    await tester.pumpAndSettle();
+    expect(find.text('Sleep Status: Well Rested'), findsNothing);
+    expect(find.text('Finish my project calmly.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }
 

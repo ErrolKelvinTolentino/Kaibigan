@@ -168,7 +168,7 @@ void main() {
     final screens = <Widget>[
       const AffirmationsScreen(),
       const MoodTrackerScreen(),
-      const RoutinesHubScreen(),
+      const RoutinesHubScreen(autoplay: false),
       const JournalListScreen(),
       const UnifiedEntriesScreen(),
       const SettingsScreen(),
@@ -209,7 +209,7 @@ void main() {
     final screens = <Widget>[
       const AffirmationsScreen(),
       const MoodTrackerScreen(),
-      const RoutinesHubScreen(),
+      const RoutinesHubScreen(autoplay: false),
       const JournalListScreen(),
       const GardenScreen(),
       const FutureLettersScreen(),

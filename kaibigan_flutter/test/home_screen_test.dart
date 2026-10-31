@@ -199,8 +199,8 @@ void main() {
 
     expect(find.byKey(const ValueKey('daily-path-details')), findsNothing);
     await tester.scrollUntilVisible(
-      find.byKey(const ValueKey('see-all-activities')),
-      500,
+      find.byKey(const ValueKey('home-highlight-card')),
+      200,
       scrollable: find
           .descendant(
             of: find.byKey(const ValueKey('home-scroll-view')),
@@ -208,15 +208,15 @@ void main() {
           )
           .first,
     );
-    await tester.ensureVisible(find.byKey(const ValueKey('see-all-activities')));
+    await tester.tap(find.byKey(const ValueKey('home-highlight-card')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('see-all-activities')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Today\'s highlight'));
-    await tester.pumpAndSettle();
-
     expect(find.byType(TodaysHighlightScreen), findsOneWidget);
     expect(find.text('Latest bright moment'), findsOneWidget);
+    final highlightField = tester.widget<TextField>(find.byType(TextField));
+    expect(highlightField.decoration?.filled, isFalse);
+    expect(highlightField.decoration?.fillColor, Colors.transparent);
+    expect(highlightField.decoration?.border, InputBorder.none);
+    expect(highlightField.decoration?.enabledBorder, InputBorder.none);
     expect(tester.takeException(), isNull);
   });
 
@@ -286,6 +286,21 @@ void main() {
 
     expect(find.byKey(const ValueKey('all-activities-menu')), findsOneWidget);
     expect(find.text('All activities'), findsOneWidget);
+    final grid = tester
+        .widget<GridView>(find.byKey(const ValueKey('all-activities-menu')));
+    expect(grid.childrenDelegate.estimatedChildCount, 8);
+    expect(find.text('Gratitude Garden'), findsOneWidget);
+    expect(find.text('Mood Tracker'), findsOneWidget);
+    expect(find.text('Weekly reflection'), findsNothing);
+    expect(find.text('Routines'), findsNothing);
+    expect(find.text("Today's highlight"), findsNothing);
+    expect(find.text('Focus'), findsNothing);
+    expect(find.text('Sleep log'), findsNothing);
+    await tester.drag(find.byKey(const ValueKey('all-activities-menu')),
+        const Offset(0, -500));
+    await tester.pumpAndSettle();
+    expect(find.text('Grounding'), findsOneWidget);
+    expect(find.text('Breathe'), findsOneWidget);
     expect(find.byType(BottomNavigationBar), findsNothing);
     expect(find.byType(NavigationBar), findsNothing);
   });

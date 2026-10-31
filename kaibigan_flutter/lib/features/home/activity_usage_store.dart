@@ -75,6 +75,14 @@ class ActivityUsageStore {
     _syncToSupabase();
   }
 
+  /// Clears local activity counts, login dates, and pinned favorites from device storage (e.g. on logout).
+  static Future<void> clearActivityStats() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_loginDatesKey);
+    await prefs.remove(_activityCountsKey);
+    await prefs.remove(_pinnedFavoritesKey);
+  }
+
   /// Synchronizes local activity stats with Supabase database (bi-directional merge).
   static Future<void> syncWithSupabase() async {
     if (!SupabaseService.isInitialized) return;

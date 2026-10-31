@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/constants/app_typography.dart';
 import '../../core/theme/kaibigan_tokens.dart';
 import '../../core/utils/language_helper.dart';
 import '../../core/widgets/kaibigan_logo.dart';
@@ -27,20 +28,21 @@ import '../mood_tracking/mood_provider.dart';
 import '../mood_tracking/mood_tracker_screen.dart';
 import '../routines/flows/progressive_routine_runner.dart';
 import '../routines/routine_model.dart';
+import '../routines/routine_management_screen.dart';
 import '../routines/routines_hub_screen.dart';
 import '../routines/routines_provider.dart';
 import '../routines/screens/daily_reflection_screen.dart';
 import '../routines/screens/grounding_session_screen.dart';
 import '../routines/screens/mindfulness_meditation_screen.dart';
 import '../routines/screens/sleep_analytics_screen.dart';
-import '../routines/screens/todays_focus_screen.dart';
 import '../routines/screens/todays_highlight_screen.dart';
 import '../settings/settings_screen.dart';
 import '../settings/user_provider.dart';
-import '../unified_entries/unified_entries_screen.dart';
 import '../weekly_reflection/weekly_reflection_screen.dart';
 import 'activity_feedback_store.dart';
 import 'activity_usage_store.dart';
+import '../auth_onboarding/app_tutorial_screen.dart';
+import '../companion/companion_model.dart';
 import 'widgets/home_favorites_carousel.dart';
 import 'widgets/home_streak_greeting_card.dart';
 import 'widgets/today_moments_card.dart';
@@ -379,9 +381,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final routine = activeRoutine ?? routines.recommendedRoutine;
     final descriptor =
         _RoutineDescriptor.forType(routine?.type ?? routines.currentPhase);
-    final routineCompleted =
-        routine != null && routines.isRoutineCompletedTodayById(routine.id);
-    final isResuming = activeRoutine != null && !routineCompleted;
+    final routineCompleted = activeRoutine == null &&
+        routine != null &&
+        routines.isCompletedForPeriod(routine, DateTime.now());
+    final isResuming = activeRoutine != null;
     final highlight = routines.todayHighlight;
     final affirmation = affirmations?.homeAffirmationForDay(
           DateTime.now(),
@@ -446,46 +449,75 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       ),
                     ),
                   ),
-                SliverPadding(
-                  padding: EdgeInsets.fromLTRB(
-                    pagePadding + 2,
-                    16,
-                    pagePadding + 2,
-                    8,
-                  ),
-                  sliver: SliverToBoxAdapter(
-                    child: _sectionHeading(
-                      title: LanguageHelper.pick(
+                if (user.hasCompletedSetup && !user.hasSeenAppTutorial)
+                  SliverPadding(
+                    key: const ValueKey('home-onboarding-card-block'),
+                    padding:
+                        EdgeInsets.fromLTRB(pagePadding, 6, pagePadding, 10),
+                    sliver: SliverToBoxAdapter(
+                      child: _buildOnboardingWelcomeCard(
+                        context,
+                        user,
+                        isDark,
                         language,
-                        english: 'My Favorites',
-                        filipino: 'Aking mga Paborito',
-                      ),
-                      subtitle: LanguageHelper.pick(
-                        language,
-                        english: 'Your most used spaces and daily companions',
-                        filipino: 'Iyong mga pinakaginagamit na espasyo',
-                      ),
-                      action: TextButton(
-                        key: const ValueKey('see-all-favorites'),
-                        onPressed: () => _openActivitiesMenu(context),
-                        child: Text(
-                          LanguageHelper.pick(
-                            language,
-                            english: 'See all',
-                            filipino: 'Tingnan lahat',
-                          ),
-                        ),
                       ),
                     ),
                   ),
-                ),
-                SliverToBoxAdapter(
+                Builder(
                   key: const ValueKey('home-favorites-block'),
-                  child: HomeFavoritesCarousel(
-                    favorites: _buildFavoritesList(context, language),
-                    isDark: isDark,
-                    language: language,
-                  ),
+                  builder: (context) {
+                    final hasRealUsage =
+                        _activityCounts.values.any((c) => c > 0);
+                    return SliverMainAxisGroup(
+                      slivers: [
+                        SliverPadding(
+                          padding: EdgeInsets.fromLTRB(
+                            pagePadding + 2,
+                            16,
+                            pagePadding + 2,
+                            8,
+                          ),
+                          sliver: SliverToBoxAdapter(
+                            child: _sectionHeading(
+                              title: LanguageHelper.pick(
+                                language,
+                                english: 'My Favorites',
+                                filipino: 'Aking mga Paborito',
+                              ),
+                              subtitle: LanguageHelper.pick(
+                                language,
+                                english: hasRealUsage
+                                    ? 'Your most used spaces and daily companions'
+                                    : 'Default starter spaces — updates as you explore',
+                                filipino: hasRealUsage
+                                    ? 'Iyong mga pinakaginagamit na espasyo'
+                                    : 'Mga panimulang espasyo — nagbabago habang ginagamit',
+                              ),
+                              action: TextButton(
+                                key: const ValueKey('see-all-favorites'),
+                                onPressed: () => _openActivitiesMenu(context),
+                                child: Text(
+                                  LanguageHelper.pick(
+                                    language,
+                                    english: 'See all',
+                                    filipino: 'Tingnan lahat',
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        SliverToBoxAdapter(
+                          child: HomeFavoritesCarousel(
+                            favorites: _buildFavoritesList(context, language),
+                            isDark: isDark,
+                            language: language,
+                            isSuggested: !hasRealUsage,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
                 SliverPadding(
                   padding: EdgeInsets.fromLTRB(
@@ -609,17 +641,34 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     8,
                   ),
                   sliver: SliverToBoxAdapter(
-                    child: _sectionHeading(
-                      title: LanguageHelper.pick(
-                        language,
-                        english: 'Your routine',
-                        filipino: 'Iyong routine',
-                      ),
-                      subtitle: LanguageHelper.pick(
-                        language,
-                        english: 'Your daily anchor',
-                        filipino: 'Araw-araw mong sandigan',
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _sectionHeading(
+                          title: LanguageHelper.pick(
+                            language,
+                            english: 'Your routine',
+                            filipino: 'Iyong routine',
+                          ),
+                          subtitle: LanguageHelper.pick(
+                            language,
+                            english: 'Your daily anchor',
+                            filipino: 'Araw-araw mong sandigan',
+                          ),
+                        ),
+                        TextButton.icon(
+                          key: const ValueKey('home-routine-settings'),
+                          onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) =>
+                                      const RoutineManagementScreen())),
+                          icon: const Icon(Icons.tune_rounded, size: 18),
+                          label: Text(LanguageHelper.pick(language,
+                              english: 'Routine settings',
+                              filipino: 'Mga setting ng routine')),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -766,22 +815,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ],
               ),
             ),
-            _headerButton(
-              isDark: isDark,
-              icon: Icons.auto_stories_outlined,
-              tooltip: LanguageHelper.pick(
-                language,
-                english: 'All entries',
-                filipino: 'Lahat ng tala',
-              ),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const UnifiedEntriesScreen(),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
             _headerButton(
               key: const ValueKey('home-settings-button'),
               isDark: isDark,
@@ -1039,7 +1072,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             MaterialPageRoute(builder: (_) => const MoodTrackerScreen()),
           );
         },
-        usageCount: _activityCounts['mood'] ?? 10,
+        usageCount: _activityCounts['mood'] ?? 0,
       ),
       FavoriteActivityData(
         id: 'gratitude',
@@ -1066,7 +1099,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             MaterialPageRoute(builder: (_) => const GardenScreen()),
           );
         },
-        usageCount: _activityCounts['gratitude'] ?? 8,
+        usageCount: _activityCounts['gratitude'] ?? 0,
       ),
       FavoriteActivityData(
         id: 'journal',
@@ -1093,7 +1126,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             MaterialPageRoute(builder: (_) => const JournalListScreen()),
           );
         },
-        usageCount: _activityCounts['journal'] ?? 5,
+        usageCount: _activityCounts['journal'] ?? 0,
       ),
       FavoriteActivityData(
         id: 'grounding',
@@ -1202,6 +1235,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ),
     ];
 
+    final hasRealUsage = _activityCounts.values.any((c) => c > 0);
+    if (!hasRealUsage) {
+      // Beginners start with Mood Tracker, Gratitude Garden, and AI Journal
+      return [allCandidates[0], allCandidates[1], allCandidates[2]];
+    }
+
     allCandidates.sort((a, b) => b.usageCount.compareTo(a.usageCount));
     return allCandidates.take(3).toList();
   }
@@ -1216,6 +1255,153 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         description: subtitle,
         action: action,
       );
+
+  Widget _buildOnboardingWelcomeCard(
+    BuildContext context,
+    UserProvider user,
+    bool isDark,
+    String language,
+  ) {
+    final companion = MascotInfo.getById(user.selectedCompanion);
+
+    return Container(
+      key: const ValueKey('home-onboarding-welcome-card'),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkCard : Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: companion.primaryColor.withValues(alpha: isDark ? 0.35 : 0.28),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: companion.primaryColor.withValues(alpha: 0.10),
+            blurRadius: 18,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: companion.primaryColor.withValues(alpha: 0.16),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Icon(
+                    companion.materialIcon,
+                    color: companion.primaryColor,
+                    size: 24,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      LanguageHelper.pick(
+                        language,
+                        english: 'Welcome to Kaibigan, ${user.displayName}!',
+                        filipino: 'Maligayang pagdating, ${user.displayName}!',
+                        taglish: 'Welcome to Kaibigan, ${user.displayName}!',
+                      ),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: isDark
+                            ? AppColors.textPrimaryDark
+                            : AppColors.textPrimaryLight,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      LanguageHelper.pick(
+                        language,
+                        english:
+                            'Take a quick 1-minute tour to see how your routines, activities, and private spaces work.',
+                        filipino:
+                            'Subukan ang 1-minutong gabay upang malaman ang iyong mga routines, aktibidad, at espasyo.',
+                        taglish:
+                            'Take a quick 1-minute tour para makita ang daily routines, calming activities, at private spaces mo.',
+                      ),
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.4,
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : AppColors.textSecondaryLight,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                key: const ValueKey('dismiss-onboarding-welcome-card'),
+                icon: Icon(
+                  Icons.close_rounded,
+                  size: 18,
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
+                ),
+                tooltip: 'Dismiss',
+                onPressed: () => user.completeAppTutorial(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  key: const ValueKey('start-onboarding-tour-button'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: companion.primaryColor,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  icon: const Icon(Icons.explore_rounded, size: 18),
+                  label: Text(
+                    LanguageHelper.pick(
+                      language,
+                      english: 'Start 1-Min Tour',
+                      filipino: 'Simulan ang Tour',
+                      taglish: 'Start 1-Min Tour',
+                    ),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const AppTutorialScreen(),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildRoutineCard({
     required BuildContext context,
@@ -1296,7 +1482,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         onTap: completed || loading || routine == null
             ? () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const RoutinesHubScreen()),
+                  MaterialPageRoute(
+                      builder: (_) => const RoutinesHubScreen(autoplay: false)),
                 );
               }
             : () => _openRoutine(routine, resume: resuming),
@@ -1463,9 +1650,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         vertical: 5,
                       ),
                       decoration: BoxDecoration(
-                        color: completed
-                            ? accent.withValues(alpha: 0.14)
-                            : accent,
+                        color:
+                            completed ? accent.withValues(alpha: 0.14) : accent,
                         borderRadius: BorderRadius.circular(99),
                       ),
                       child: Row(
@@ -1788,13 +1974,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
           borderRadius: BorderRadius.circular(26),
           border: Border.all(
-            color: const Color(0xFFC4B5FD)
-                .withValues(alpha: isDark ? 0.30 : 0.60),
+            color:
+                const Color(0xFFC4B5FD).withValues(alpha: isDark ? 0.30 : 0.60),
           ),
           boxShadow: [
             BoxShadow(
-              color:
-                  const Color(0xFF7C3AED).withValues(alpha: isDark ? 0.12 : 0.07),
+              color: const Color(0xFF7C3AED)
+                  .withValues(alpha: isDark ? 0.12 : 0.07),
               blurRadius: 24,
               offset: const Offset(0, 8),
             ),
@@ -1839,7 +2025,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             : Colors.white.withValues(alpha: 0.90),
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                          color: const Color(0xFFC4B5FD).withValues(alpha: 0.40),
+                          color:
+                              const Color(0xFFC4B5FD).withValues(alpha: 0.40),
                         ),
                       ),
                       child: const Icon(
@@ -2010,185 +2197,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  List<_ActivityItem> _activities(BuildContext context) {
-    final language = context.read<UserProvider>().language;
-    String copy(String english, String filipino) => LanguageHelper.pick(
-          language,
-          english: english,
-          filipino: filipino,
-        );
-    return [
-      _ActivityItem(
-        title: copy('Weekly reflection', 'Lingguhang pagninilay'),
-        subtitle: copy('Connect your week', 'Pag-ugnayin ang linggo'),
-        accent: AppColors.lavenderMist,
-        assetPath: FeatureIconHelper.weeklyInsights,
-        placeholderIcon: Icons.auto_graph_rounded,
-        placeholderColor: AppColors.honeyAmber,
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const WeeklyReflectionScreen()),
-          );
-        },
-      ),
-      _ActivityItem(
-        title: copy('Gratitude', 'Pasasalamat'),
-        subtitle: copy('Plant a flower', 'Magtanim ng bulaklak'),
-        accent: AppColors.softOlive,
-        assetPath: FeatureIconHelper.gratitudeGarden,
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const GardenScreen()),
-          );
-        },
-      ),
-      _ActivityItem(
-        title: copy('Mood', 'Damdamin'),
-        subtitle: copy('Daily check-in', 'Araw-araw na check-in'),
-        accent: AppColors.warmPeach,
-        assetPath: FeatureIconHelper.moodTracker,
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const MoodTrackerScreen()),
-          );
-        },
-      ),
-      _ActivityItem(
-        title: copy('Today\'s highlight', 'Mahalagang sandali ngayon'),
-        subtitle: copy('Keep one moment', 'Itabi ang isang sandali'),
-        accent: AppColors.softYellow,
-        assetPath: FeatureIconHelper.todaysHighlight,
-        placeholderIcon: Icons.auto_awesome_outlined,
-        placeholderColor: AppColors.honeyAmber,
-        onTap: () {
-          _openHighlight(
-            context.read<RoutinesProvider>().todayHighlight,
-          );
-        },
-      ),
-      _ActivityItem(
-        title: copy('AI Journal', 'AI Talaarawan'),
-        subtitle: copy('Reflect freely', 'Malayang magnilay'),
-        accent: AppColors.honeyAmber,
-        assetPath: FeatureIconHelper.journal,
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const JournalListScreen()),
-          );
-        },
-      ),
-      _ActivityItem(
-        title: copy('Sleep log', 'Tala ng tulog'),
-        subtitle: copy('Rest & energy', 'Pahinga at lakas'),
-        accent: AppColors.periwinkle,
-        assetPath: FeatureIconHelper.sleepLog,
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const SleepAnalyticsScreen()),
-          );
-        },
-      ),
-      _ActivityItem(
-        title: copy('Reflection', 'Pagninilay'),
-        subtitle: copy('Evening review', 'Balik-tanaw sa gabi'),
-        accent: AppColors.lavenderMist,
-        assetPath: FeatureIconHelper.dailyReflection,
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const DailyReflectionScreen()),
-          );
-        },
-      ),
-      _ActivityItem(
-        title: copy('Focus', 'Pokus'),
-        subtitle: copy('Mindful priority', 'Mahalagang unahin'),
-        accent: AppColors.softYellow,
-        assetPath: FeatureIconHelper.todaysFocus,
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const TodaysFocusScreen()),
-          );
-        },
-      ),
-      _ActivityItem(
-        title: copy('Future letters', 'Mga liham sa hinaharap'),
-        subtitle: copy('Sealed notes', 'Mga selyadong tala'),
-        accent: AppColors.warmPeach,
-        assetPath: FeatureIconHelper.entries,
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const FutureLettersScreen()),
-          );
-        },
-      ),
-      _ActivityItem(
-        title: copy('Affirmations', 'Mga pagpapatibay'),
-        subtitle: copy('Supportive reminders', 'Mga paalalang may malasakit'),
-        accent: AppColors.softRose,
-        assetPath: FeatureIconHelper.affirmations,
-        placeholderIcon: Icons.format_quote_rounded,
-        placeholderColor: AppColors.honeyAmber,
-        onTap: () {
-          _openAffirmations();
-        },
-      ),
-      _ActivityItem(
-        title: copy('Grounding', 'Pagpapakalma'),
-        subtitle: copy('5–4–3–2–1 senses', '5–4–3–2–1 pandama'),
-        accent: AppColors.softOlive,
-        assetPath: FeatureIconHelper.grounding,
-        placeholderIcon: Icons.spa_outlined,
-        placeholderColor: AppColors.honeyAmber,
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const GroundingSessionScreen()),
-          );
-        },
-      ),
-      _ActivityItem(
-        title: copy('Breathe', 'Huminga'),
-        subtitle: copy('Guided rhythms', 'Gabay sa paghinga'),
-        accent: AppColors.skyBlue,
-        assetPath: FeatureIconHelper.breathing,
-        placeholderIcon: Icons.air_rounded,
-        placeholderColor: AppColors.honeyGold,
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => const MindfulnessMeditationScreen(),
-            ),
-          );
-        },
-      ),
-      _ActivityItem(
-        title: copy('Routines', 'Mga gawain'),
-        subtitle: copy('Daily anchors', 'Araw-araw na gabay'),
-        accent: AppColors.honeyGold,
-        assetPath: FeatureIconHelper.routines,
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const RoutinesHubScreen()),
-          );
-        },
-      ),
-    ];
-  }
+  List<ActivityItem> _activities(BuildContext context) =>
+      ActivityItem.defaultActivities(context);
 
   void _openActivitiesMenu(BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => _ActivitiesMenuScreen(
+        builder: (_) => ActivitiesMenuScreen(
           activities: _activities(context),
         ),
       ),
@@ -2608,10 +2623,15 @@ class _FeedbackChoice extends StatelessWidget {
   }
 }
 
-class _ActivitiesMenuScreen extends StatelessWidget {
-  const _ActivitiesMenuScreen({required this.activities});
+class ActivitiesMenuScreen extends StatelessWidget {
+  const ActivitiesMenuScreen({
+    super.key,
+    this.embedded = false,
+    this.activities,
+  });
 
-  final List<_ActivityItem> activities;
+  final bool embedded;
+  final List<ActivityItem>? activities;
 
   @override
   Widget build(BuildContext context) {
@@ -2621,16 +2641,30 @@ class _ActivitiesMenuScreen extends StatelessWidget {
         isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight;
     final secondary =
         isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
+    final items = activities ?? ActivityItem.defaultActivities(context);
 
     return Scaffold(
+      backgroundColor: isDark ? AppColors.darkBackground : AppColors.warmCream,
       appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        automaticallyImplyLeading: !embedded,
+        leading: embedded
+            ? null
+            : IconButton(
+                icon: Icon(Icons.arrow_back_ios_new_rounded,
+                    color: isDark ? Colors.white : Colors.black87),
+                onPressed: () => Navigator.pop(context),
+              ),
         title: Text(
           LanguageHelper.pick(
             language,
-            english: 'All activities',
-            filipino: 'Lahat ng gawain',
+            english: embedded ? 'Activities' : 'All activities',
+            filipino: embedded ? 'Mga Gawain' : 'Lahat ng gawain',
           ),
+          style: AppTypography.heading3(context, isDark: isDark),
         ),
+        centerTitle: true,
       ),
       body: SafeArea(
         top: false,
@@ -2643,9 +2677,9 @@ class _ActivitiesMenuScreen extends StatelessWidget {
             crossAxisSpacing: 12,
             mainAxisExtent: 174,
           ),
-          itemCount: activities.length,
+          itemCount: items.length,
           itemBuilder: (context, index) {
-            final item = activities[index];
+            final item = items[index];
             return Semantics(
               button: true,
               label: '${item.title}. ${item.subtitle}',
@@ -2714,7 +2748,7 @@ class _ActivityArtwork extends StatelessWidget {
     required this.height,
   });
 
-  final _ActivityItem item;
+  final ActivityItem item;
   final double width;
   final double height;
 
@@ -2854,7 +2888,7 @@ class _RoutineDescriptor {
   }
 }
 
-class _ActivityItem {
+class ActivityItem {
   final String title;
   final String subtitle;
   final String? assetPath;
@@ -2863,7 +2897,7 @@ class _ActivityItem {
   final Color accent;
   final VoidCallback onTap;
 
-  const _ActivityItem({
+  const ActivityItem({
     required this.title,
     required this.subtitle,
     this.assetPath,
@@ -2872,4 +2906,118 @@ class _ActivityItem {
     this.accent = AppColors.honeyAmber,
     required this.onTap,
   });
+
+  static List<ActivityItem> defaultActivities(BuildContext context) {
+    final language = context.read<UserProvider>().language;
+    String copy(String english, String filipino) => LanguageHelper.pick(
+          language,
+          english: english,
+          filipino: filipino,
+        );
+    return [
+      ActivityItem(
+        title: copy('Gratitude Garden', 'Pasasalamat'),
+        subtitle: copy('Plant a flower', 'Magtanim ng bulaklak'),
+        accent: AppColors.softOlive,
+        assetPath: FeatureIconHelper.gratitudeGarden,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const GardenScreen()),
+          );
+        },
+      ),
+      ActivityItem(
+        title: copy('Mood Tracker', 'Damdamin'),
+        subtitle: copy('Daily check-in', 'Araw-araw na check-in'),
+        accent: AppColors.warmPeach,
+        assetPath: FeatureIconHelper.moodTracker,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const MoodTrackerScreen()),
+          );
+        },
+      ),
+      ActivityItem(
+        title: copy('AI Journal', 'AI Talaarawan'),
+        subtitle: copy('Reflect freely', 'Malayang magnilay'),
+        accent: AppColors.honeyAmber,
+        assetPath: FeatureIconHelper.journal,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const JournalListScreen()),
+          );
+        },
+      ),
+      ActivityItem(
+        title: copy('Reflection', 'Pagninilay'),
+        subtitle: copy('Evening review', 'Balik-tanaw sa gabi'),
+        accent: AppColors.lavenderMist,
+        assetPath: FeatureIconHelper.dailyReflection,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const DailyReflectionScreen()),
+          );
+        },
+      ),
+      ActivityItem(
+        title: copy('Future letters', 'Mga liham sa hinaharap'),
+        subtitle: copy('Sealed notes', 'Mga selyadong tala'),
+        accent: AppColors.warmPeach,
+        assetPath: FeatureIconHelper.entries,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const FutureLettersScreen()),
+          );
+        },
+      ),
+      ActivityItem(
+        title: copy('Affirmations', 'Mga pagpapatibay'),
+        subtitle: copy('Supportive reminders', 'Mga paalalang may malasakit'),
+        accent: AppColors.softRose,
+        assetPath: FeatureIconHelper.affirmations,
+        placeholderIcon: Icons.format_quote_rounded,
+        placeholderColor: AppColors.honeyAmber,
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const AffirmationsScreen()),
+          );
+        },
+      ),
+      ActivityItem(
+        title: copy('Grounding', 'Pagpapakalma'),
+        subtitle: copy('5–4–3–2–1 senses', '5–4–3–2–1 pandama'),
+        accent: AppColors.softOlive,
+        assetPath: FeatureIconHelper.grounding,
+        placeholderIcon: Icons.spa_outlined,
+        placeholderColor: AppColors.honeyAmber,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const GroundingSessionScreen()),
+          );
+        },
+      ),
+      ActivityItem(
+        title: copy('Breathe', 'Huminga'),
+        subtitle: copy('Guided rhythms', 'Gabay sa paghinga'),
+        accent: AppColors.skyBlue,
+        assetPath: FeatureIconHelper.breathing,
+        placeholderIcon: Icons.air_rounded,
+        placeholderColor: AppColors.honeyGold,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const MindfulnessMeditationScreen(),
+            ),
+          );
+        },
+      ),
+    ];
+  }
 }

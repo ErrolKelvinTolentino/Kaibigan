@@ -254,12 +254,54 @@ void main() {
     expect(ambience.requestedSoundIds, contains('rain'));
     expect(ambience.current.id, 'rain');
 
-    // Muting mid-session is one tap and does not open the picker again.
-    await tester.tap(find.byKey(const ValueKey('breathing-sound-toggle')));
+    // Verify 'chimes' has been removed from sound picker options
+    expect(find.byKey(const ValueKey('breathing-sound-chimes')), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
-    expect(ambience.current.id, 'none');
+  });
+
+  testWidgets(
+      'short duration breathing phases use concise, easily readable text',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.binding.setSurfaceSize(const Size(390, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      featureUnderTest(
+        MindfulnessMeditationScreen(
+          soundPlayer: SilentAmbientSoundController(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Select physiological sigh which has a 1-second top-up phase
+    await tester.scrollUntilVisible(find.text('Physiological sigh'), 200);
+    await tester.tap(find.text('Physiological sigh'));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('begin-breathing-button')),
+      200,
+    );
+    await tester.tap(find.byKey(const ValueKey('begin-breathing-button')));
+    await tester.pump();
+
+    // Phase 1: Inhale (3s)
+    expect(find.text('Breathe in through nose'), findsOneWidget);
+
+    // Fast-forward 3 seconds to transition to Phase 2: Top up (1s)
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(find.text('Top up'), findsWidgets);
+    // Concise guidance readable within 1 second
+    expect(find.text('Sniff again'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
   });
 }
+

@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/services/ai_service.dart';
 import '../../core/utils/language_helper.dart';
 import '../../core/widgets/kaibigan_logo.dart';
 import '../companion/companion_model.dart';
+import '../comfort_corner/comfort_corner_screen.dart';
+import '../mood_tracking/mood_tracker_screen.dart';
+import '../routines/screens/gratitude_planting_screen.dart';
+import '../routines/screens/grounding_session_screen.dart';
+import '../routines/screens/mindfulness_meditation_screen.dart';
+import '../routines/screens/sleep_log_flow_screen.dart';
 import 'journal_model.dart';
 import 'journal_reflection_insights.dart';
 
@@ -19,14 +24,14 @@ class JournalSaveReflectionScreen extends StatefulWidget {
 
   /// Called once the look-back is ready, so the caller can keep it with the
   /// saved record. Omitted in tests, where nothing is persisted.
-  final ValueChanged<AIJournalSaveSummary>? onSummaryReady;
+  final Future<bool> Function(AIJournalSaveSummary)? onSummaryReady;
 
   /// The entries already saved, used to say what keeps coming back. Reading
   /// one entry alone throws away the thing journalling is best at showing.
   final List<JournalEntry> previousEntries;
 
-  /// Opens the screen behind a suggested next move. Without it the
-  /// suggestions still appear, as text rather than as buttons.
+  /// Optional override for suggested activities. By default they open from
+  /// this screen, including when the insight is revisited from Records.
   final ValueChanged<JournalFollowUpKind>? onFollowUp;
 
   /// Aggregate figures from the last seven days, so the recap's suggestion
@@ -58,6 +63,8 @@ class _JournalSaveReflectionScreenState
   JournalContextReading? _context;
   bool _loading = true;
   int _page = 0;
+  bool _saving = false;
+  bool _saveFailed = false;
 
   String _copy(String english, String filipino) => LanguageHelper.pick(
         widget.language,
@@ -76,6 +83,17 @@ class _JournalSaveReflectionScreenState
       previousEntries: widget.previousEntries,
       language: widget.language,
     );
+    if (widget.entry.summary != null) {
+      _summary = widget.entry.summary;
+      _loading = false;
+      _context = JournalReflectionInsights.read(
+        entry: widget.entry,
+        previousEntries: widget.previousEntries,
+        language: widget.language,
+        summary: _summary,
+      );
+      return;
+    }
     _loadSummary();
   }
 
@@ -101,12 +119,47 @@ class _JournalSaveReflectionScreenState
           );
         });
       }
-      widget.onSummaryReady?.call(summary);
+      await _persistSummary(summary);
     } catch (_) {
       // The intentionally simple fallback below is the complete failure state.
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _persistSummary(AIJournalSaveSummary summary) async {
+    final save = widget.onSummaryReady;
+    if (save == null) return;
+    if (mounted) setState(() => _saving = true);
+    var saved = false;
+    try {
+      saved = await save(summary);
+    } catch (_) {
+      // Keep the reflection visible and offer a retry when persistence fails.
+    }
+    if (mounted) {
+      setState(() {
+        _saving = false;
+        _saveFailed = !saved;
+      });
+    }
+  }
+
+  void _openFollowUp(JournalFollowUpKind kind) {
+    if (widget.onFollowUp != null) {
+      widget.onFollowUp!(kind);
+      return;
+    }
+    Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => switch (kind) {
+              JournalFollowUpKind.breathing =>
+                const MindfulnessMeditationScreen(),
+              JournalFollowUpKind.grounding => const GroundingSessionScreen(),
+              JournalFollowUpKind.gratitude => const GratitudePlantingScreen(),
+              JournalFollowUpKind.moodCheckIn => const MoodTrackerScreen(),
+              JournalFollowUpKind.sleepLog => const SleepLogFlowScreen(),
+              JournalFollowUpKind.comfortCorner => const ComfortCornerScreen(),
+            }));
   }
 
   @override
@@ -142,7 +195,7 @@ class _JournalSaveReflectionScreenState
       ),
       body: SafeArea(
         child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 320),
+          duration: const Duration(milliseconds: 120),
           child: _loading
               ? _loadingView(isDark)
               : _summary == null
@@ -163,7 +216,6 @@ class _JournalSaveReflectionScreenState
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _mascotOrb(mascot, 78),
             const SizedBox(height: 24),
             Text(
               _copy('Holding this moment with you…',
@@ -199,7 +251,6 @@ class _JournalSaveReflectionScreenState
   }
 
   Widget _fallbackView(bool isDark) {
-    final mascot = MascotInfo.getById(widget.companionId);
     return Center(
       key: const ValueKey('journal-summary-fallback'),
       child: SingleChildScrollView(
@@ -232,7 +283,6 @@ class _JournalSaveReflectionScreenState
                       color: AppColors.sageGreen.withValues(alpha: 0.35),
                       size: 34),
                 ),
-                _mascotOrb(mascot, 92),
               ],
             ),
             const SizedBox(height: 26),
@@ -281,9 +331,7 @@ class _JournalSaveReflectionScreenState
                     followUp: followUp,
                     isDark: isDark,
                     accent: AppColors.sageGreen,
-                    onTap: widget.onFollowUp == null
-                        ? null
-                        : () => widget.onFollowUp!(followUp.kind),
+                    onTap: () => _openFollowUp(followUp.kind),
                   ),
                 ),
             ],
@@ -298,7 +346,7 @@ class _JournalSaveReflectionScreenState
           ],
         ),
       ),
-    ).animate().fadeIn(duration: 350.ms);
+    );
   }
 
   Widget _summaryView(AIJournalSaveSummary summary, bool isDark) {
@@ -328,7 +376,8 @@ class _JournalSaveReflectionScreenState
         _reflectionCard(
           key: const ValueKey('journal-summary-question-card'),
           eyebrow: _copy('A QUESTION TO SIT WITH', 'TANONG NA PAG-ISIPAN'),
-          title: _copy('No answer needed today', 'Walang kailangang sagot ngayon'),
+          title:
+              _copy('No answer needed today', 'Walang kailangang sagot ngayon'),
           body: summary.question,
           emotions: const [],
           icon: Icons.help_outline_rounded,
@@ -369,6 +418,19 @@ class _JournalSaveReflectionScreenState
     return Column(
       key: const ValueKey('journal-summary-success'),
       children: [
+        if (_saveFailed)
+          MaterialBanner(
+            content: Text(_copy(
+              'Your entry is saved, but these insights could not be kept yet.',
+              'Naka-save ang tala, pero hindi pa naingatan ang mga insight.',
+            )),
+            actions: [
+              TextButton(
+                onPressed: _saving ? null : () => _persistSummary(summary),
+                child: Text(_copy('Retry', 'Subukan muli')),
+              ),
+            ],
+          ),
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
           child: Column(
@@ -442,7 +504,7 @@ class _JournalSaveReflectionScreenState
               icon: Icon(
                   isLast ? Icons.check_rounded : Icons.arrow_forward_rounded),
               label: Text(isLast
-                  ? _copy('Keep this moment', 'Ingatan ang sandaling ito')
+                  ? _copy('Done', 'Tapos na')
                   : _copy('Continue', 'Magpatuloy')),
             ),
           ),
@@ -528,9 +590,7 @@ class _JournalSaveReflectionScreenState
                   followUp: followUp,
                   isDark: isDark,
                   accent: accent,
-                  onTap: widget.onFollowUp == null
-                      ? null
-                      : () => widget.onFollowUp!(followUp.kind),
+                  onTap: () => _openFollowUp(followUp.kind),
                 ),
               ),
             ),
@@ -551,7 +611,7 @@ class _JournalSaveReflectionScreenState
           ],
         ),
       ),
-    ).animate().fadeIn(duration: 320.ms).slideY(begin: 0.04);
+    );
   }
 
   Widget _reflectionCard({
@@ -695,7 +755,7 @@ class _JournalSaveReflectionScreenState
           ],
         ),
       ),
-    ).animate().fadeIn(duration: 320.ms).slideY(begin: 0.04);
+    );
   }
 
   Widget _emotionChip(String emotion, bool isDark) {
@@ -763,19 +823,6 @@ class _JournalSaveReflectionScreenState
         return AppColors.softRose;
     }
   }
-
-  Widget _mascotOrb(MascotInfo mascot, double size) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: mascot.primaryColor.withValues(alpha: 0.14),
-          border:
-              Border.all(color: mascot.primaryColor.withValues(alpha: 0.22)),
-        ),
-        child: Icon(mascot.materialIcon,
-            color: mascot.primaryColor, size: size * 0.43),
-      );
 }
 
 /// One suggested next move. Tappable when the caller can route to it, plain

@@ -94,7 +94,7 @@ void main() {
     'gratitude garden': () => const GardenScreen(),
     'journal list': () => const JournalListScreen(),
     'unified entries': () => const UnifiedEntriesScreen(),
-    'routines hub': () => const RoutinesHubScreen(),
+    'routines hub': () => const RoutinesHubScreen(autoplay: false),
     'learning hub': () => const LearningHubScreen(),
     'friend support hub': () => const FriendSupportHubScreen(),
     'comfort corner': () => const ComfortCornerScreen(),

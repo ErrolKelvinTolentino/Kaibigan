@@ -6,6 +6,8 @@ enum EntryCategory {
   gratitude,
   mood,
   sleep,
+  breathing,
+  grounding,
   highlight,
   focus,
   reflection,

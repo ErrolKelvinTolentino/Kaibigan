@@ -15,6 +15,8 @@ class AddActionSheet extends StatefulWidget {
 
 class _AddActionSheetState extends State<AddActionSheet> {
   bool _isCreatingCustom = false;
+  bool _isSaving = false;
+  bool _hasPendingAction = false;
   final TextEditingController _customTitleController = TextEditingController();
   final TextEditingController _customSubtitleController =
       TextEditingController();
@@ -81,22 +83,36 @@ class _AddActionSheetState extends State<AddActionSheet> {
     super.dispose();
   }
 
-  void _addPresetAction(RoutineStep step) {
+  Future<void> _addPresetAction(RoutineStep step) async {
+    if (_isSaving) return;
+    setState(() => _isSaving = true);
     final routinesProvider =
         Provider.of<RoutinesProvider>(context, listen: false);
+    if (_hasPendingAction) {
+      await routinesProvider.saveConfigurations();
+      await _finishSave(routinesProvider);
+      return;
+    }
     final newStep = step.copyWith(
       id: 'step_${DateTime.now().millisecondsSinceEpoch}',
       isEnabled: true,
     );
     routinesProvider.addStepToRoutine(widget.routineId, newStep);
-    Navigator.pop(context);
+    _hasPendingAction = true;
+    await _finishSave(routinesProvider);
   }
 
-  void _saveCustomAction() {
-    if (_customTitleController.text.trim().isEmpty) return;
+  Future<void> _saveCustomAction() async {
+    if (_isSaving || _customTitleController.text.trim().isEmpty) return;
+    setState(() => _isSaving = true);
 
     final routinesProvider =
         Provider.of<RoutinesProvider>(context, listen: false);
+    if (_hasPendingAction) {
+      await routinesProvider.saveConfigurations();
+      await _finishSave(routinesProvider);
+      return;
+    }
     final newStep = RoutineStep(
       id: 'custom_step_${DateTime.now().millisecondsSinceEpoch}',
       title: _customTitleController.text.trim(),
@@ -111,6 +127,20 @@ class _AddActionSheetState extends State<AddActionSheet> {
     );
 
     routinesProvider.addStepToRoutine(widget.routineId, newStep);
+    _hasPendingAction = true;
+    await _finishSave(routinesProvider);
+  }
+
+  Future<void> _finishSave(RoutinesProvider routinesProvider) async {
+    await routinesProvider.flushConfigurationWrites();
+    if (!mounted) return;
+    setState(() => _isSaving = false);
+    if (routinesProvider.configurationError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(routinesProvider.configurationError!)),
+      );
+      return;
+    }
     Navigator.pop(context);
   }
 
@@ -119,7 +149,8 @@ class _AddActionSheetState extends State<AddActionSheet> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
-      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.92),
+      constraints:
+          BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.92),
       padding: EdgeInsets.only(
         top: 24,
         left: 24,
@@ -138,7 +169,8 @@ class _AddActionSheetState extends State<AddActionSheet> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(child: Text(
+                Expanded(
+                    child: Text(
                   _isCreatingCustom
                       ? 'Create Custom Action'
                       : 'Add Action to Routine',
@@ -190,26 +222,27 @@ class _AddActionSheetState extends State<AddActionSheet> {
                     borderRadius: BorderRadius.circular(16),
                     clipBehavior: Clip.antiAlias,
                     child: ListTile(
-                    leading: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppColors.sageGreen.withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.sageGreen.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(step.icon,
+                            color: AppColors.sageGreen, size: 20),
                       ),
-                      child:
-                          Icon(step.icon, color: AppColors.sageGreen, size: 20),
+                      title: Text(step.title,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 14)),
+                      subtitle: Text(step.subtitle,
+                          style: const TextStyle(fontSize: 12)),
+                      trailing:
+                          const Icon(Icons.add, color: AppColors.sageGreen),
+                      onTap: _isSaving ? null : () => _addPresetAction(step),
                     ),
-                    title: Text(step.title,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w700, fontSize: 14)),
-                    subtitle: Text(step.subtitle,
-                        style: const TextStyle(fontSize: 12)),
-                    trailing: const Icon(Icons.add, color: AppColors.sageGreen),
-                    onTap: () => _addPresetAction(step),
                   ),
-                ),
-              );
-            }),
+                );
+              }),
             ] else ...[
               TextField(
                 controller: _customTitleController,
@@ -290,8 +323,10 @@ class _AddActionSheetState extends State<AddActionSheet> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: _customTitleController.text.trim().isEmpty
-                          ? null : _saveCustomAction,
+                      onPressed: _isSaving ||
+                              _customTitleController.text.trim().isEmpty
+                          ? null
+                          : _saveCustomAction,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.sageGreen,
                         foregroundColor: Colors.white,
@@ -299,8 +334,8 @@ class _AddActionSheetState extends State<AddActionSheet> {
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20)),
                       ),
-                      child: const Text('Save Action',
-                          style: TextStyle(fontWeight: FontWeight.w700)),
+                      child: Text(_isSaving ? 'Saving…' : 'Save Action',
+                          style: const TextStyle(fontWeight: FontWeight.w700)),
                     ),
                   ),
                 ],

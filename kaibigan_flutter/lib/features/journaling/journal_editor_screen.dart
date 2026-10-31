@@ -1,14 +1,16 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/theme/journal_appearance.dart';
+import '../../core/theme/kaibigan_tokens.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../core/utils/language_helper.dart';
 import '../../core/services/pdf_service.dart';
@@ -18,32 +20,182 @@ import '../../core/services/ai_response_feedback_service.dart';
 import '../../core/services/journal_draft_service.dart';
 import '../../core/services/supabase_service.dart';
 import '../companion/companion_model.dart';
+import '../settings/journal_appearance_screen.dart';
 import '../settings/user_provider.dart';
 import '../comfort_corner/akbay_safety_sheet.dart';
-import '../comfort_corner/comfort_corner_screen.dart';
 import '../insights/wellbeing_context.dart';
 import '../mood_tracking/mood_provider.dart';
 import '../routines/routines_provider.dart';
-import '../mood_tracking/mood_tracker_screen.dart';
-import '../routines/screens/gratitude_planting_screen.dart';
-import '../routines/screens/grounding_session_screen.dart';
-import '../routines/screens/mindfulness_meditation_screen.dart';
-import '../routines/screens/sleep_log_flow_screen.dart';
 import '../../core/widgets/cozy_confirm_sheet.dart';
 import '../../core/widgets/journal_format_toolbar.dart';
 import '../../core/widgets/journal_paper_surface.dart';
+import '../../core/widgets/mobile_layout.dart';
 import 'journal_provider.dart';
-import 'journal_reflection_insights.dart';
 import 'journal_reply_starters.dart';
+import 'journal_reply_reveal.dart';
 import 'journal_model.dart';
 import 'journal_save_reflection_screen.dart';
+import 'journal_editor_chrome.dart';
+
+class MarkdownJournalEditingController extends TextEditingController {
+  MarkdownJournalEditingController({super.text});
+
+  @override
+  TextSpan buildTextSpan({
+    required BuildContext context,
+    TextStyle? style,
+    required bool withComposing,
+  }) {
+    final baseStyle = style ?? const TextStyle();
+    if (text.isEmpty) {
+      return TextSpan(text: '', style: baseStyle);
+    }
+
+    final children = <InlineSpan>[];
+    final lines = text.split('\n');
+
+    for (int i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      final isLast = i == lines.length - 1;
+      final lineEnding = isLast ? '' : '\n';
+
+      // Check if line is a markdown heading: e.g. ### Heading or ## Heading or # Heading
+      final headingMatch = RegExp(r'^(#{1,6})\s+(.*)$').firstMatch(line);
+      if (headingMatch != null) {
+        final hashes = headingMatch.group(1)!;
+        final title = headingMatch.group(2)!;
+        final level = hashes.length;
+        final scale = level == 1 ? 1.22 : (level == 2 ? 1.14 : 1.08);
+
+        // Render the hash marker very faintly so it doesn't look like raw broken syntax
+        children.add(TextSpan(
+          text: '$hashes ',
+          style: baseStyle.copyWith(
+            color: (baseStyle.color ?? Colors.black).withValues(alpha: 0.22),
+            fontSize: (baseStyle.fontSize ?? 16) * 0.85,
+            fontWeight: FontWeight.w400,
+          ),
+        ));
+        // Bold, prominent heading text
+        children.add(TextSpan(
+          text: '$title$lineEnding',
+          style: baseStyle.copyWith(
+            fontWeight: FontWeight.w700,
+            fontSize: (baseStyle.fontSize ?? 16) * scale,
+            height: 1.4,
+          ),
+        ));
+        continue;
+      }
+
+      // Check inline bold and italics: **bold**, _italic_, *italic*
+      final inlineSpans = _parseInlineMarkdown(line, baseStyle);
+      children.addAll(inlineSpans);
+      if (!isLast) {
+        children.add(TextSpan(text: '\n', style: baseStyle));
+      }
+    }
+
+    return TextSpan(children: children, style: baseStyle);
+  }
+
+  static List<InlineSpan> _parseInlineMarkdown(
+      String line, TextStyle baseStyle) {
+    final spans = <InlineSpan>[];
+    final regex = RegExp(r'(\*\*([^*]+)\*\*)|(_([^_]+)_)|(\*([^*]+)\*)');
+    int lastIndex = 0;
+
+    for (final match in regex.allMatches(line)) {
+      if (match.start > lastIndex) {
+        spans.add(TextSpan(
+          text: line.substring(lastIndex, match.start),
+          style: baseStyle,
+        ));
+      }
+
+      if (match.group(1) != null) {
+        // **bold**
+        final content = match.group(2)!;
+        spans.add(TextSpan(
+          text: '**',
+          style: baseStyle.copyWith(
+            color: (baseStyle.color ?? Colors.black).withValues(alpha: 0.22),
+          ),
+        ));
+        spans.add(TextSpan(
+          text: content,
+          style: baseStyle.copyWith(fontWeight: FontWeight.w700),
+        ));
+        spans.add(TextSpan(
+          text: '**',
+          style: baseStyle.copyWith(
+            color: (baseStyle.color ?? Colors.black).withValues(alpha: 0.22),
+          ),
+        ));
+      } else if (match.group(3) != null) {
+        // _italic_
+        final content = match.group(4)!;
+        spans.add(TextSpan(
+          text: '_',
+          style: baseStyle.copyWith(
+            color: (baseStyle.color ?? Colors.black).withValues(alpha: 0.22),
+          ),
+        ));
+        spans.add(TextSpan(
+          text: content,
+          style: baseStyle.copyWith(fontStyle: FontStyle.italic),
+        ));
+        spans.add(TextSpan(
+          text: '_',
+          style: baseStyle.copyWith(
+            color: (baseStyle.color ?? Colors.black).withValues(alpha: 0.22),
+          ),
+        ));
+      } else if (match.group(5) != null) {
+        // *italic*
+        final content = match.group(6)!;
+        spans.add(TextSpan(
+          text: '*',
+          style: baseStyle.copyWith(
+            color: (baseStyle.color ?? Colors.black).withValues(alpha: 0.22),
+          ),
+        ));
+        spans.add(TextSpan(
+          text: content,
+          style: baseStyle.copyWith(fontStyle: FontStyle.italic),
+        ));
+        spans.add(TextSpan(
+          text: '*',
+          style: baseStyle.copyWith(
+            color: (baseStyle.color ?? Colors.black).withValues(alpha: 0.22),
+          ),
+        ));
+      }
+
+      lastIndex = match.end;
+    }
+
+    if (lastIndex < line.length) {
+      spans.add(TextSpan(
+        text: line.substring(lastIndex),
+        style: baseStyle,
+      ));
+    }
+
+    return spans;
+  }
+}
 
 class JournalTurn {
   final TextEditingController userController;
+  final FocusNode focusNode = FocusNode();
+  final GlobalKey replyAnchor = GlobalKey();
   String? aiResponse;
   List<String> suggestedReplies;
   String inferredNeed;
   bool isOfflineReply;
+  bool animateReply = false;
+  int replyRevision = 0;
   CompanionMode mode;
   String? companionId;
   AIReplyFeedback? feedback;
@@ -59,10 +211,25 @@ class JournalTurn {
     this.companionId,
     this.feedback,
     this.feedbackReason,
-  }) : userController = TextEditingController(text: userText);
+  }) : userController = MarkdownJournalEditingController(
+          text: cleanLegacyMarkdownHeadings(userText),
+        );
+
+  static String cleanLegacyMarkdownHeadings(String text) {
+    return text.replaceAllMapped(
+      RegExp(r'^\s*#{1,6}\s+(.+)$', multiLine: true),
+      (match) {
+        final title = match.group(1)!.trim();
+        return title.startsWith('**') && title.endsWith('**')
+            ? title
+            : '**$title**';
+      },
+    );
+  }
 
   void dispose() {
     userController.dispose();
+    focusNode.dispose();
   }
 }
 
@@ -78,14 +245,23 @@ class JournalEditorScreen extends StatefulWidget {
   State<JournalEditorScreen> createState() => _JournalEditorScreenState();
 }
 
-class _JournalEditorScreenState extends State<JournalEditorScreen> {
+class _JournalEditorScreenState extends State<JournalEditorScreen>
+    with WidgetsBindingObserver {
   final TextEditingController _titleController = TextEditingController();
+  final FocusNode _titleFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
-  final FocusNode _activeFocusNode = FocusNode();
+  final ValueNotifier<int> _writingChanges = ValueNotifier(0);
+  FocusNode get _activeFocusNode => _turns.last.focusNode;
+  JournalTurn? _formattingTurn;
+  bool _showFormatting = false;
 
   final List<JournalTurn> _turns = [];
   bool _isGeneratingAi = false;
+  JournalTurn? _generatingTurn;
+  JournalTurn? _pendingReplyReveal;
+  double _readingSpace = 0;
   bool _isSaving = false;
+  bool _isExportingPdf = false;
   AIRequestCancellationToken? _aiCancellationToken;
   String? _activeCompanionId;
   int _promptIndex = 0;
@@ -131,6 +307,7 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     final target = widget.targetEntry;
     if (target != null) {
       _titleController.text = target.hasGeneratedTitle ? '' : target.title;
@@ -156,7 +333,13 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
       _addTurn(JournalTurn(userText: ''));
       _restoreDraft();
     }
-    _titleController.addListener(_scheduleDraftSave);
+    _titleController.addListener(() {
+      _scheduleDraftSave();
+      if (mounted) setState(() {});
+    });
+    _titleFocusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
   }
 
   String? get _draftUserId => SupabaseService.isInitialized
@@ -164,7 +347,24 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
       : null;
 
   void _addTurn(JournalTurn turn) {
-    turn.userController.addListener(_scheduleDraftSave);
+    var previousText = turn.userController.text;
+    turn.userController.addListener(() {
+      if (previousText == turn.userController.text) return;
+      final wasEmpty = previousText.trim().isEmpty;
+      previousText = turn.userController.text;
+      _scheduleDraftSave();
+      if (mounted && !_restoringDraft) {
+        _writingChanges.value++;
+        // Only starter visibility needs to rebuild the conversation. Typing
+        // updates the footer and word count without reparsing older replies.
+        if (wasEmpty != previousText.trim().isEmpty) setState(() {});
+      }
+    });
+    turn.focusNode.addListener(() {
+      if (turn.focusNode.hasFocus && mounted) {
+        setState(() => _formattingTurn = turn);
+      }
+    });
     _turns.add(turn);
   }
 
@@ -187,6 +387,7 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
       turn.dispose();
     }
     _turns.clear();
+    _formattingTurn = null;
     _titleController.text = draft['title'] as String? ?? '';
     for (final item in turns ?? const []) {
       final map = item as Map<String, dynamic>;
@@ -264,15 +465,50 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _aiCancellationToken?.cancel();
     _draftTimer?.cancel();
     _titleController.dispose();
+    _titleFocusNode.dispose();
     _scrollController.dispose();
-    _activeFocusNode.dispose();
+    _writingChanges.dispose();
     for (var turn in _turns) {
       turn.dispose();
     }
     super.dispose();
+  }
+
+  @override
+  void didChangeMetrics() {
+    WidgetsBinding.instance.addPostFrameCallback((_) => _revealReplyStart());
+  }
+
+  void _showReplyStart(JournalTurn turn) {
+    _pendingReplyReveal = turn;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _revealReplyStart());
+  }
+
+  void _revealReplyStart() {
+    if (!mounted ||
+        _pendingReplyReveal == null ||
+        !_scrollController.hasClients) {
+      return;
+    }
+    // Wait for the actual keyboard resize, rather than racing timed scrolls.
+    if (View.of(context).viewInsets.bottom > 0) return;
+    final target =
+        _pendingReplyReveal!.replyAnchor.currentContext?.findRenderObject();
+    if (target == null || !target.attached) return;
+    final offset =
+        RenderAbstractViewport.of(target).getOffsetToReveal(target, 0).offset;
+    final position = _scrollController.position;
+    if (offset > position.maxScrollExtent + 0.5) {
+      setState(() => _readingSpace += offset - position.maxScrollExtent);
+      WidgetsBinding.instance.addPostFrameCallback((_) => _revealReplyStart());
+      return;
+    }
+    _pendingReplyReveal = null;
+    _scrollController.jumpTo(offset.clamp(0.0, position.maxScrollExtent));
   }
 
   void _shufflePrompt() {
@@ -361,6 +597,7 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
   }
 
   Future<void> _triggerAiReflection() async {
+    if (_isGeneratingAi || _isSaving) return;
     final lastTurn = _turns.last;
     final textToReflectOn = lastTurn.userController.text.trim();
 
@@ -389,27 +626,12 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
     final cancellationToken = AIRequestCancellationToken();
     _aiCancellationToken?.cancel();
     _aiCancellationToken = cancellationToken;
-    setState(() => _isGeneratingAi = true);
-
-    // Scroll immediately so the thinking indicator is brought into view
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scrollController.hasClients) return;
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOutCubic,
-      );
+    setState(() {
+      _isGeneratingAi = true;
+      _generatingTurn = lastTurn;
+      _readingSpace = 0;
     });
-
-    // Ensure indicator stays centered/visible after keyboard dismiss animation
-    Future.delayed(const Duration(milliseconds: 280), () {
-      if (!mounted || !_scrollController.hasClients) return;
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOutCubic,
-      );
-    });
+    _showReplyStart(lastTurn);
 
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     final companionId = _activeCompanionId ?? userProvider.selectedCompanion;
@@ -442,7 +664,10 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
           );
         }
         setState(() {
+          _readingSpace = 0;
           lastTurn.aiResponse = aiReply.text;
+          lastTurn.animateReply = aiReply.safetyLevel == 'none';
+          lastTurn.replyRevision++;
           lastTurn.suggestedReplies = aiReply.suggestedReplies;
           lastTurn.inferredNeed = aiReply.inferredNeed;
           lastTurn.isOfflineReply = aiReply.isOffline;
@@ -457,21 +682,8 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
           ));
         });
 
-        // Focus first, then scroll after the keyboard has changed the viewport.
-        // Scrolling before that resize can leave the new paper area hidden in a
-        // cramped strip below a longer AI response.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          _activeFocusNode.requestFocus();
-          Future.delayed(const Duration(milliseconds: 320), () {
-            if (!mounted || !_scrollController.hasClients) return;
-            _scrollController.animateTo(
-              _scrollController.position.maxScrollExtent,
-              duration: const Duration(milliseconds: 360),
-              curve: Curves.easeOutCubic,
-            );
-          });
-        });
+        _showReplyStart(lastTurn);
+        _scheduleDraftSave();
       }
     } on AIRequestCancelledException {
       // Cancellation is user-directed and does not need an error message.
@@ -496,7 +708,12 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
     } finally {
       if (identical(_aiCancellationToken, cancellationToken)) {
         _aiCancellationToken = null;
-        if (mounted) setState(() => _isGeneratingAi = false);
+        if (mounted) {
+          setState(() {
+            _isGeneratingAi = false;
+            _generatingTurn = null;
+          });
+        }
       }
     }
   }
@@ -565,64 +782,65 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                Center(
-                  child: Container(
-                    width: 42,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.white24 : Colors.black12,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 18),
-                Text(
-                  _t(language,
-                      english: 'What could be better?',
-                      filipino: 'Ano ang puwedeng pagbutihin?'),
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.w900),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  _t(language,
-                      english: 'No journal text is saved with this feedback.',
-                      filipino:
-                          'Walang journal text na sine-save kasama ng feedback na ito.'),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isDark
-                        ? AppColors.textSecondaryDark
-                        : AppColors.textSecondaryLight,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                ...reasons.entries.map(
-                  (entry) => Material(
-                    color: Colors.transparent,
-                    child: ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Container(
-                        padding: const EdgeInsets.all(9),
-                        decoration: BoxDecoration(
-                          color: AppColors.honeyGold.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(entry.value.$2,
-                            size: 19, color: AppColors.honeyAmber),
+                  Center(
+                    child: Container(
+                      width: 42,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white24 : Colors.black12,
+                        borderRadius: BorderRadius.circular(4),
                       ),
-                      title: Text(entry.value.$1,
-                          style: const TextStyle(fontWeight: FontWeight.w700)),
-                      trailing: const Icon(Icons.chevron_right_rounded),
-                      onTap: () => Navigator.pop(sheetContext, entry.key),
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 18),
+                  Text(
+                    _t(language,
+                        english: 'What could be better?',
+                        filipino: 'Ano ang puwedeng pagbutihin?'),
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.w900),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _t(language,
+                        english: 'No journal text is saved with this feedback.',
+                        filipino:
+                            'Walang journal text na sine-save kasama ng feedback na ito.'),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondaryLight,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  ...reasons.entries.map(
+                    (entry) => Material(
+                      color: Colors.transparent,
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Container(
+                          padding: const EdgeInsets.all(9),
+                          decoration: BoxDecoration(
+                            color: AppColors.honeyGold.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(entry.value.$2,
+                              size: 19, color: AppColors.honeyAmber),
+                        ),
+                        title: Text(entry.value.$1,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w700)),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () => Navigator.pop(sheetContext, entry.key),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      );
+        );
       },
     );
     if (reason == null || !mounted) return;
@@ -662,25 +880,11 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
     final cancellationToken = AIRequestCancellationToken();
     _aiCancellationToken?.cancel();
     _aiCancellationToken = cancellationToken;
-    setState(() => _isGeneratingAi = true);
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scrollController.hasClients) return;
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOutCubic,
-      );
+    setState(() {
+      _isGeneratingAi = true;
+      _generatingTurn = turn;
     });
-
-    Future.delayed(const Duration(milliseconds: 280), () {
-      if (!mounted || !_scrollController.hasClients) return;
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOutCubic,
-      );
-    });
+    _showReplyStart(turn);
 
     final user = context.read<UserProvider>();
     final companionId = turn.companionId ?? user.selectedCompanion;
@@ -700,12 +904,15 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
       if (!mounted || cancellationToken.isCancelled) return;
       setState(() {
         turn.aiResponse = reply.text;
+        turn.animateReply = reply.safetyLevel == 'none';
+        turn.replyRevision++;
         turn.suggestedReplies = reply.suggestedReplies;
         turn.inferredNeed = reply.inferredNeed;
         turn.isOfflineReply = reply.isOffline;
         turn.feedback = null;
         turn.feedbackReason = null;
       });
+      _showReplyStart(turn);
       _scheduleDraftSave();
     } on AIRequestCancelledException {
       // The user explicitly cancelled this request.
@@ -726,7 +933,12 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
     } finally {
       if (identical(_aiCancellationToken, cancellationToken)) {
         _aiCancellationToken = null;
-        if (mounted) setState(() => _isGeneratingAi = false);
+        if (mounted) {
+          setState(() {
+            _isGeneratingAi = false;
+            _generatingTurn = null;
+          });
+        }
       }
     }
   }
@@ -745,423 +957,422 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
         reply.contains('Hotline') ||
         reply.contains('Crisis');
 
-    // A translucent wash rather than a solid card: the reply belongs to the
-    // page, so the ruled paper stays visible underneath it. A solid white fill
-    // here read as a box dropped into the middle of the notebook.
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 12),
-      decoration: BoxDecoration(
-        color: mascot.primaryColor.withValues(alpha: isDark ? 0.15 : 0.07),
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(6),
-          topRight: Radius.circular(22),
-          bottomLeft: Radius.circular(22),
-          bottomRight: Radius.circular(22),
+    final palette = context.kaibigan;
+    final replyFontSize =
+        15 * context.watch<UserProvider>().journalTextSize.scale;
+    final nameColor = isDark
+        ? palette.accentStrong
+        : mascot.id == 'ann'
+            ? AppColors.annDark
+            : AppColors.kaiDark;
+    // Replies sit between the writing sheets, so the paper remains for the
+    // person's own words and the companion has a clearly separate voice.
+    return JournalReplyReveal(
+      key: ObjectKey(turn),
+      text: reply,
+      animate: turn.animateReply && !isCrisisReply,
+      revision: turn.replyRevision,
+      builder: (context, visibleReply, isRevealing, showFullReply) => Container(
+        key: ValueKey('journal-ai-reply-$turnIndex'),
+        margin: const EdgeInsets.symmetric(vertical: 18),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color.alphaBlend(
+                    mascot.primaryColor.withValues(alpha: isDark ? 0.1 : 0.07),
+                    palette.surface),
+                palette.surface
+              ]),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+              color:
+                  mascot.primaryColor.withValues(alpha: isDark ? 0.28 : 0.18)),
         ),
-        border: Border.all(
-          color: mascot.primaryColor.withValues(alpha: isDark ? 0.34 : 0.24),
-          width: 1.2,
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(17, 13, 14, 17),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: mascot.primaryColor.withValues(alpha: 0.2),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(mascot.materialIcon,
-                            size: 16, color: mascot.primaryColor),
-                      ),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          mascot.name,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color: mascot.primaryColor,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 7),
-                      Flexible(
-                        child: Text(
-                          isOfflineReply
-                              ? _t(
-                                  language,
-                                  english: 'a quiet note',
-                                  filipino: 'munting tala',
-                                )
-                              : _t(
-                                  language,
-                                  english: 'with you',
-                                  filipino: 'kasama mo',
-                                ),
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600,
-                            color: isDark ? Colors.white38 : Colors.black38,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.copy_rounded, size: 16),
-                  color: isDark ? Colors.white54 : Colors.black45,
-                  tooltip: _t(
-                    language,
-                    english: 'Copy reflection',
-                    filipino: 'Kopyahin ang pagninilay',
-                  ),
-                  onPressed: () {
-                    Clipboard.setData(ClipboardData(text: reply));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          _t(
-                            language,
-                            english: 'Reflection from ${mascot.name} copied.',
-                            filipino:
-                                'Nakopya ang pagninilay mula kay ${mascot.name}.',
-                          ),
-                        ),
-                        behavior: SnackBarBehavior.floating,
-                        duration: const Duration(seconds: 2),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Markdown Body
-            MarkdownBody(
-              data: reply,
-              selectable: true,
-              styleSheet: MarkdownStyleSheet(
-                p: TextStyle(
-                  fontSize: 15,
-                  height: 1.6,
-                  fontWeight: FontWeight.w500,
-                  color: isDark
-                      ? AppColors.textPrimaryDark
-                      : AppColors.textPrimaryLight,
-                ),
-                em: GoogleFonts.lora(
-                  fontStyle: FontStyle.italic,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                  color: isDark ? AppColors.honeyGold : AppColors.honeyAmber,
-                  height: 1.5,
-                ),
-                strong: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  color: isDark ? Colors.white : Colors.black87,
-                ),
-                blockquote: TextStyle(
-                  fontStyle: FontStyle.italic,
-                  color: isDark ? Colors.white70 : Colors.black87,
-                ),
-                blockquoteDecoration: BoxDecoration(
-                  border: Border(
-                    left: BorderSide(color: mascot.primaryColor, width: 3),
-                  ),
-                ),
-                listBullet: TextStyle(
-                  color: mascot.primaryColor,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-
-            if (!isCrisisReply) ...[
-              const SizedBox(height: 6),
-              if (turn.feedback == null)
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        constraints: const BoxConstraints.tightFor(
-                            width: 44, height: 44),
-                        padding: const EdgeInsets.all(12),
-                        tooltip: _t(language,
-                            english: 'Helpful', filipino: 'Nakatulong'),
-                        onPressed: () => _recordHelpfulFeedback(turn),
-                        icon: Icon(Icons.thumb_up_alt_outlined,
-                            size: 15,
-                            color: isDark ? Colors.white38 : Colors.black38),
-                      ),
-                      IconButton(
-                        constraints: const BoxConstraints.tightFor(
-                            width: 44, height: 44),
-                        padding: const EdgeInsets.all(12),
-                        tooltip: _t(language,
-                            english: 'Not helpful',
-                            filipino: 'Hindi nakatulong'),
-                        onPressed: () => _showNotHelpfulReasons(turn),
-                        icon: Icon(Icons.thumb_down_alt_outlined,
-                            size: 15,
-                            color: isDark ? Colors.white38 : Colors.black38),
-                      ),
-                    ],
-                  ),
-                )
-              else if (turn.feedback == AIReplyFeedback.helpful)
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Icon(Icons.check_circle_outline_rounded,
-                        size: 17,
-                        color: AppColors.sageGreen.withValues(alpha: 0.75)),
-                  ),
-                )
-              else
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    style: TextButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      textStyle: const TextStyle(
-                          fontSize: 11, fontWeight: FontWeight.w700),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 16, 16, 18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                        Text(mascot.name,
+                            style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: nameColor)),
+                        const SizedBox(height: 2),
+                        Text(
+                            isOfflineReply
+                                ? _t(language,
+                                    english: 'a quiet note',
+                                    filipino: 'munting tala')
+                                : _t(language,
+                                    english: 'Your AI companion',
+                                    filipino: 'Kasama mong AI'),
+                            style: TextStyle(
+                                fontSize: 11.5, color: palette.textSecondary)),
+                      ])),
+                  IconButton(
+                    icon: const Icon(Icons.copy_rounded, size: 16),
+                    color: isDark ? Colors.white54 : Colors.black45,
+                    tooltip: _t(
+                      language,
+                      english: 'Copy reflection',
+                      filipino: 'Kopyahin ang pagninilay',
                     ),
-                    onPressed: _isGeneratingAi
-                        ? null
-                        : () => _regenerateTurn(turn, turnIndex),
-                    icon: const Icon(Icons.refresh_rounded, size: 14),
-                    label: Text(_t(language,
-                        english: 'Try another reflection',
-                        filipino: 'Subukan ang ibang pagninilay')),
-                  ),
-                ),
-            ],
-
-            // Crisis Hotlines Card
-            if (isCrisisReply) ...[
-              const SizedBox(height: 14),
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.redAccent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                      color: Colors.redAccent.withValues(alpha: 0.3)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.shield_outlined,
-                            color: Colors.redAccent, size: 18),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            '24/7 Free Crisis Support (Philippines)',
-                            style: const TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.redAccent,
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: reply));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            _t(
+                              language,
+                              english: 'Reflection from ${mascot.name} copied.',
+                              filipino:
+                                  'Nakopya ang pagninilay mula kay ${mascot.name}.',
                             ),
                           ),
+                          behavior: SnackBarBehavior.floating,
+                          duration: const Duration(seconds: 2),
                         ),
-                      ],
+                      );
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // Markdown Body
+              MarkdownBody(
+                data: visibleReply,
+                selectable: !isRevealing,
+                styleSheet: MarkdownStyleSheet(
+                  p: TextStyle(
+                    fontSize: replyFontSize,
+                    height: 1.65,
+                    fontWeight: FontWeight.w500,
+                    color: isDark
+                        ? AppColors.textPrimaryDark
+                        : AppColors.textPrimaryLight,
+                  ),
+                  em: GoogleFonts.lora(
+                    fontStyle: FontStyle.italic,
+                    fontSize: replyFontSize,
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? AppColors.honeyGold : AppColors.honeyAmber,
+                    height: 1.5,
+                  ),
+                  strong: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                  blockquote: TextStyle(
+                    fontStyle: FontStyle.italic,
+                    color: isDark ? Colors.white70 : Colors.black87,
+                  ),
+                  blockquoteDecoration: BoxDecoration(
+                    border: Border(
+                      left: BorderSide(color: mascot.primaryColor, width: 3),
                     ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        ElevatedButton(
-                          onPressed: () async {
-                            final uri = Uri(scheme: 'tel', path: '911');
-                            if (await canLaunchUrl(uri)) await launchUrl(uri);
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.redAccent,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.emergency_rounded,
-                                  size: 14, color: Colors.white),
-                              SizedBox(width: 6),
-                              Flexible(
-                                child: Text(
-                                  'Emergency 911',
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        ElevatedButton(
-                          onPressed: () async {
-                            final uri = Uri(scheme: 'tel', path: '1553');
-                            if (await canLaunchUrl(uri)) await launchUrl(uri);
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.sageGreen,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.phone,
-                                  size: 14, color: Colors.white),
-                              SizedBox(width: 6),
-                              Flexible(
-                                child: Text(
-                                  'Call NCMH 1553',
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        OutlinedButton(
-                          onPressed: () async {
-                            final uri = Uri(scheme: 'tel', path: '09178001123');
-                            if (await canLaunchUrl(uri)) await launchUrl(uri);
-                          },
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.redAccent,
-                            side: const BorderSide(color: Colors.redAccent),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.phone_in_talk,
-                                  size: 14, color: Colors.redAccent),
-                              SizedBox(width: 6),
-                              Flexible(
-                                child: Text(
-                                  'In Touch 0917-800-1123',
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        OutlinedButton(
-                          onPressed: () => AkbaySafetySheet.show(context),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.sageGreen,
-                            side: const BorderSide(color: AppColors.sageGreen),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.info_outline,
-                                  size: 14, color: AppColors.sageGreen),
-                              SizedBox(width: 6),
-                              Flexible(
-                                child: Text(
-                                  'All Safety Lines',
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                  ),
+                  listBullet: TextStyle(
+                    color: mascot.primaryColor,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
-            ],
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Icon(
-                  Icons.auto_awesome_rounded,
-                  size: 11,
-                  color: isDark ? Colors.white38 : Colors.black38,
+
+              if (isRevealing)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    key: ValueKey('journal-show-full-reply-$turnIndex'),
+                    onPressed: showFullReply,
+                    child: Text(_t(language,
+                        english: 'Show full reflection',
+                        filipino: 'Ipakita ang buong pagninilay')),
+                  ),
                 ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    _t(
-                      language,
-                      english:
-                          '✦ AI response · for personal reflection, not medical advice',
-                      filipino:
-                          '✦ Tugon ng AI · para sa pagninilay, hindi medikal na payo',
+              if (!isCrisisReply && !isRevealing) ...[
+                const SizedBox(height: 6),
+                if (turn.feedback == null)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          constraints: const BoxConstraints.tightFor(
+                              width: 48, height: 48),
+                          padding: const EdgeInsets.all(12),
+                          tooltip: _t(language,
+                              english: 'Helpful', filipino: 'Nakatulong'),
+                          onPressed: () => _recordHelpfulFeedback(turn),
+                          icon: Icon(Icons.thumb_up_alt_outlined,
+                              size: 15,
+                              color: isDark ? Colors.white38 : Colors.black38),
+                        ),
+                        IconButton(
+                          constraints: const BoxConstraints.tightFor(
+                              width: 48, height: 48),
+                          padding: const EdgeInsets.all(12),
+                          tooltip: _t(language,
+                              english: 'Not helpful',
+                              filipino: 'Hindi nakatulong'),
+                          onPressed: () => _showNotHelpfulReasons(turn),
+                          icon: Icon(Icons.thumb_down_alt_outlined,
+                              size: 15,
+                              color: isDark ? Colors.white38 : Colors.black38),
+                        ),
+                      ],
                     ),
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: isDark ? Colors.white38 : Colors.black38,
-                      fontStyle: FontStyle.italic,
+                  )
+                else if (turn.feedback == AIReplyFeedback.helpful)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Icon(Icons.check_circle_outline_rounded,
+                          size: 17,
+                          color: AppColors.sageGreen.withValues(alpha: 0.75)),
                     ),
+                  )
+                else
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        textStyle: const TextStyle(
+                            fontSize: 11, fontWeight: FontWeight.w700),
+                      ),
+                      onPressed: _isGeneratingAi
+                          ? null
+                          : () => _regenerateTurn(turn, turnIndex),
+                      icon: const Icon(Icons.refresh_rounded, size: 14),
+                      label: Text(_t(language,
+                          english: 'Try another reflection',
+                          filipino: 'Subukan ang ibang pagninilay')),
+                    ),
+                  ),
+              ],
+
+              // Crisis Hotlines Card
+              if (isCrisisReply) ...[
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                        color: Colors.redAccent.withValues(alpha: 0.3)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.shield_outlined,
+                              color: Colors.redAccent, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '24/7 Free Crisis Support (Philippines)',
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.redAccent,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          ElevatedButton(
+                            onPressed: () async {
+                              final uri = Uri(scheme: 'tel', path: '911');
+                              if (await canLaunchUrl(uri)) await launchUrl(uri);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.redAccent,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.emergency_rounded,
+                                    size: 14, color: Colors.white),
+                                SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    'Emergency 911',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          ElevatedButton(
+                            onPressed: () async {
+                              final uri = Uri(scheme: 'tel', path: '1553');
+                              if (await canLaunchUrl(uri)) await launchUrl(uri);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.sageGreen,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.phone,
+                                    size: 14, color: Colors.white),
+                                SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    'Call NCMH 1553',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          OutlinedButton(
+                            onPressed: () async {
+                              final uri =
+                                  Uri(scheme: 'tel', path: '09178001123');
+                              if (await canLaunchUrl(uri)) await launchUrl(uri);
+                            },
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.redAccent,
+                              side: const BorderSide(color: Colors.redAccent),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.phone_in_talk,
+                                    size: 14, color: Colors.redAccent),
+                                SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    'In Touch 0917-800-1123',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          OutlinedButton(
+                            onPressed: () => AkbaySafetySheet.show(context),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.sageGreen,
+                              side:
+                                  const BorderSide(color: AppColors.sageGreen),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.info_outline,
+                                    size: 14, color: AppColors.sageGreen),
+                                SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    'All Safety Lines',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
               ],
-            ),
-            if (_startersToShow(turn, turnIndex).isNotEmpty) ...[
-              const SizedBox(height: 14),
-              JournalReplyStarters(
-                starters: _startersToShow(turn, turnIndex),
-                isDark: isDark,
-                label: _t(
-                  language,
-                  english: 'IF IT HELPS TO START',
-                  filipino: 'KUNG NAHIHIRAPANG MAGSIMULA',
-                ),
-                onSelected: _useStarter,
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Icon(
+                    Icons.auto_awesome_rounded,
+                    size: 11,
+                    color: isDark ? Colors.white38 : Colors.black38,
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      _t(
+                        language,
+                        english: 'AI reflection · not medical advice',
+                        filipino: 'Pagninilay ng AI · hindi medikal na payo',
+                      ),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: palette.textSecondary,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                ],
               ),
+              if (!isRevealing &&
+                  _startersToShow(turn, turnIndex).isNotEmpty) ...[
+                const SizedBox(height: 14),
+                JournalReplyStarters(
+                  starters: _startersToShow(turn, turnIndex),
+                  isDark: isDark,
+                  label: _t(
+                    language,
+                    english: 'IF IT HELPS TO START',
+                    filipino: 'KUNG NAHIHIRAPANG MAGSIMULA',
+                  ),
+                  onSelected: _useStarter,
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
-    ).animate().fadeIn(duration: 350.ms).slideY(begin: 0.05, end: 0);
+    );
   }
 
   List<String> _startersToShow(JournalTurn turn, int turnIndex) {
@@ -1190,55 +1401,18 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
 
   Widget _buildThinkingIndicator(MascotInfo mascot, bool isDark) {
     final language = context.read<UserProvider>().language;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 14),
+    return Container(
+      key: const ValueKey('journal-thinking-indicator'),
+      margin: const EdgeInsets.symmetric(vertical: 18),
+      padding: const EdgeInsets.fromLTRB(12, 12, 6, 12),
+      decoration: BoxDecoration(
+          color: context.kaibigan.surfaceSubtle,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: context.kaibigan.border)),
       child: Row(
         children: [
-          Container(
-            width: 38,
-            height: 32,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: mascot.primaryColor.withValues(alpha: 0.12),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(7),
-                topRight: Radius.circular(16),
-                bottomLeft: Radius.circular(16),
-                bottomRight: Radius.circular(16),
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(3, (index) {
-                final dot = Container(
-                  width: 4,
-                  height: 4,
-                  margin: const EdgeInsets.symmetric(horizontal: 1.5),
-                  decoration: BoxDecoration(
-                    color: mascot.primaryColor,
-                    shape: BoxShape.circle,
-                  ),
-                );
-                if (MediaQuery.disableAnimationsOf(context)) return dot;
-                return dot
-                    .animate(
-                      onPlay: (controller) => controller.repeat(),
-                      delay: Duration(milliseconds: index * 130),
-                    )
-                    .fade(
-                      begin: 0.25,
-                      end: 1,
-                      duration: 520.ms,
-                    )
-                    .then()
-                    .fade(
-                      begin: 1,
-                      end: 0.25,
-                      duration: 520.ms,
-                    );
-              }),
-            ),
-          ),
+          const SizedBox.square(
+              dimension: 18, child: CircularProgressIndicator(strokeWidth: 2)),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -1268,20 +1442,53 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
           ),
         ],
       ),
-    ).animate().fadeIn(duration: 180.ms).slideY(begin: 0.04);
+    );
   }
 
   Future<void> _exportJournal() async {
+    if (_isExportingPdf) return;
+    final language = context.read<UserProvider>().language;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
     final content = _getAllUserContent();
-    if (content.isEmpty) return;
-    await PdfService.exportJournalPdf(
-      title: _titleController.text.trim().isEmpty
-          ? JournalEntry.warmUntitledTitle
-          : _titleController.text.trim(),
-      content: content,
-      aiResponse: _getAllAiResponses(),
-      createdAt: widget.initialEntry?.createdAt ?? DateTime.now(),
-    );
+    if (content.trim().isEmpty && _titleController.text.trim().isEmpty) {
+      messenger.showSnackBar(SnackBar(
+          content: Text(_t(language,
+              english: 'Write something before exporting a PDF.',
+              filipino: 'Sumulat muna bago mag-export ng PDF.'))));
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    setState(() => _isExportingPdf = true);
+    try {
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+      final saved = await PdfService.exportJournalPdf(
+        title: _titleController.text.trim().isEmpty
+            ? JournalEntry.warmUntitledTitle
+            : _titleController.text.trim(),
+        content: content,
+        aiResponse: _getAllAiResponses(),
+        createdAt: widget.targetEntry?.createdAt ?? DateTime.now(),
+      );
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(
+          content: Text(saved
+              ? _t(language,
+                  english: 'PDF saved.', filipino: 'Na-save ang PDF.')
+              : _t(language,
+                  english: 'PDF export canceled.',
+                  filipino: 'Kinansela ang pag-export ng PDF.'))));
+    } catch (_) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(
+        content: Text(_t(language,
+            english: 'The PDF could not be saved. Please try again.',
+            filipino: 'Hindi na-save ang PDF. Pakisubukang muli.')),
+      ));
+    } finally {
+      if (mounted) setState(() => _isExportingPdf = false);
+    }
   }
 
   Future<void> _deleteCurrentEntry(String language) async {
@@ -1321,561 +1528,505 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
     }
   }
 
+  String _draftCaption(String language) {
+    if (_titleController.text.trim().isEmpty &&
+        _getAllUserContent().trim().isEmpty) {
+      return _t(language,
+          english: 'No rush. Start anywhere.',
+          filipino: 'Dahan-dahan lang. Simula saanman.');
+    }
+    if (widget.targetEntry != null) {
+      return _t(language,
+          english: 'Editing your entry', filipino: 'Inaayos ang iyong tala');
+    }
+    if (_draftUserId == null) {
+      return _t(language,
+          english: 'Save to keep this moment',
+          filipino: 'I-save para maingatan');
+    }
+    return _draftSaved
+        ? _t(language,
+            english: 'Draft saved on this device',
+            filipino: 'Naka-save ang burador sa device')
+        : _t(language,
+            english: 'Saving draft…', filipino: 'Sine-save ang burador…');
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final userProvider = Provider.of<UserProvider>(context);
-    final language = userProvider.language;
-    final activeId = _activeCompanionId ?? userProvider.selectedCompanion;
+    final palette = context.kaibigan;
+    final user = context.watch<UserProvider>();
+    final language = user.language;
+    final activeId = _activeCompanionId ?? user.selectedCompanion;
     final mascot = MascotInfo.getById(activeId);
-    final journalAccent = userProvider.journalAccent.color;
-    final textSize = userProvider.journalTextSize;
-    // The writing font and the ruled lines are derived from one number so the
-    // words sit on the rules instead of drifting between them.
-    final bodyFontSize = 16.5 * textSize.scale;
-    final ruleHeight = textSize.lineHeight;
-    final journalPaperMinHeight = (MediaQuery.sizeOf(context).height * 0.58)
-        .clamp(420.0, 620.0)
+    final paperMinHeight = (MediaQuery.sizeOf(context).height * 0.44)
+        .clamp(300.0, 500.0)
         .toDouble();
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBackground : AppColors.warmCream,
+      key: const ValueKey('ai-journal-editor'),
+      backgroundColor: palette.background,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: palette.background,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded,
-              color: isDark ? Colors.white : Colors.black87),
+          tooltip: _t(language, english: 'Back', filipino: 'Bumalik'),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: _isSaving ? null : () => _saveAndPop(),
         ),
-        title: Text(
-          _t(language, english: 'Journal', filipino: 'Talaarawan'),
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            color:
-                isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
-          ),
-        ),
+        titleSpacing: 0,
+        title: Text(_t(language, english: 'AI Journal', filipino: 'AI Journal'),
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
         centerTitle: false,
         actions: [
           PopupMenuButton<String>(
             tooltip: _t(language,
                 english: 'More journal actions', filipino: 'Iba pang aksyon'),
+            icon: _isExportingPdf
+                ? const SizedBox(
+                    key: ValueKey('journal-export-progress'),
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.more_horiz_rounded),
             onSelected: (action) {
               if (action == 'export') _exportJournal();
               if (action == 'delete') _deleteCurrentEntry(language);
+              if (action == 'appearance') {
+                Navigator.of(context).push(MaterialPageRoute<void>(
+                    builder: (_) => const JournalAppearanceScreen()));
+              }
             },
             itemBuilder: (_) => [
               PopupMenuItem(
-                value: 'export',
-                child: Row(
-                  children: [
-                    const Icon(Icons.picture_as_pdf_outlined),
-                    const SizedBox(width: 12),
-                    Text(_t(language,
-                        english: 'Export as PDF',
-                        filipino: 'I-export bilang PDF')),
-                  ],
-                ),
-              ),
+                  value: 'appearance',
+                  child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.palette_outlined),
+                      title: Text(_t(language,
+                          english: 'Paper & text style',
+                          filipino: 'Papel at estilo ng teksto')))),
+              PopupMenuItem(
+                  value: 'export',
+                  enabled: !_isExportingPdf,
+                  child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.picture_as_pdf_outlined),
+                      title: Text(_t(language,
+                          english: 'Export as PDF',
+                          filipino: 'I-export bilang PDF')))),
               if (widget.targetEntry != null)
                 PopupMenuItem(
-                  value: 'delete',
-                  child: Row(
-                    children: [
-                      const Icon(Icons.delete_outline_rounded,
-                          color: Colors.redAccent),
-                      const SizedBox(width: 12),
-                      Text(_t(language,
-                          english: 'Delete entry',
-                          filipino: 'Burahin ang tala')),
-                    ],
-                  ),
-                ),
+                    value: 'delete',
+                    child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.delete_outline_rounded,
+                            color: palette.danger),
+                        title: Text(_t(language,
+                            english: 'Delete entry',
+                            filipino: 'Burahin ang tala')))),
             ],
           ),
-          IconButton(
-            icon: _isSaving
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.check_rounded,
-                    size: 24, color: AppColors.sageGreen),
-            tooltip: _t(
-              language,
-              english: 'Save journal',
-              filipino: 'I-save ang talaarawan',
+          Tooltip(
+            message: _t(language,
+                english: 'Save journal', filipino: 'I-save ang talaarawan'),
+            child: TextButton(
+              key: const ValueKey('journal-save-button'),
+              onPressed:
+                  _isSaving ? null : () => _saveAndPop(showReflection: true),
+              style: TextButton.styleFrom(
+                  foregroundColor: palette.botanical,
+                  minimumSize: const Size(54, 48),
+                  padding: const EdgeInsets.symmetric(horizontal: 10)),
+              child: _isSaving
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : Text(_t(language, english: 'Save', filipino: 'I-save'),
+                      style: const TextStyle(fontWeight: FontWeight.w800)),
             ),
-            onPressed:
-                _isSaving ? null : () => _saveAndPop(showReflection: true),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
         ],
       ),
       body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                controller: _scrollController,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    GestureDetector(
-                      onTap: null,
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: isDark
-                                ? [
-                                    mascot.primaryColor.withValues(alpha: 0.20),
-                                    AppColors.darkCard,
-                                  ]
-                                : [
-                                    mascot.lightBgColor,
-                                    AppColors.honeyLight,
-                                  ],
-                          ),
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(
-                            color: mascot.primaryColor
-                                .withValues(alpha: isDark ? 0.28 : 0.14),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 44,
-                              height: 44,
-                              decoration: BoxDecoration(
-                                color:
-                                    mascot.primaryColor.withValues(alpha: 0.16),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                mascot.materialIcon,
-                                color: mascot.primaryColor,
-                                size: 22,
-                              ),
-                            ),
-                            const SizedBox(width: 13),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _t(
-                                      language,
-                                      english: 'Write it as it comes',
-                                      filipino: 'Isulat nang malaya',
-                                    ),
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w800,
-                                      color: isDark
-                                          ? AppColors.textPrimaryDark
-                                          : AppColors.textPrimaryLight,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    _t(
-                                      language,
-                                      english:
-                                          '${mascot.name} will follow your lead and respond in your language.',
-                                      filipino:
-                                          'Susundan ni ${mascot.name} ang tono at wikang ginagamit mo.',
-                                    ),
-                                    style: TextStyle(
-                                      fontSize: 12.5,
-                                      height: 1.35,
-                                      color: isDark
-                                          ? AppColors.textSecondaryDark
-                                          : AppColors.textSecondaryLight,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ).animate().fadeIn(duration: 300.ms).slideY(begin: -0.04),
-                    const SizedBox(height: 14),
-                    Wrap(
-                      alignment: WrapAlignment.spaceBetween,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 8,
+        top: false,
+        child: Column(children: [
+          Expanded(
+            child: SingleChildScrollView(
+              key: const ValueKey('journal-editor-scroll'),
+              controller: _scrollController,
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              child: MobileContent(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                      MobileLayout.horizontalPadding(context),
+                      4,
+                      MobileLayout.horizontalPadding(context),
+                      24),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text(
-                          DateFormatter.formatFullDate(
-                            widget.initialEntry?.createdAt ?? DateTime.now(),
-                            language: language,
-                          ),
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
-                            color: isDark ? Colors.white38 : Colors.black38,
-                          ),
-                        ),
-                        TextButton.icon(
-                          onPressed: () => setState(
-                            () => _showWritingPrompt = !_showWritingPrompt,
-                          ),
-                          icon: Icon(
-                            _showWritingPrompt
-                                ? Icons.close_rounded
-                                : Icons.lightbulb_outline_rounded,
-                            size: 16,
-                          ),
-                          label: Text(
-                            _showWritingPrompt
-                                ? _t(
-                                    language,
-                                    english: 'Hide prompt',
-                                    filipino: 'Itago ang gabay',
-                                  )
-                                : _t(
-                                    language,
-                                    english: 'Need a starting point?',
-                                    filipino: 'Kailangan ng panimula?',
-                                  ),
-                          ),
-                          style: TextButton.styleFrom(
-                            foregroundColor: mascot.primaryColor,
-                            textStyle: const TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 260),
-                      curve: Curves.easeOutCubic,
-                      child: _showWritingPrompt
-                          ? Container(
-                              width: double.infinity,
-                              margin: const EdgeInsets.only(bottom: 16),
-                              padding: const EdgeInsets.fromLTRB(15, 13, 8, 13),
-                              decoration: BoxDecoration(
-                                color: AppColors.honeyGold.withValues(
-                                  alpha: isDark ? 0.12 : 0.08,
-                                ),
-                                borderRadius: BorderRadius.circular(18),
-                                border: Border.all(
-                                  color: AppColors.honeyGold
-                                      .withValues(alpha: 0.20),
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Expanded(
+                        JournalCompanionHeader(
+                            mascot: mascot, language: language),
+                        Wrap(
+                            alignment: WrapAlignment.spaceBetween,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 12,
+                            runSpacing: 4,
+                            children: [
+                              Row(mainAxisSize: MainAxisSize.min, children: [
+                                Icon(Icons.today_outlined,
+                                    size: 14, color: palette.textMuted),
+                                const SizedBox(width: 6),
+                                Flexible(
                                     child: Text(
-                                      _guidingPrompts(language)[_promptIndex],
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        height: 1.45,
-                                        fontWeight: FontWeight.w600,
-                                        color: isDark
-                                            ? AppColors.textPrimaryDark
-                                            : AppColors.textPrimaryLight,
-                                      ),
-                                    ),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(
-                                      Icons.refresh_rounded,
-                                      color: AppColors.honeyAmber,
-                                      size: 19,
-                                    ),
-                                    tooltip: _t(
-                                      language,
-                                      english: 'Another prompt',
-                                      filipino: 'Ibang gabay',
-                                    ),
-                                    onPressed: _shufflePrompt,
-                                  ),
-                                ],
+                                        DateFormatter.formatFullDate(
+                                            widget.targetEntry?.createdAt ??
+                                                DateTime.now(),
+                                            language: language),
+                                        style: TextStyle(
+                                            fontSize: 11.5,
+                                            color: palette.textSecondary))),
+                              ]),
+                              TextButton.icon(
+                                key: const ValueKey('journal-prompt-toggle'),
+                                onPressed: () => setState(() =>
+                                    _showWritingPrompt = !_showWritingPrompt),
+                                icon: Icon(
+                                    _showWritingPrompt
+                                        ? Icons.close_rounded
+                                        : Icons.lightbulb_outline_rounded,
+                                    size: 16),
+                                label: Text(_showWritingPrompt
+                                    ? _t(language,
+                                        english: 'Hide prompt',
+                                        filipino: 'Itago ang gabay')
+                                    : _t(language,
+                                        english: 'Need a starting point?',
+                                        filipino: 'Kailangan ng panimula?')),
+                                style: TextButton.styleFrom(
+                                    foregroundColor: palette.accentStrong,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 4),
+                                    textStyle: GoogleFonts.quicksand(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w700)),
                               ),
-                            ).animate().fadeIn(duration: 180.ms)
-                          : const SizedBox.shrink(),
-                    ),
-                    JournalPaperSurface(
-                      key: const ValueKey('ai-journal-paper'),
-                      style: userProvider.journalPaperStyle,
-                      accentColor: journalAccent,
-                      minHeight: journalPaperMinHeight,
-                      lineHeight: ruleHeight,
-                      // Clears the title field so the first rule lands under
-                      // the first line of the entry itself.
-                      firstLineOffset: 26 + 34 * textSize.scale + ruleHeight,
-                      padding: const EdgeInsets.fromLTRB(20, 26, 20, 20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          TextField(
-                            controller: _titleController,
-                            style: GoogleFonts.lora(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w700,
-                              color: isDark
-                                  ? AppColors.textPrimaryDark
-                                  : AppColors.textPrimaryLight,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: _t(
-                                language,
-                                english: 'Name this moment (optional)',
-                                filipino: 'Bigyan ng pamagat (opsyonal)',
-                              ),
-                              hintStyle: GoogleFonts.lora(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w700,
-                                color: isDark ? Colors.white24 : Colors.black26,
-                              ),
-                              border: InputBorder.none,
-                              focusedBorder: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              filled: false,
-                              fillColor: Colors.transparent,
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-
-                          // Conversation / Entry Turns List
-                          ..._turns.asMap().entries.map((entry) {
-                            final idx = entry.key;
-                            final turn = entry.value;
-                            final isLastTurn = idx == _turns.length - 1;
-                            final isActiveWritingTurn =
-                                isLastTurn && turn.aiResponse == null;
-                            final turnMascot = MascotInfo.getById(
-                                turn.companionId ?? activeId);
-
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                AnimatedContainer(
-                                  duration: const Duration(milliseconds: 220),
-                                  curve: Curves.easeOutCubic,
-                                  width: double.infinity,
-                                  margin: EdgeInsets.only(
-                                    top: idx == 0 ? 0 : 8,
-                                    bottom: turn.aiResponse == null ? 12 : 0,
-                                  ),
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 4),
-                                  decoration: const BoxDecoration(
-                                      color: Colors.transparent),
-                                  child: TextField(
-                                    key: isActiveWritingTurn
-                                        ? const ValueKey(
-                                            'active-journal-writing-field')
-                                        : null,
-                                    controller: turn.userController,
-                                    focusNode:
-                                        isLastTurn ? _activeFocusNode : null,
-                                    minLines: isActiveWritingTurn ? 7 : 2,
-                                    maxLines: null,
-                                    keyboardType: TextInputType.multiline,
-                                    onChanged: (_) => setState(() {}),
-                                    style: GoogleFonts.lora(
-                                      fontSize: bodyFontSize,
-                                      height: ruleHeight / bodyFontSize,
-                                      color: isDark
-                                          ? AppColors.textPrimaryDark
-                                          : AppColors.textPrimaryLight,
-                                    ),
-                                    decoration: InputDecoration(
-                                      hintText: idx == 0
-                                          ? _t(
-                                              language,
-                                              english:
-                                                  'What has been sitting with you?',
-                                              filipino: 'Ano ang nasa isip mo?',
-                                            )
-                                          : _t(
-                                              language,
-                                              english:
-                                                  'Continue with ${turnMascot.name}…',
-                                              filipino:
-                                                  'Magpatuloy kasama si ${turnMascot.name}…',
-                                            ),
-                                      hintStyle: GoogleFonts.lora(
-                                        fontSize: bodyFontSize - 1,
-                                        height: ruleHeight / bodyFontSize,
-                                        color: isDark
-                                            ? Colors.white24
-                                            : Colors.black26,
-                                      ),
-                                      border: InputBorder.none,
-                                      focusedBorder: InputBorder.none,
-                                      enabledBorder: InputBorder.none,
-                                      filled: false,
-                                      fillColor: Colors.transparent,
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                              vertical: 8),
-                                    ),
-                                  ),
-                                ),
-                                if (turn.aiResponse != null)
+                            ]),
+                        const SizedBox(height: 12),
+                        JournalAnimatedSize(
+                            child: _showWritingPrompt
+                                ? JournalPromptCard(
+                                    text:
+                                        _guidingPrompts(language)[_promptIndex],
+                                    onShuffle: _shufflePrompt,
+                                    shuffleLabel: _t(language,
+                                        english: 'Another prompt',
+                                        filipino: 'Ibang gabay'))
+                                : const SizedBox.shrink()),
+                        for (var index = 0; index < _turns.length; index++) ...[
+                          if (index > 0) ...[
+                            Padding(
+                                padding: const EdgeInsets.fromLTRB(4, 4, 4, 10),
+                                child: Text(
+                                    _t(language,
+                                        english: 'YOUR NEXT THOUGHT',
+                                        filipino: 'ANG SUSUNOD MONG KAISIPAN'),
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        letterSpacing: 1.2,
+                                        fontWeight: FontWeight.w800,
+                                        color: palette.textMuted))),
+                          ],
+                          _buildWritingPaper(
+                              index, user, activeId, paperMinHeight),
+                          if (_turns[index].aiResponse != null ||
+                              identical(_turns[index], _generatingTurn))
+                            KeyedSubtree(
+                              key: _turns[index].replyAnchor,
+                              child: Column(children: [
+                                if (_turns[index].aiResponse != null)
                                   _buildAiReplyBox(
-                                    context,
-                                    turnMascot,
-                                    turn,
-                                    idx,
-                                    isDark,
-                                  ),
-                              ],
-                            ).animate().fadeIn(duration: 260.ms);
-                          }),
-                          const SizedBox(
-                            key: ValueKey('journal-paper-breathing-room'),
-                            height: 84,
-                          ),
+                                      context,
+                                      MascotInfo.getById(
+                                          _turns[index].companionId ??
+                                              activeId),
+                                      _turns[index],
+                                      index,
+                                      isDark),
+                                if (identical(_turns[index], _generatingTurn))
+                                  _buildThinkingIndicator(mascot, isDark),
+                              ]),
+                            ),
                         ],
-                      ),
-                    ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.025),
-                    if (_isGeneratingAi)
-                      _buildThinkingIndicator(mascot, isDark),
-                    const SizedBox(height: 60),
-                  ],
+                        const SizedBox(height: 12),
+                        ListenableBuilder(
+                          listenable: _writingChanges,
+                          builder: (context, _) {
+                            final content = _getAllUserContent().trim();
+                            final words = content.isEmpty
+                                ? 0
+                                : content.split(RegExp(r'\s+')).length;
+                            return Wrap(
+                                alignment: WrapAlignment.spaceBetween,
+                                spacing: 12,
+                                runSpacing: 6,
+                                children: [
+                                  Text(_draftCaption(language),
+                                      key: const ValueKey(
+                                          'journal-draft-status'),
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: palette.textSecondary)),
+                                  Text(
+                                      words == 0
+                                          ? _t(language,
+                                              english: 'A fresh page',
+                                              filipino: 'Bagong pahina')
+                                          : _t(language,
+                                              english:
+                                                  '$words ${words == 1 ? 'word' : 'words'}',
+                                              filipino: '$words salita'),
+                                      key: const ValueKey('journal-word-count'),
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: palette.textMuted)),
+                                ]);
+                          },
+                        ),
+                        SizedBox(height: _readingSpace),
+                      ]),
                 ),
               ),
             ),
-            JournalFormatToolbar(
-              controller: _turns.isEmpty ? null : _turns.last.userController,
-              textSize: textSize,
-              enabled: !_isGeneratingAi && !_isSaving,
-              onTextSizeChanged: userProvider.setJournalTextSize,
-            ),
-            Container(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? AppColors.darkCard.withValues(alpha: 0.95)
-                    : Colors.white.withValues(alpha: 0.95),
-                border: Border(
-                  top: BorderSide(
-                    color: isDark
-                        ? AppColors.darkCardBorder
-                        : Colors.black.withValues(alpha: 0.05),
-                  ),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Tooltip(
-                    message: _draftSaved
-                        ? _t(
-                            language,
-                            english: 'Draft saved',
-                            filipino: 'Ligtas ang burador',
-                          )
-                        : _t(
-                            language,
-                            english: 'Saving draft…',
-                            filipino: 'Sine-save ang burador…',
-                          ),
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 180),
-                      child: Icon(
-                        _draftSaved
-                            ? Icons.cloud_done_outlined
-                            : Icons.cloud_upload_outlined,
-                        key: ValueKey(_draftSaved),
-                        size: 18,
-                        color: _draftSaved
-                            ? AppColors.sageGreen
-                            : (isDark ? Colors.white38 : Colors.black38),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 180),
-                      child: FilledButton.icon(
-                        key: ValueKey(_isGeneratingAi),
-                        onPressed: _isGeneratingAi || _isSaving
-                            ? null
-                            : _triggerAiReflection,
-                        icon: _isGeneratingAi
-                            ? SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    AppColors.readableOn(journalAccent),
-                                  ),
-                                ),
-                              )
-                            : Icon(
-                                _turns.length > 1
-                                    ? Icons.send_rounded
-                                    : Icons.forum_outlined,
-                                size: 16,
-                              ),
-                        label: Text(
-                          _isGeneratingAi
-                              ? _t(
-                                  language,
-                                  english: '${mascot.name} is replying…',
-                                  filipino: 'Sumasagot si ${mascot.name}…',
-                                )
-                              : (_turns.length > 1
-                                  ? _t(
-                                      language,
-                                      english: 'Send',
-                                      filipino: 'Ipadala',
-                                    )
-                                  : _t(
-                                      language,
-                                      english: 'Share with ${mascot.name}',
-                                      filipino: 'Ibahagi kay ${mascot.name}',
-                                    )),
-                          style: const TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: journalAccent,
-                          foregroundColor: AppColors.readableOn(journalAccent),
-                          disabledBackgroundColor: _isGeneratingAi
-                              ? journalAccent.withValues(alpha: 0.72)
-                              : journalAccent.withValues(alpha: 0.28),
-                          disabledForegroundColor: _isGeneratingAi
-                              ? AppColors.readableOn(journalAccent)
-                              : null,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 17,
-                            vertical: 11,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+          ),
+          ListenableBuilder(
+            listenable: _writingChanges,
+            builder: (_, __) => _buildEditorFooter(user, mascot),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _buildWritingPaper(
+      int index, UserProvider user, String activeId, double minHeight) {
+    final palette = context.kaibigan;
+    final turn = _turns[index];
+    final first = index == 0;
+    final active = index == _turns.length - 1 && turn.aiResponse == null;
+    final textSize = user.journalTextSize;
+    final fontSize = 16.5 * textSize.scale;
+    final textScaler = MediaQuery.textScalerOf(context);
+    final lineHeight =
+        textScaler.scale(fontSize) * textSize.lineHeight / fontSize;
+    final newlineCount = '\n'.allMatches(_titleController.text).length;
+    final estimatedWrapLines =
+        (_titleController.text.length / 25).ceil().clamp(1, 4);
+    final titleLineCount = math.max(newlineCount + 1, estimatedWrapLines);
+    final titleHeight = textScaler.scale(21) * 1.4 * titleLineCount;
+    final turnMascot = MascotInfo.getById(turn.companionId ?? activeId);
+    return JournalPaperSurface(
+      key: first
+          ? const ValueKey('ai-journal-paper')
+          : ValueKey('journal-writing-paper-$index'),
+      style: user.journalPaperStyle,
+      accentColor: user.journalAccent.color,
+      showBinding: first,
+      minHeight: active ? minHeight : null,
+      lineHeight: lineHeight,
+      firstLineOffset: 22 + (first ? titleHeight + 18 : 0) + lineHeight - 3,
+      padding: const EdgeInsets.fromLTRB(18, 22, 18, 18),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (first) ...[
+          TextField(
+            key: const ValueKey('journal-title-field'),
+            controller: _titleController,
+            focusNode: _titleFocusNode,
+            readOnly: _isSaving,
+            minLines: 1,
+            maxLines: null,
+            textCapitalization: TextCapitalization.sentences,
+            keyboardType: TextInputType.multiline,
+            textInputAction: TextInputAction.next,
+            onSubmitted: (_) {
+              if (_turns.isNotEmpty) {
+                _turns.first.focusNode.requestFocus();
+              }
+            },
+            style: GoogleFonts.lora(
+                fontSize: 21,
+                height: 1.4,
+                fontWeight: FontWeight.w600,
+                color: palette.textPrimary),
+            strutStyle: const StrutStyle(
+                fontSize: 21, height: 1.4, forceStrutHeight: true),
+            decoration: InputDecoration(
+                isCollapsed: true,
+                hintText: _t(user.language,
+                    english: 'Name this moment (optional)',
+                    filipino: 'Bigyan ng pamagat (opsyonal)'),
+                hintStyle: GoogleFonts.lora(
+                    fontSize: 18,
+                    height: 1.4,
+                    fontWeight: FontWeight.w500,
+                    color: palette.textMuted),
+                border: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                filled: false,
+                fillColor: Colors.transparent,
+                contentPadding: EdgeInsets.zero),
+          ),
+          const SizedBox(height: 18),
+        ],
+        TextField(
+          key: active
+              ? const ValueKey('active-journal-writing-field')
+              : ValueKey('journal-writing-field-$index'),
+          controller: turn.userController,
+          focusNode: turn.focusNode,
+          readOnly: _isSaving || _isGeneratingAi,
+          minLines: active ? 7 : 2,
+          maxLines: null,
+          keyboardType: TextInputType.multiline,
+          textCapitalization: TextCapitalization.sentences,
+          scrollPadding: const EdgeInsets.only(bottom: 28),
+          style: GoogleFonts.lora(
+              fontSize: fontSize,
+              height: textSize.lineHeight / fontSize,
+              color: palette.textPrimary),
+          strutStyle: StrutStyle(
+              fontSize: fontSize,
+              height: textSize.lineHeight / fontSize,
+              forceStrutHeight: true),
+          decoration: InputDecoration(
+              isCollapsed: true,
+              hintText: first
+                  ? _t(user.language,
+                      english: 'What has been sitting with you?',
+                      filipino: 'Ano ang nasa isip mo?')
+                  : _t(user.language,
+                      english: 'Continue with ${turnMascot.name}…',
+                      filipino: 'Magpatuloy kasama si ${turnMascot.name}…'),
+              hintStyle: GoogleFonts.lora(
+                  fontSize: fontSize,
+                  height: textSize.lineHeight / fontSize,
+                  color: palette.textMuted),
+              border: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              filled: false,
+              fillColor: Colors.transparent,
+              contentPadding: EdgeInsets.zero),
         ),
+        if (active)
+          const SizedBox(
+              key: ValueKey('journal-paper-breathing-room'), height: 32),
+      ]),
+    );
+  }
+
+  Widget _buildEditorFooter(UserProvider user, MascotInfo mascot) {
+    final palette = context.kaibigan;
+    final accent = user.journalAccent.color;
+    final target = _titleFocusNode.hasFocus
+        ? null
+        : (_formattingTurn ?? _turns.last).userController;
+    final canShare = !_isGeneratingAi &&
+        !_isSaving &&
+        _turns.last.userController.text.trim().isNotEmpty;
+    return Material(
+      key: const ValueKey('journal-editor-controls'),
+      color: palette.surface,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: palette.border))),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          JournalAnimatedSize(
+            child: _showFormatting
+                ? JournalFormatToolbar(
+                    controller: target,
+                    textSize: user.journalTextSize,
+                    enabled: !_isGeneratingAi && !_isSaving,
+                    onTextSizeChanged: user.setJournalTextSize)
+                : const SizedBox.shrink(),
+          ),
+          MobileContent(
+              child: Padding(
+            padding: EdgeInsets.fromLTRB(
+                MobileLayout.horizontalPadding(context),
+                8,
+                MobileLayout.horizontalPadding(context),
+                8),
+            child: Row(children: [
+              TextFieldTapRegion(
+                  child: IconButton(
+                key: const ValueKey('journal-toggle-formatting'),
+                tooltip: _t(user.language,
+                    english: 'Formatting', filipino: 'Pag-format'),
+                isSelected: _showFormatting,
+                icon: const Icon(Icons.text_format_rounded, size: 24),
+                selectedIcon: Icon(Icons.text_format_rounded,
+                    size: 24, color: palette.accentStrong),
+                style: IconButton.styleFrom(
+                    backgroundColor: _showFormatting
+                        ? palette.accentSubtle
+                        : palette.surfaceSubtle,
+                    minimumSize: const Size(48, 48)),
+                onPressed: () =>
+                    setState(() => _showFormatting = !_showFormatting),
+              )),
+              const SizedBox(width: 12),
+              Expanded(
+                  child: FilledButton.icon(
+                key: const ValueKey('journal-share-button'),
+                onPressed: canShare ? _triggerAiReflection : null,
+                icon: _isGeneratingAi
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : Icon(
+                        _turns.length > 1
+                            ? Icons.send_rounded
+                            : Icons.auto_awesome_outlined,
+                        size: 18),
+                label: Text(
+                    _isGeneratingAi
+                        ? _t(user.language,
+                            english: '${mascot.name} is replying…',
+                            filipino: 'Sumasagot si ${mascot.name}…')
+                        : _turns.length > 1
+                            ? _t(user.language,
+                                english: 'Send', filipino: 'Ipadala')
+                            : _t(user.language,
+                                english: 'Share with ${mascot.name}',
+                                filipino: 'Ibahagi kay ${mascot.name}'),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w800)),
+                style: FilledButton.styleFrom(
+                    backgroundColor: accent,
+                    foregroundColor: AppColors.readableOn(accent),
+                    disabledBackgroundColor: _isGeneratingAi
+                        ? palette.accentSubtle
+                        : palette.surfaceSubtle,
+                    disabledForegroundColor: palette.textSecondary,
+                    minimumSize: const Size.fromHeight(48),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 11),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16))),
+              )),
+            ]),
+          )),
+        ]),
       ),
     );
   }
@@ -1930,6 +2081,7 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
           mood: '',
           reflectionMode: CompanionMode.auto.name,
           conversationTurns: conversationTurns,
+          clearSummary: contentChanged,
         );
         final saved = await provider.updateJournalEntry(updated);
         if (saved) savedEntry = updated;
@@ -1979,38 +2131,17 @@ class _JournalEditorScreenState extends State<JournalEditorScreen> {
             language: userProvider.language,
             companionId: activeCompanion,
             previousEntries: earlier,
-            onFollowUp: _openFollowUp,
             wellbeingContext: wellbeing.promptBlock,
             // Kept with the record so reopening it later shows the same cards
             // rather than the conversation alone.
-            onSummaryReady: (summary) => provider.updateJournalEntry(
-              savedEntry!.copyWith(summary: summary),
-            ),
+            onSummaryReady: (summary) => provider.saveSummary(
+                savedEntry!.id, summary,
+                expectedContent: savedEntry.content),
           ),
         ),
       );
       return;
     }
     Navigator.pop(context);
-  }
-
-  /// Opens the practice a reflection card suggested.
-  ///
-  /// Pushed on top of the reflection page rather than replacing it, so
-  /// declining the practice returns the person to their own words.
-  void _openFollowUp(JournalFollowUpKind kind) {
-    final navigator = Navigator.of(context);
-    navigator.push(
-      MaterialPageRoute<void>(
-        builder: (_) => switch (kind) {
-          JournalFollowUpKind.breathing => const MindfulnessMeditationScreen(),
-          JournalFollowUpKind.grounding => const GroundingSessionScreen(),
-          JournalFollowUpKind.gratitude => const GratitudePlantingScreen(),
-          JournalFollowUpKind.moodCheckIn => const MoodTrackerScreen(),
-          JournalFollowUpKind.sleepLog => const SleepLogFlowScreen(),
-          JournalFollowUpKind.comfortCorner => const ComfortCornerScreen(),
-        },
-      ),
-    );
   }
 }

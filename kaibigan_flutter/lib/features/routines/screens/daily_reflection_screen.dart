@@ -510,6 +510,10 @@ class _DailyReflectionScreenState extends State<DailyReflectionScreen> {
               ),
               contentPadding: const EdgeInsets.symmetric(vertical: 5),
               border: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              filled: false,
+              fillColor: Colors.transparent,
             ),
           ),
           if (showDivider)

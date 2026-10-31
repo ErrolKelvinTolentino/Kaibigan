@@ -13,8 +13,23 @@ import 'ai_memory_screen.dart';
 import 'journal_appearance_screen.dart';
 import 'sound_settings_screen.dart';
 import 'privacy_data_screen.dart';
+import '../auth_onboarding/app_tutorial_screen.dart';
+import '../journaling/journal_provider.dart';
+import '../gratitude_garden/gratitude_provider.dart';
+import '../mood_tracking/mood_provider.dart';
+import '../future_letters/letters_provider.dart';
+import '../routines/routines_provider.dart';
+import '../routines/routine_management_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
+  /// Cloud sync is only meaningfully "on" when there is a backend *and* the
+  /// person has not chosen to keep everything on this device.
+  static bool _syncActive(UserProvider user) =>
+      SupabaseService.isInitialized &&
+      user.isAuthenticated &&
+      !user.hasPendingLocalImport &&
+      !user.isImportingLocalData;
+
   const SettingsScreen({super.key});
 
   @override
@@ -186,6 +201,24 @@ class SettingsScreen extends StatelessWidget {
                     onTap: () => _showCompanionPicker(context, userProvider),
                   ),
                   const Divider(height: 1, indent: 72),
+                  KeyedSubtree(
+                    key: const ValueKey('settings-routine-settings'),
+                    child: _settingsTile(
+                      context: context,
+                      isDark: isDark,
+                      leading: const Icon(Icons.tune_rounded,
+                          color: AppColors.sageGreen, size: 22),
+                      iconColor: AppColors.sageGreen,
+                      title: copy('Routine settings', 'Mga setting ng routine'),
+                      subtitle: copy('Activities, schedules, and reminders',
+                          'Mga gawain, iskedyul, at paalala'),
+                      onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const RoutineManagementScreen())),
+                    ),
+                  ),
+                  const Divider(height: 1, indent: 72),
                   _settingsTile(
                     context: context,
                     isDark: isDark,
@@ -304,6 +337,28 @@ class SettingsScreen extends StatelessWidget {
                       ),
                     ),
                   ),
+                  const Divider(height: 1, indent: 72),
+                  _settingsTile(
+                    context: context,
+                    isDark: isDark,
+                    leading: const Icon(
+                      Icons.explore_outlined,
+                      color: AppColors.honeyAmber,
+                      size: 22,
+                    ),
+                    iconColor: AppColors.honeyAmber,
+                    title: copy('App tour & tutorial', 'Gabay sa paggamit'),
+                    subtitle: copy(
+                      'Explore how Kaibigan spaces work',
+                      'Alamin kung paano gamitin ang bawat espasyo',
+                    ),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AppTutorialScreen(isModal: true),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -377,6 +432,9 @@ class SettingsScreen extends StatelessWidget {
             const SizedBox(height: 24),
 
             // Section 2: Account & Supabase Status
+            // Offline mode is a working state, not a broken one, so the card
+            // below describes where records are kept rather than only
+            // whether a client object exists.
             Text(
               copy('Account & sync', 'Account at pag-sync'),
               style: TextStyle(
@@ -406,17 +464,17 @@ class SettingsScreen extends StatelessWidget {
                         width: 44,
                         height: 44,
                         decoration: BoxDecoration(
-                          color: (SupabaseService.isInitialized
+                          color: (_syncActive(userProvider)
                                   ? AppColors.sageGreen
                                   : Colors.orange)
                               .withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(14),
                         ),
                         child: Icon(
-                          SupabaseService.isInitialized
+                          _syncActive(userProvider)
                               ? Icons.cloud_done_rounded
                               : Icons.cloud_off_rounded,
-                          color: SupabaseService.isInitialized
+                          color: _syncActive(userProvider)
                               ? AppColors.sageGreen
                               : Colors.orange,
                           size: 23,
@@ -428,29 +486,46 @@ class SettingsScreen extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              SupabaseService.isInitialized
+                              userProvider.isOffline
                                   ? copy(
-                                      'Cloud sync is on',
-                                      'Naka-on ang cloud sync',
+                                      'Saved on this device',
+                                      'Naka-save sa device na ito',
                                     )
-                                  : copy(
-                                      'Sync unavailable',
-                                      'Hindi available ang pag-sync',
-                                    ),
+                                  : userProvider.hasPendingLocalImport
+                                      ? copy('Local backup pending',
+                                          'Hinihintay ang lokal na backup')
+                                      : _syncActive(userProvider)
+                                          ? copy(
+                                              'Cloud sync is on',
+                                              'Naka-on ang cloud sync',
+                                            )
+                                          : copy(
+                                              'Sync unavailable',
+                                              'Hindi available ang pag-sync',
+                                            ),
                               style: const TextStyle(
                                   fontWeight: FontWeight.w800, fontSize: 14),
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              SupabaseService.isInitialized
+                              userProvider.isOffline
                                   ? copy(
-                                      'Signed-in entries sync securely with Supabase',
-                                      'Ligtas na sini-sync sa Supabase ang iyong mga tala',
+                                      'Nothing is uploaded. Losing this phone loses these entries.',
+                                      'Walang ina-upload. Kapag nawala ang telepono, mawawala rin ang mga tala.',
                                     )
-                                  : copy(
-                                      'New entries cannot be saved until sync is restored',
-                                      'Hindi mase-save ang bagong tala hanggang bumalik ang sync',
-                                    ),
+                                  : userProvider.hasPendingLocalImport
+                                      ? copy(
+                                          'Your local entries are safe. Retry the backup when connected.',
+                                          'Ligtas ang iyong mga lokal na tala. Subukan muli kapag may koneksiyon.')
+                                      : _syncActive(userProvider)
+                                          ? copy(
+                                              'Signed-in entries sync securely with Supabase',
+                                              'Ligtas na sini-sync sa Supabase ang iyong mga tala',
+                                            )
+                                          : copy(
+                                              'New entries cannot be saved until sync is restored',
+                                              'Hindi mase-save ang bagong tala hanggang bumalik ang sync',
+                                            ),
                               style: TextStyle(
                                   fontSize: 12,
                                   color: isDark
@@ -464,20 +539,24 @@ class SettingsScreen extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 5),
                         decoration: BoxDecoration(
-                          color: (SupabaseService.isInitialized
+                          color: (_syncActive(userProvider)
                                   ? AppColors.sageGreen
                                   : Colors.orange)
                               .withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                          SupabaseService.isInitialized
-                              ? copy('Connected', 'Konektado')
-                              : 'Offline',
+                          userProvider.isOffline
+                              ? copy('On device', 'Sa device')
+                              : userProvider.hasPendingLocalImport
+                                  ? copy('Pending', 'Nakabinbin')
+                                  : _syncActive(userProvider)
+                                      ? copy('Connected', 'Konektado')
+                                      : 'Offline',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w800,
-                            color: SupabaseService.isInitialized
+                            color: _syncActive(userProvider)
                                 ? AppColors.sageGreen
                                 : Colors.orange,
                           ),
@@ -485,6 +564,86 @@ class SettingsScreen extends StatelessWidget {
                       ),
                     ],
                   ),
+                  if (userProvider.isOffline) ...[
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: FilledButton.icon(
+                        key: const ValueKey('settings-leave-offline'),
+                        icon: const Icon(Icons.cloud_upload_outlined, size: 18),
+                        label: Text(
+                          copy('Sign in or create an account',
+                              'Mag-sign in o gumawa ng account'),
+                        ),
+                        // Leaving offline mode never deletes what is on the
+                        // device, so this is safe to tap and reversible.
+                        onPressed: () async {
+                          await userProvider.leaveOfflineMode(
+                              importLocalData: true);
+                          if (!context.mounted || userProvider.isOffline) {
+                            return;
+                          }
+                          Navigator.of(context)
+                              .popUntil((route) => route.isFirst);
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      copy(
+                        'Your saved entries will be added to the account you sign in to or create. A local backup stays on this device.',
+                        'Idaragdag ang iyong mga tala sa account na gagawin mo o pag-sign in-an. May lokal na backup pa rin sa device na ito.',
+                      ),
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        height: 1.4,
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : AppColors.textSecondaryLight,
+                      ),
+                    ),
+                  ],
+                  if (userProvider.localImportError != null) ...[
+                    const SizedBox(height: 12),
+                    Text(userProvider.localImportError!,
+                        key: const ValueKey('local-import-error')),
+                  ],
+                  if (userProvider.hasPendingLocalImport &&
+                      userProvider.isAuthenticated) ...[
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      key: const ValueKey('retry-local-import'),
+                      icon: const Icon(Icons.cloud_upload_outlined),
+                      label: Text(userProvider.isImportingLocalData
+                          ? copy('Backing up…', 'Nagba-back up…')
+                          : copy('Retry backup', 'Subukan muli ang backup')),
+                      onPressed: userProvider.isImportingLocalData
+                          ? null
+                          : () async {
+                              // Capture providers while this route is mounted. Refresh
+                              // even after a partial upload so confirmed entries show.
+                              final journal = context.read<JournalProvider>();
+                              final gratitude =
+                                  context.read<GratitudeProvider>();
+                              final mood = context.read<MoodProvider>();
+                              final letters = context.read<LettersProvider>();
+                              final routines = context.read<RoutinesProvider>();
+                              await userProvider.retryLocalImport();
+                              if (!context.mounted ||
+                                  !userProvider.isAuthenticated) {
+                                return;
+                              }
+                              await Future.wait([
+                                journal.fetchJournalEntries(),
+                                gratitude.fetchGratitudeEntries(),
+                                mood.fetchMoodLogs(),
+                                letters.fetchLetters(),
+                                routines.fetchRoutineLogs()
+                              ]);
+                            },
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   SizedBox(
                     width: double.infinity,
@@ -592,28 +751,35 @@ class SettingsScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 12),
-              if (trailing != null)
-                trailing
-              else ...[
-                Flexible(
-                  child: Text(
-                    value ?? '',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.right,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: isDark
-                          ? AppColors.textPrimaryDark
-                          : AppColors.textPrimaryLight,
+              if (trailing != null) ...[
+                const SizedBox(width: 12),
+                trailing,
+              ] else ...[
+                if (value != null && value.isNotEmpty) ...[
+                  const SizedBox(width: 10),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 130),
+                    child: Text(
+                      value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: isDark
+                            ? AppColors.textPrimaryDark
+                            : AppColors.textPrimaryLight,
+                      ),
                     ),
                   ),
+                ],
+                const SizedBox(width: 6),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 22,
+                  color: secondaryColor,
                 ),
-                const SizedBox(width: 4),
-                Icon(Icons.chevron_right_rounded,
-                    size: 22, color: secondaryColor),
               ],
             ],
           ),
@@ -997,13 +1163,15 @@ class SettingsScreen extends StatelessWidget {
 
     return showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       showDragHandle: true,
       backgroundColor: isDark ? AppColors.darkCard : AppColors.warmCream,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (sheetContext) => SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
+            child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1057,7 +1225,7 @@ class SettingsScreen extends StatelessWidget {
               ),
             ],
           ),
-        ),
+        )),
       ),
     );
   }

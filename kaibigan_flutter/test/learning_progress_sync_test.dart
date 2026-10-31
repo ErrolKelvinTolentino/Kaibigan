@@ -83,6 +83,35 @@ void main() {
     expect(await device().loadViewedIdeas('lesson'), {1, 2});
   });
 
+  test(
+      'quiz and practice results sync without transcripts or crossing accounts',
+      () async {
+    final cloud = _Cloud()..online = false;
+    var owner = 'user-a';
+    LearningProgressStore device() => LearningProgressStore(
+        sync: LearningProgressSync(cloud: cloud, currentUserId: () => owner));
+    final store = device();
+    await store.saveQuizScore('friend-support-listen', 2, 3);
+    await store.savePracticeResult(
+        lessonId: 'friend-support-listen',
+        scenarioId: 'practice-overwhelm',
+        replies: 3,
+        supportiveReplies: 2);
+    expect(cloud.records, isEmpty);
+    cloud.online = true;
+    expect(await device().loadQuizScore('friend-support-listen'),
+        (score: 2, total: 3));
+    final row = cloud.records[owner]!['friend-support-listen']!;
+    expect(row['practice_count'], 1);
+    expect(row['practice_supportive_count'], 2);
+    expect(row.keys, isNot(contains('transcript')));
+    await device().saveQuizScore('friend-support-listen', 1, 3);
+    expect(await device().loadQuizScore('friend-support-listen'),
+        (score: 2, total: 3));
+    owner = 'user-b';
+    expect(await device().loadQuizScore('friend-support-listen'), isNull);
+  });
+
   test('switching identity during fetch cannot persist a pending edit',
       () async {
     final cloud = _Cloud()..gate = Completer<void>();

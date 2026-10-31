@@ -3,3 +3,7 @@ verify_jwt = true
 
 [functions.delete-account]
 verify_jwt = true
+
+# Only fixed lesson ids and public NLM resources; available to offline users.
+[functions.learning-resources]
+verify_jwt = false

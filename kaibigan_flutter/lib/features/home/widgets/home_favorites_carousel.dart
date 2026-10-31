@@ -33,11 +33,13 @@ class HomeFavoritesCarousel extends StatelessWidget {
     required this.favorites,
     required this.isDark,
     required this.language,
+    this.isSuggested = false,
   });
 
   final List<FavoriteActivityData> favorites;
   final bool isDark;
   final String language;
+  final bool isSuggested;
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +59,7 @@ class HomeFavoritesCarousel extends StatelessWidget {
       // clipping the second line.
       height: 194 +
           (MediaQuery.textScalerOf(context).scale(13.5) - 13.5)
-              .clamp(0.0, 22.0) *
+                  .clamp(0.0, 22.0) *
               2,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
@@ -66,23 +68,44 @@ class HomeFavoritesCarousel extends StatelessWidget {
         itemCount: favorites.length,
         itemBuilder: (context, index) {
           final item = favorites[index];
-          final rankLabel = switch (index) {
-            0 => LanguageHelper.pick(
-                language,
-                english: '★ #1 Most Used',
-                filipino: '★ #1 Pinakaginagamit',
-              ),
-            1 => LanguageHelper.pick(
-                language,
-                english: '★ #2 Favorite',
-                filipino: '★ #2 Paborito',
-              ),
-            _ => LanguageHelper.pick(
-                language,
-                english: '★ #3 Frequent',
-                filipino: '★ #3 Madalas',
-              ),
-          };
+          final rankLabel = isSuggested
+              ? switch (index) {
+                  0 => LanguageHelper.pick(
+                      language,
+                      english: 'Start Here',
+                      filipino: 'Simulan Dito',
+                      taglish: 'Start Here',
+                    ),
+                  1 => LanguageHelper.pick(
+                      language,
+                      english: 'Explore',
+                      filipino: 'Tuklasin',
+                      taglish: 'Explore',
+                    ),
+                  _ => LanguageHelper.pick(
+                      language,
+                      english: 'Reflect',
+                      filipino: 'Magmuni-muni',
+                      taglish: 'Reflect',
+                    ),
+                }
+              : switch (index) {
+                  0 => LanguageHelper.pick(
+                      language,
+                      english: '★ #1 Most Used',
+                      filipino: '★ #1 Pinakaginagamit',
+                    ),
+                  1 => LanguageHelper.pick(
+                      language,
+                      english: '★ #2 Favorite',
+                      filipino: '★ #2 Paborito',
+                    ),
+                  _ => LanguageHelper.pick(
+                      language,
+                      english: '★ #3 Frequent',
+                      filipino: '★ #3 Madalas',
+                    ),
+                };
 
           return Semantics(
             button: true,

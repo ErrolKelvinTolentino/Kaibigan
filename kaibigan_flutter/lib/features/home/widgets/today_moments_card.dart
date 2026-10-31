@@ -267,14 +267,16 @@ class TodayMomentsCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 7),
-                      Text(
-                        copy('A NOTE FOR TODAY', 'PAALALA NGAYON',
-                            'A NOTE FOR TODAY'),
-                        style: const TextStyle(
-                          color: AppColors.honeyAmber,
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.65,
+                      Expanded(
+                        child: Text(
+                          copy('A NOTE FOR TODAY', 'PAALALA NGAYON',
+                              'A NOTE FOR TODAY'),
+                          style: const TextStyle(
+                            color: AppColors.honeyAmber,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.65,
+                          ),
                         ),
                       ),
                     ],

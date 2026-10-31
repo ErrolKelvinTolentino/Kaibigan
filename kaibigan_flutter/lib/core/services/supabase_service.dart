@@ -4,6 +4,9 @@ import '../utils/env_config.dart';
 
 class SupabaseService {
   static bool _isInitialized = false;
+  static SupabaseClient? _testClient;
+  static final ValueNotifier<bool> _initialization = ValueNotifier(false);
+  static ValueListenable<bool> get initializationState => _initialization;
 
   static Future<void> init() async {
     try {
@@ -21,7 +24,22 @@ class SupabaseService {
           publishableKey: anonKey,
         );
         _isInitialized = true;
-        debugPrint("Supabase successfully initialized with $url");
+        _initialization.value = true;
+        // "Initialized" only means a client object exists; no request has
+        // been made yet, so this line says nothing about whether the project
+        // is actually up. Reachability is checked separately.
+        debugPrint(
+          'Supabase client created for $url '
+          '(${EnvConfig.describeSupabaseCredentials()}). '
+          'Not yet contacted — this does not mean the project is reachable.',
+        );
+        if (EnvConfig.usingFallbackSupabaseCredentials) {
+          debugPrint(
+            'WARNING: using the credentials compiled into env_config.dart. '
+            'No .env or --dart-define value was found, so this build may be '
+            'talking to a different project than you expect.',
+          );
+        }
       } else {
         debugPrint(
           "Supabase credentials missing or invalid. Supabase is required for authentication and storage.",
@@ -30,9 +48,16 @@ class SupabaseService {
     } catch (e) {
       debugPrint("Supabase initialization error: $e");
       _isInitialized = false;
+      _initialization.value = false;
     }
   }
 
-  static bool get isInitialized => _isInitialized;
-  static SupabaseClient get client => Supabase.instance.client;
+  static bool get isInitialized => _isInitialized || _testClient != null;
+  static SupabaseClient get client => _testClient ?? Supabase.instance.client;
+
+  @visibleForTesting
+  static void setClientForTesting(SupabaseClient? client) {
+    _testClient = client;
+    _initialization.value = isInitialized;
+  }
 }

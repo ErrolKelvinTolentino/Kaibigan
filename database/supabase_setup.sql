@@ -10,6 +10,16 @@ CREATE TABLE public.profiles (
     display_name TEXT NOT NULL DEFAULT 'Friend',
     preferred_mascot_id TEXT NOT NULL DEFAULT 'kai',
     preferred_language TEXT NOT NULL DEFAULT 'taglish',
+    theme_mode TEXT NOT NULL DEFAULT 'light',
+    garden_appearance TEXT NOT NULL DEFAULT 'syncWithTime',
+    journal_paper_style TEXT NOT NULL DEFAULT 'ruled',
+    journal_accent TEXT NOT NULL DEFAULT 'honey',
+    journal_text_size TEXT NOT NULL DEFAULT 'normal',
+    ui_sound_level TEXT NOT NULL DEFAULT 'soft',
+    ai_memory_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    ai_wellbeing_context_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    has_completed_setup BOOLEAN NOT NULL DEFAULT FALSE,
+    has_seen_tutorial BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -101,7 +111,23 @@ CREATE TABLE public.learning_progress (
     helpful_ideas INT[] NOT NULL DEFAULT '{}' CHECK (0 <= ALL(helpful_ideas)),
     last_idea_index INT NOT NULL DEFAULT 0 CHECK (last_idea_index >= 0),
     last_opened_at TIMESTAMPTZ,
+    quiz_score INTEGER,
+    quiz_total INTEGER,
+    practice_count INTEGER NOT NULL DEFAULT 0,
+    last_practice_scenario TEXT,
+    last_practiced_at TIMESTAMPTZ,
+    practice_reply_count INTEGER NOT NULL DEFAULT 0,
+    practice_supportive_count INTEGER NOT NULL DEFAULT 0,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT learning_progress_quiz_valid CHECK (
+      (quiz_score IS NULL AND quiz_total IS NULL) OR
+      (quiz_score IS NOT NULL AND quiz_total IS NOT NULL AND quiz_total > 0 AND quiz_score BETWEEN 0 AND quiz_total)
+    ),
+    CONSTRAINT learning_progress_practice_valid CHECK (
+      practice_count >= 0 AND practice_reply_count >= 0 AND
+      practice_supportive_count BETWEEN 0 AND practice_reply_count AND
+      (last_practice_scenario IS NULL OR btrim(last_practice_scenario) <> '')
+    ),
     PRIMARY KEY (user_id, lesson_id)
 );
 

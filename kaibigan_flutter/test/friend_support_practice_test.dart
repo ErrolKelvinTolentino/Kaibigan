@@ -154,7 +154,7 @@ void main() {
   });
 
   group('practice service safety', () {
-    test('a real crisis in the box stops the roleplay', () async {
+    test('a real crisis in the box stops the roleplay with safety notice and peer response', () async {
       final result = await const FriendSupportPracticeService().respond(
         scenario: overwhelm,
         userReply: 'I want to kill myself',
@@ -164,7 +164,38 @@ void main() {
 
       expect(result.endsPractice, isTrue);
       expect(result.tone, PracticeFeedbackTone.unsafe);
-      expect(result.friendReply, contains('1553'));
+      expect(result.safetyNotice, contains('1553'));
+      expect(result.friendReply.toLowerCase(), contains('worried about you'));
+    });
+
+    test('asking the friend about suicide does not stop the roleplay', () {
+      final result = LocalPracticeCoach.evaluate(
+        scenario: hopeless,
+        userReply: 'Are you thinking about suicide?',
+        language: 'english',
+        turnIndex: 0,
+      );
+
+      expect(result.endsPractice, isFalse);
+      expect(
+        result.points.any((p) => p.label.contains('directly')),
+        isTrue,
+      );
+    });
+
+    test('acting sad too is flagged as self-centering and does not advise', () {
+      final result = LocalPracticeCoach.evaluate(
+        scenario: overwhelm,
+        userReply: "I'm feeling really sad too",
+        language: 'english',
+        turnIndex: 0,
+      );
+
+      expect(
+        result.points.any((p) => p.label.contains('about them')),
+        isTrue,
+      );
+      expect(result.friendReply, isNot(contains('adviser')));
     });
 
     test('an empty reply is refused without calling anything', () async {
@@ -201,7 +232,7 @@ void main() {
 
       // The briefing says who this is and what to practise.
       expect(find.byKey(const ValueKey('practice-briefing')), findsOneWidget);
-      expect(find.textContaining('Mika needs a friend'), findsOneWidget);
+      expect(find.textContaining('Emma needs a friend'), findsOneWidget);
       expect(
         find.textContaining('written by the app, not a real person'),
         findsOneWidget,

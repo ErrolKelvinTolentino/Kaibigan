@@ -229,6 +229,10 @@ class TrustedArticle {
   final String summary;
   final Uri url;
 
+  static bool isMedlineUrl(Uri url) => url.scheme == 'https' &&
+      const {'medlineplus.gov', 'www.medlineplus.gov'}.contains(url.host) &&
+      url.userInfo.isEmpty;
+
   Map<String, Object?> toJson() => {
         'title': title,
         'summary': summary,
@@ -239,7 +243,7 @@ class TrustedArticle {
     final title = json['title'] as String?;
     final summary = json['summary'] as String?;
     final url = Uri.tryParse(json['url'] as String? ?? '');
-    if (title == null || summary == null || url == null || !url.hasScheme) {
+    if (title == null || title.trim().isEmpty || summary == null || url == null || !isMedlineUrl(url)) {
       return null;
     }
     return TrustedArticle(title: title, summary: summary, url: url);

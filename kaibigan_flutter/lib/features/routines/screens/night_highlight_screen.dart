@@ -177,7 +177,14 @@ class _NightHighlightScreenState extends State<NightHighlightScreen> {
                             decoration: const InputDecoration(
                               hintText:
                                   'e.g. Laughing with friends over lunch...',
+                              filled: false,
+                              fillColor: Colors.transparent,
                               border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              errorBorder: InputBorder.none,
+                              disabledBorder: InputBorder.none,
+                              contentPadding: EdgeInsets.zero,
                             ),
                           ),
                         ),
@@ -264,7 +271,14 @@ class _NightHighlightScreenState extends State<NightHighlightScreen> {
                             decoration: const InputDecoration(
                               hintText:
                                   'Describe the details of your highlight...',
+                              filled: false,
+                              fillColor: Colors.transparent,
                               border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              errorBorder: InputBorder.none,
+                              disabledBorder: InputBorder.none,
+                              contentPadding: EdgeInsets.zero,
                             ),
                           ),
                         ),

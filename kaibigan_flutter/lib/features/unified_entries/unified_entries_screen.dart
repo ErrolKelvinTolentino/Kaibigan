@@ -8,19 +8,19 @@ import '../journaling/journal_provider.dart';
 import '../gratitude_garden/gratitude_provider.dart';
 import '../gratitude_garden/gratitude_model.dart';
 import '../gratitude_garden/flower_detail_sheet.dart';
-import '../journaling/journal_model.dart';
-import '../journaling/journal_editor_screen.dart';
 import '../mood_tracking/mood_provider.dart';
 import '../mood_tracking/mood_model.dart';
 import '../mood_tracking/mood_detail_sheet.dart';
 import '../routines/routines_provider.dart';
 import '../routines/routine_model.dart';
+import '../insights/wellness_analytics.dart';
 import '../settings/user_provider.dart';
 import 'unified_entry_detail_screen.dart';
 import 'unified_feed_item.dart';
 
 class UnifiedEntriesScreen extends StatefulWidget {
-  const UnifiedEntriesScreen({super.key});
+  const UnifiedEntriesScreen({super.key, this.embedded = false});
+  final bool embedded;
 
   @override
   State<UnifiedEntriesScreen> createState() => _UnifiedEntriesScreenState();
@@ -104,9 +104,34 @@ class _UnifiedEntriesScreenState extends State<UnifiedEntriesScreen> {
       ));
     }
 
-    // 4. Routine Logs (Focus, Highlight, Sleep)
+    // Routine notes share a storage column, but are not all focus entries.
     for (final r in routinesProvider.logs) {
-      if (r.focusOrHighlight != null && r.focusOrHighlight!.isNotEmpty) {
+      final activity = routineActivity(r);
+      final note = r.focusOrHighlight?.trim() ?? '';
+      if (activity == 'breathing' || activity == 'grounding') {
+        final breathing = activity == 'breathing';
+        items.add(UnifiedFeedItem(
+          id: 'routine_${activity}_${r.id}',
+          title: breathing ? 'Breathing Session' : 'Grounding Session',
+          content: note,
+          category:
+              breathing ? EntryCategory.breathing : EntryCategory.grounding,
+          categoryTag: breathing ? 'Breathe' : 'Grounding',
+          categoryColor: breathing ? AppColors.skyBlue : AppColors.sageGreen,
+          iconAssetOrEmoji: breathing
+              ? FeatureIconHelper.breathing
+              : FeatureIconHelper.grounding,
+          timestamp: r.completedAt,
+          rawData: r,
+        ));
+        continue;
+      }
+      // Older sleep trackers used a morning routine ID and a "Slept ..."
+      // summary. A combined morning routine can still have its own real focus.
+      final sleepOnly = r.routineId == 'sleep' ||
+          r.routineId.startsWith('sleep_') ||
+          (r.sleepFeeling != null && note.startsWith('Slept '));
+      if (note.isNotEmpty && !sleepOnly) {
         final isHighlight = r.routineType == RoutineType.night;
         items.add(UnifiedFeedItem(
           id: 'routine_fh_${r.id}',
@@ -124,15 +149,20 @@ class _UnifiedEntriesScreenState extends State<UnifiedEntriesScreen> {
         ));
       }
 
-      if (r.sleepFeeling != null) {
+      if (r.sleepFeeling != null || sleepOnly) {
         items.add(UnifiedFeedItem(
           id: 'routine_sleep_${r.id}',
-          title: 'Sleep Status: ${r.sleepFeeling!.label}',
-          content: r.sleepFeeling!.description,
+          title: r.sleepFeeling == null
+              ? 'Sleep Log'
+              : 'Sleep Status: ${r.sleepFeeling!.label}',
+          content: sleepOnly && note.isNotEmpty
+              ? note
+              : r.sleepFeeling?.description ?? 'Saved sleep log.',
           category: EntryCategory.sleep,
           categoryTag: 'Sleep Log',
           categoryColor: AppColors.skyBlue,
-          iconAssetOrEmoji: r.sleepFeeling!.assetPath,
+          iconAssetOrEmoji:
+              r.sleepFeeling?.assetPath ?? FeatureIconHelper.sleepLog,
           timestamp: r.completedAt,
           rawData: r,
         ));
@@ -173,13 +203,16 @@ class _UnifiedEntriesScreenState extends State<UnifiedEntriesScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded,
-              color: isDark
-                  ? AppColors.textPrimaryDark
-                  : AppColors.textPrimaryLight),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+        automaticallyImplyLeading: !widget.embedded,
+        leading: widget.embedded
+            ? null
+            : IconButton(
+                icon: Icon(Icons.arrow_back_ios_new_rounded,
+                    color: isDark
+                        ? AppColors.textPrimaryDark
+                        : AppColors.textPrimaryLight),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
         title: Text(
           'All Entries',
           style: AppTypography.heading2(context, isDark: isDark),
@@ -230,6 +263,12 @@ class _UnifiedEntriesScreenState extends State<UnifiedEntriesScreen> {
                           )
                         : null,
                     border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    errorBorder: InputBorder.none,
+                    disabledBorder: InputBorder.none,
+                    filled: false,
+                    fillColor: Colors.transparent,
                     contentPadding: const EdgeInsets.symmetric(
                         vertical: 14, horizontal: 16),
                   ),
@@ -250,6 +289,9 @@ class _UnifiedEntriesScreenState extends State<UnifiedEntriesScreen> {
                       'Gratitude', EntryCategory.gratitude, isDark),
                   _buildFilterChip('Mood', EntryCategory.mood, isDark),
                   _buildFilterChip('Sleep', EntryCategory.sleep, isDark),
+                  _buildFilterChip('Breathe', EntryCategory.breathing, isDark),
+                  _buildFilterChip(
+                      'Grounding', EntryCategory.grounding, isDark),
                   _buildFilterChip(
                       'Highlight', EntryCategory.highlight, isDark),
                   _buildFilterChip('Focus', EntryCategory.focus, isDark),
@@ -299,6 +341,7 @@ class _UnifiedEntriesScreenState extends State<UnifiedEntriesScreen> {
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: ChoiceChip(
+        key: ValueKey('records-filter-${category.name}'),
         label: Text(label),
         selected: isSelected,
         onSelected: (selected) {
@@ -448,16 +491,20 @@ class _UnifiedEntriesScreenState extends State<UnifiedEntriesScreen> {
                 spacing: 6,
                 runSpacing: 4,
                 children: [
-                  _chip('Stress ${(item.rawData as MoodLog).stressLevel}/5', isDark),
-                  _chip('Energy ${(item.rawData as MoodLog).energyLevel}/5', isDark),
+                  _chip('Stress ${(item.rawData as MoodLog).stressLevel}/5',
+                      isDark),
+                  _chip('Energy ${(item.rawData as MoodLog).energyLevel}/5',
+                      isDark),
                 ],
               ),
             ] else if (item.rawData is GratitudeEntry) ...[
               const SizedBox(height: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
                 decoration: BoxDecoration(
-                  color: AppColors.honeyGold.withValues(alpha: isDark ? 0.18 : 0.12),
+                  color: AppColors.honeyGold
+                      .withValues(alpha: isDark ? 0.18 : 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -469,12 +516,15 @@ class _UnifiedEntriesScreenState extends State<UnifiedEntriesScreen> {
                   ),
                 ),
               ),
-            ] else if (item.rawData is RoutineLog && (item.rawData as RoutineLog).sleepFeeling != null) ...[
+            ] else if (item.rawData is RoutineLog &&
+                (item.rawData as RoutineLog).sleepFeeling != null) ...[
               const SizedBox(height: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
                 decoration: BoxDecoration(
-                  color: AppColors.skyBlue.withValues(alpha: isDark ? 0.18 : 0.12),
+                  color:
+                      AppColors.skyBlue.withValues(alpha: isDark ? 0.18 : 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -553,7 +603,9 @@ class _UnifiedEntriesScreenState extends State<UnifiedEntriesScreen> {
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w600,
-          color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+          color: isDark
+              ? AppColors.textSecondaryDark
+              : AppColors.textSecondaryLight,
         ),
       ),
     );
@@ -563,7 +615,8 @@ class _UnifiedEntriesScreenState extends State<UnifiedEntriesScreen> {
     BuildContext context,
     UnifiedFeedItem item,
   ) async {
-    if (item.category == EntryCategory.gratitude && item.rawData is GratitudeEntry) {
+    if (item.category == EntryCategory.gratitude &&
+        item.rawData is GratitudeEntry) {
       final user = Provider.of<UserProvider>(context, listen: false);
       await FlowerDetailSheet.show(
         context,
@@ -592,17 +645,6 @@ class _UnifiedEntriesScreenState extends State<UnifiedEntriesScreen> {
         onUpdated: () {
           if (mounted) setState(() {});
         },
-      );
-      if (mounted) setState(() {});
-      return;
-    }
-
-    if ((item.category == EntryCategory.journal || item.category == EntryCategory.reflection) &&
-        item.rawData is JournalEntry) {
-      await Navigator.of(context).push<void>(
-        MaterialPageRoute(
-          builder: (_) => JournalEditorScreen(entry: item.rawData as JournalEntry),
-        ),
       );
       if (mounted) setState(() {});
       return;

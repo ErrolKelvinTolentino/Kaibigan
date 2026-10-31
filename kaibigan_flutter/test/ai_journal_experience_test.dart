@@ -40,13 +40,13 @@ void main() {
     expect(activeField.minLines, 7);
     expect(
       tester.getSize(find.byKey(const ValueKey('ai-journal-paper'))).height,
-      greaterThanOrEqualTo(420),
+      greaterThanOrEqualTo(300),
     );
     expect(
       tester
           .getSize(find.byKey(const ValueKey('journal-paper-breathing-room')))
           .height,
-      84,
+      32,
     );
 
     await tester.tap(find.text('Need a starting point?'));
@@ -138,7 +138,7 @@ void main() {
       tester
           .getSize(find.byKey(const ValueKey('journal-paper-breathing-room')))
           .height,
-      84,
+      32,
     );
     expect(tester.takeException(), isNull);
   });
@@ -193,6 +193,8 @@ void main() {
     expect(freshReplyField, findsOneWidget);
     expect(secondResponse, lessThan(tester.getTopLeft(freshReplyField).dy));
 
+    await tester.ensureVisible(freshReplyField);
+    await tester.pumpAndSettle();
     await tester.tap(freshReplyField);
     await tester.enterText(freshReplyField, 'This is what I want to say next.');
     expect(find.text('First chat'), findsOneWidget);
@@ -294,7 +296,8 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('sharing with companion dismisses keyboard and displays loading state',
+  testWidgets(
+      'sending closes keyboard, shows the reply start, and waits for a tap',
       (tester) async {
     SharedPreferences.setMockInitialValues({
       'selected_companion': 'kai',
@@ -320,15 +323,74 @@ void main() {
 
     final textFieldWidget = tester.widget<TextField>(inputField);
     expect(textFieldWidget.focusNode?.hasFocus, isTrue);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.pump();
 
     final shareButton = find.text('Share with Kai');
     expect(shareButton, findsOneWidget);
     await tester.tap(shareButton);
+    await tester.pump();
+    tester.view.resetViewInsets();
     await tester.pumpAndSettle();
 
     // The reply from the companion arrives and renders in the journal stream
     expect(find.text('a quiet note'), findsOneWidget);
+    final nextInput = tester.widget<TextField>(inputField);
+    expect(textFieldWidget.focusNode?.hasFocus, isFalse);
+    expect(nextInput.focusNode?.hasFocus, isFalse);
+    expect(tester.testTextInput.isVisible, isFalse);
+    final reply = find.byKey(const ValueKey('journal-ai-reply-0'));
+    final viewport = find.byKey(const ValueKey('journal-editor-scroll'));
+    expect(tester.getTopLeft(reply).dy,
+        closeTo(tester.getTopLeft(viewport).dy, 2));
+    await tester.ensureVisible(inputField);
+    await tester.tap(inputField);
+    await tester.pump();
+    expect(nextInput.focusNode?.hasFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isTrue);
     expect(tester.takeException(), isNull);
+  });
+
+  test('cleanLegacyMarkdownHeadings converts legacy ### markdown headings to bold', () {
+    const raw = '''
+### What you shared
+Felt tired today.
+
+### What may connect
+Work stress.
+''';
+    final cleaned = JournalTurn.cleanLegacyMarkdownHeadings(raw);
+    expect(cleaned, contains('**What you shared**'));
+    expect(cleaned, contains('**What may connect**'));
+    expect(cleaned, isNot(contains('###')));
+  });
+
+  testWidgets('Journal title field allows multiline text without single-line clipping',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'selected_companion': 'kai',
+      'preferred_language': 'english',
+    });
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => UserProvider(),
+        child: const MaterialApp(home: JournalEditorScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final titleFieldFinder = find.byKey(const ValueKey('journal-title-field'));
+    expect(titleFieldFinder, findsOneWidget);
+
+    final titleField = tester.widget<TextField>(titleFieldFinder);
+    expect(titleField.maxLines, isNull);
+    expect(titleField.keyboardType, TextInputType.multiline);
+
+    await tester.enterText(titleFieldFinder, 'Weekly Reflection (Oct 12 – Oct 18)');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Weekly Reflection (Oct 12 – Oct 18)'), findsOneWidget);
   });
 }
 

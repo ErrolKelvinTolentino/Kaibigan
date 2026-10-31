@@ -380,13 +380,13 @@ class _WeeklyReflectionScreenState extends State<WeeklyReflectionScreen> {
         'Lingguhang Pagninilay ($dateRange)',
       );
       final content = '''
-### ${_copy(language, 'What you shared', 'Ang ibinahagi mo')}
+**${_copy(language, 'What you shared', 'Ang ibinahagi mo')}**
 ${narrative.evidence}
 
-### ${_copy(language, 'What may connect', 'Posibleng ugnayan')}
+**${_copy(language, 'What may connect', 'Posibleng ugnayan')}**
 ${narrative.pattern}
 
-### ${_copy(language, 'Try this next', 'Subukan ito')}
+**${_copy(language, 'Try this next', 'Subukan ito')}**
 ${narrative.experiment}
 ''';
 
@@ -1197,13 +1197,20 @@ ${narrative.experiment}
           const SizedBox(height: 8),
           MarkdownBody(
             data: markdown,
-            styleSheet: MarkdownStyleSheet(
+            styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
               p: TextStyle(
                 fontSize: 13,
                 height: 1.5,
                 color: primary,
               ),
-              strong: const TextStyle(fontWeight: FontWeight.w800),
+              strong: TextStyle(
+                fontWeight: FontWeight.w800,
+                color: primary,
+              ),
+              em: TextStyle(
+                fontStyle: FontStyle.italic,
+                color: primary,
+              ),
               listBullet: TextStyle(color: primary),
             ),
           ),

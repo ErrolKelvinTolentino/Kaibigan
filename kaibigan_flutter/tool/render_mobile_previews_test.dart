@@ -25,6 +25,11 @@ import 'package:kaibigan_flutter/features/routines/routines_provider.dart';
 import 'package:kaibigan_flutter/features/insights/wellness_analytics.dart';
 import 'package:kaibigan_flutter/features/insights/wellness_insights_panel.dart';
 import 'package:kaibigan_flutter/features/settings/user_provider.dart';
+import 'package:kaibigan_flutter/features/main_navigation_screen.dart';
+import 'package:kaibigan_flutter/features/journaling/journal_editor_screen.dart';
+import 'package:kaibigan_flutter/features/journaling/journal_model.dart';
+import 'package:kaibigan_flutter/features/mental_health_learning/friend_support/friend_support_practice_screen.dart';
+import 'package:kaibigan_flutter/features/mental_health_learning/friend_support/friend_support_practice_model.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -32,6 +37,7 @@ void main() {
     final font = File('C:/Windows/Fonts/segoeui.ttf');
     if (!await font.exists()) return;
     final bytes = ByteData.sublistView(await font.readAsBytes());
+    // ignore: invalid_use_of_visible_for_testing_member
     font_test.assetManifest = _PreviewFontManifest();
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -39,10 +45,15 @@ void main() {
       final path = utf8.decode(message!.buffer
           .asUint8List(message.offsetInBytes, message.lengthInBytes));
       if (path.startsWith('preview-fonts/')) return bytes;
+      final asset = File('build/unit_test_assets/${Uri.decodeFull(path)}');
+      if (asset.existsSync()) {
+        return ByteData.sublistView(asset.readAsBytesSync());
+      }
       return messenger.delegate.send('flutter/assets', message);
     });
     final families = <String>{
       'Preview',
+      'Ahem',
       'Roboto',
       'serif',
       'Quicksand_regular',
@@ -50,7 +61,11 @@ void main() {
       'Quicksand_600',
       'Quicksand_700',
       'Quicksand_800',
-      'Quicksand_900'
+      'Quicksand_900',
+      'Lora_regular',
+      'Lora_500',
+      'Lora_600',
+      'Lora_700'
     };
     final icons = File(
         'C:/flutter/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf');
@@ -62,6 +77,7 @@ void main() {
       await (FontLoader(family)..addFont(Future.value(bytes))).load();
     }
   });
+  // ignore: invalid_use_of_visible_for_testing_member
   setUp(() => SharedPreferences.setMockInitialValues(
       {'preferred_language': 'english', 'display_name': 'Sam'}));
   testWidgets('render home cards and learning on a phone', (tester) async {
@@ -143,6 +159,88 @@ void main() {
     await expectLater(find.byKey(const ValueKey('preview')),
         matchesGoldenFile('../../output/mobile-insights.png'));
   });
+
+  testWidgets('render updated journal navigation and conversation practice',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    Widget app(Widget screen) => MultiProvider(
+            providers: [
+              ChangeNotifierProvider(create: (_) => UserProvider()),
+              ChangeNotifierProvider(create: (_) => JournalProvider()),
+              ChangeNotifierProvider(create: (_) => GratitudeProvider()),
+              ChangeNotifierProvider(create: (_) => MoodProvider()),
+              ChangeNotifierProvider(
+                  create: (_) => RoutinesProvider(syncOnCreate: false)),
+              ChangeNotifierProvider(create: (_) => LettersProvider()),
+              ChangeNotifierProvider(create: (_) => AffirmationsProvider()),
+            ],
+            child: MaterialApp(
+                theme: previewTheme(),
+                home: RepaintBoundary(
+                    key: const ValueKey('updated-preview'), child: screen)));
+    await tester.pumpWidget(app(const JournalEditorScreen()));
+    await tester.pumpAndSettle();
+    await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 250)));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.byKey(const ValueKey('active-journal-writing-field')),
+        'Today felt heavy, but talking to a friend helped me feel a little less alone.');
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+    await expectLater(find.byKey(const ValueKey('updated-preview')),
+        matchesGoldenFile('../../output/mobile-journal-updated.png'));
+    await tester.pumpWidget(app(const MainNavigationScreen()));
+    await tester.pumpAndSettle();
+    await expectLater(find.byKey(const ValueKey('updated-preview')),
+        matchesGoldenFile('../../output/mobile-navbar-updated.png'));
+    await tester.pumpWidget(app(
+        FriendSupportPracticeScreen(scenario: PracticeScenarios.all.first)));
+    await tester.pumpAndSettle();
+    await expectLater(find.byKey(const ValueKey('updated-preview')),
+        matchesGoldenFile('../../output/mobile-practice-updated.png'));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('render redesigned journal conversations in day and night themes',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    for (final companion in ['kai', 'ann']) {
+      final entry = JournalEntry(
+        id: 'preview-$companion',
+        title: 'A quieter afternoon',
+        content:
+            'I went for a walk instead of pushing through. It helped me slow down.',
+        aiResponse:
+            'You noticed what you needed and made a little space for it. '
+            'How did it feel to let yourself pause?',
+        companionId: companion,
+        createdAt: DateTime(2026, 10, 12, 17, 30),
+      );
+      await tester.pumpWidget(ChangeNotifierProvider(
+          create: (_) => UserProvider(),
+          child: MaterialApp(
+              theme: previewTheme(dark: companion == 'ann'),
+              home: RepaintBoundary(
+                  key: const ValueKey('journal-thread-preview'),
+                  child: JournalEditorScreen(
+                      key: ValueKey(companion), entry: entry)))));
+      await tester.pumpAndSettle();
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 250)));
+      await tester.pumpAndSettle();
+      await tester
+          .ensureVisible(find.byKey(const ValueKey('journal-ai-reply-0')));
+      await tester.pumpAndSettle();
+      await expectLater(
+          find.byKey(const ValueKey('journal-thread-preview')),
+          matchesGoldenFile(
+              '../../output/journal-conversation-$companion.png'));
+      expect(tester.takeException(), isNull);
+    }
+  });
 }
 
 class _PreviewFontManifest implements AssetManifest {
@@ -157,14 +255,17 @@ class _PreviewFontManifest implements AssetManifest {
             'ExtraBold',
             'Black'
           ])
-            'preview-fonts/$family-$weight.ttf'
+            for (final suffix in ['', 'Italic'])
+              'preview-fonts/$family-$weight$suffix.ttf',
+        'preview-fonts/Lora-Italic.ttf',
+        'preview-fonts/Quicksand-Italic.ttf',
       ];
   @override
   List<AssetMetadata>? getAssetVariants(String key) => null;
 }
 
-ThemeData previewTheme() {
-  final base = AppTheme.lightTheme;
+ThemeData previewTheme({bool dark = false}) {
+  final base = dark ? AppTheme.darkTheme : AppTheme.lightTheme;
   const label = TextStyle(
       fontFamily: 'Preview', fontSize: 14, fontWeight: FontWeight.w600);
   return base.copyWith(

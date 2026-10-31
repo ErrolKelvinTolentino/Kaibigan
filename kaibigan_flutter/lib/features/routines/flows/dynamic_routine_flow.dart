@@ -55,8 +55,9 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
   void initState() {
     super.initState();
     final provider = context.read<RoutinesProvider>();
-    final session =
-        widget.resumeSession ? provider.sessionFor(widget.config.id) : null;
+    final session = widget.resumeSession
+        ? provider.sessionFor(widget.config.id, config: widget.config)
+        : null;
     if (session != null) {
       _currentStepIndex = session.nextStepIndex.clamp(0, _activeSteps.length);
       _skippedStepIds.addAll(session.skippedStepIds);
@@ -163,8 +164,7 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
           onSkipped: onSkipped,
         ),
       StepType.journalFocus => TodaysFocusScreen(onCompleted: onCompleted),
-      StepType.journalHighlight =>
-        TodaysHighlightScreen(
+      StepType.journalHighlight => TodaysHighlightScreen(
           existingHighlight: context.read<RoutinesProvider>().todayHighlight,
           onCompleted: onCompleted,
         ),
@@ -241,7 +241,8 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
         actions: [
           if (steps.isNotEmpty)
             IconButton(
-              tooltip: routineText(context, 'View routine', 'Tingnan ang mga gawain'),
+              tooltip: routineText(
+                  context, 'View routine', 'Tingnan ang mga gawain'),
               onPressed: () => showRoutinePlan(
                 context,
                 routine: widget.config,
@@ -293,16 +294,23 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
               const SizedBox(height: 24),
               Text(
                 _isPaused
-                    ? routineText(context, 'Routine paused', 'Pahinga muna', 'Naka-pause ang routine')
-                    : routineText(context, 'A little time for you', 'Sandaling para sa iyo'),
+                    ? routineText(context, 'Routine paused', 'Pahinga muna',
+                        'Naka-pause ang routine')
+                    : routineText(context, 'A little time for you',
+                        'Sandaling para sa iyo'),
                 style: AppTypography.titleLarge(context, isDark: isDark),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 9),
               Text(
                 _isPaused
-                    ? routineText(context, 'Completed activities are saved. Continue when you feel ready.', 'Naka-save ang mga natapos mong gawain. Magpatuloy kapag handa ka na.', 'Saved na ang mga natapos mong activity. Continue kapag ready ka na.')
-                    : routineText(context, 'Take this at your own pace.', 'Gawin ito sa sarili mong bilis.'),
+                    ? routineText(
+                        context,
+                        'Completed activities are saved. Continue when you feel ready.',
+                        'Naka-save ang mga natapos mong gawain. Magpatuloy kapag handa ka na.',
+                        'Saved na ang mga natapos mong activity. Continue kapag ready ka na.')
+                    : routineText(context, 'Take this at your own pace.',
+                        'Gawin ito sa sarili mong bilis.'),
                 style: AppTypography.bodyMedium(context, isDark: isDark),
                 textAlign: TextAlign.center,
               ),
@@ -375,10 +383,12 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
                     key: const ValueKey('resume-routine-activity'),
                     onPressed: _launchCurrentActivity,
                     icon: const Icon(Icons.play_arrow_rounded),
-                    label: Text(routineText(context, 'Continue activity', 'Ipagpatuloy ang gawain')), 
+                    label: Text(routineText(context, 'Continue activity',
+                        'Ipagpatuloy ang gawain')),
                     style: FilledButton.styleFrom(
                       backgroundColor: widget.config.primaryColor,
-                      foregroundColor: AppColors.readableOn(widget.config.primaryColor),
+                      foregroundColor:
+                          AppColors.readableOn(widget.config.primaryColor),
                     ),
                   ),
                 ),
@@ -454,9 +464,15 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
               Text(
                 LanguageHelper.pick(
                   language,
-                  english: allSkipped ? 'A pause is okay, too' : 'Routine completed! ✨',
-                  filipino: allSkipped ? 'Ayos lang magpahinga muna' : 'Natapos mo ang mga gawain! ✨',
-                  taglish: allSkipped ? 'Okay lang mag-pause' : 'Tapos na ang routine! ✨',
+                  english: allSkipped
+                      ? 'A pause is okay, too'
+                      : 'Routine completed! ✨',
+                  filipino: allSkipped
+                      ? 'Ayos lang magpahinga muna'
+                      : 'Natapos mo ang mga gawain! ✨',
+                  taglish: allSkipped
+                      ? 'Okay lang mag-pause'
+                      : 'Tapos na ang routine! ✨',
                 ),
                 style: AppTypography.heroHeader(context, isDark: isDark),
                 textAlign: TextAlign.center,
@@ -468,8 +484,8 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
                   english: allSkipped
                       ? 'You skipped ${_skippedStepIds.length} activities. You can come back when it feels right.'
                       : _skippedStepIds.isEmpty
-                      ? 'Well done, ${user.displayName}. You made time for every activity.'
-                      : 'Well done, ${user.displayName}. You finished at your own pace and skipped ${_skippedStepIds.length} ${_skippedStepIds.length == 1 ? 'activity' : 'activities'}.',
+                          ? 'Well done, ${user.displayName}. You made time for every activity.'
+                          : 'Well done, ${user.displayName}. You finished at your own pace and skipped ${_skippedStepIds.length} ${_skippedStepIds.length == 1 ? 'activity' : 'activities'}.',
                   filipino: allSkipped
                       ? 'Nilaktawan mo ang ${_skippedStepIds.length} gawain. Maaari kang bumalik kapag handa ka na.'
                       : _skippedStepIds.isEmpty
@@ -491,9 +507,11 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
                   onPressed: _isFinishing ? null : _finishRoutine,
                   style: FilledButton.styleFrom(
                     backgroundColor: widget.config.primaryColor,
-                    foregroundColor: AppColors.readableOn(widget.config.primaryColor),
+                    foregroundColor:
+                        AppColors.readableOn(widget.config.primaryColor),
                     minimumSize: const Size(0, 54),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
                     ),
@@ -510,9 +528,15 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
                       : Text(
                           LanguageHelper.pick(
                             language,
-                            english: allSkipped ? 'Return to routines' : 'Save & finish',
-                            filipino: allSkipped ? 'Bumalik sa mga gawain' : 'I-save at tapusin',
-                            taglish: allSkipped ? 'Balik sa routines' : 'Save at tapusin',
+                            english: allSkipped
+                                ? 'Return to routines'
+                                : 'Save & finish',
+                            filipino: allSkipped
+                                ? 'Bumalik sa mga gawain'
+                                : 'I-save at tapusin',
+                            taglish: allSkipped
+                                ? 'Balik sa routines'
+                                : 'Save at tapusin',
                           ),
                           style: const TextStyle(
                             fontSize: 16,
@@ -542,12 +566,16 @@ class _DynamicRoutineFlowState extends State<DynamicRoutineFlow> {
             ),
             const SizedBox(height: 16),
             Text(
-              routineText(context, 'No active activities', 'Wala pang napiling gawain'),
+              routineText(
+                  context, 'No active activities', 'Wala pang napiling gawain'),
               style: AppTypography.titleLarge(context, isDark: isDark),
             ),
             const SizedBox(height: 8),
             Text(
-              routineText(context, 'Add or enable an activity before starting this routine.', 'Magdagdag o pumili muna ng gawain bago magsimula.'),
+              routineText(
+                  context,
+                  'Add or enable an activity before starting this routine.',
+                  'Magdagdag o pumili muna ng gawain bago magsimula.'),
               style: AppTypography.bodyMedium(context, isDark: isDark),
               textAlign: TextAlign.center,
             ),
@@ -617,7 +645,8 @@ class _CustomRoutineActivity extends StatelessWidget {
                     child: FilledButton.icon(
                       onPressed: onCompleted,
                       icon: const Icon(Icons.check_rounded),
-                      label: Text(routineText(context, 'Complete activity', 'Tapusin ang gawain')), 
+                      label: Text(routineText(
+                          context, 'Complete activity', 'Tapusin ang gawain')),
                       style: FilledButton.styleFrom(
                         backgroundColor: accent,
                         foregroundColor: AppColors.readableOn(accent),

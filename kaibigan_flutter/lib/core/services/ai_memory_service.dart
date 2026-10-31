@@ -62,21 +62,40 @@ class AIMemoryService {
   static List<UserMemory> get memories => List.unmodifiable(_memories);
   static bool get isEnabled => _isEnabled;
 
+  static void reset() {
+    _isEnabled = true;
+    _preferenceLoaded = false;
+    _loadedUserId = null;
+    _memories.clear();
+  }
+
+  static String _keyForUser([String? userId]) {
+    final uid = userId ??
+        (SupabaseService.isInitialized
+            ? SupabaseService.client.auth.currentUser?.id
+            : null);
+    return uid != null ? 'ai_memory_enabled_$uid' : _enabledPreferenceKey;
+  }
+
   /// Loads the user's personalization choice. Existing memories remain
   /// visible when memory is paused, but they are not learned from or sent to
   /// the AI until the user turns it on again.
-  static Future<bool> loadPreference() async {
+  static Future<bool> loadPreference([String? userId]) async {
     final preferences = await SharedPreferences.getInstance();
-    _isEnabled = preferences.getBool(_enabledPreferenceKey) ?? true;
+    final key = _keyForUser(userId);
+    _isEnabled = preferences.getBool(key) ??
+        preferences.getBool(_enabledPreferenceKey) ??
+        true;
     _preferenceLoaded = true;
     return _isEnabled;
   }
 
-  static Future<void> setEnabled(bool enabled) async {
+  static Future<void> setEnabled(bool enabled, [String? userId]) async {
     _isEnabled = enabled;
     _preferenceLoaded = true;
     final preferences = await SharedPreferences.getInstance();
-    await preferences.setBool(_enabledPreferenceKey, enabled);
+    final key = _keyForUser(userId);
+    await preferences.setBool(key, enabled);
   }
 
   /// Fetch memories from Supabase database if available

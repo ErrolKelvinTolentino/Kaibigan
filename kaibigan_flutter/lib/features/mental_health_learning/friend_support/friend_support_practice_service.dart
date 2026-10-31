@@ -43,10 +43,20 @@ class FriendSupportPracticeService {
       );
     }
 
-    // The practice partner is fiction; a real crisis in the text box is not.
-    if (AIService.isCrisisMessage(prepared)) {
+    // The practice partner is fiction; an explicit personal crisis in the text box is not.
+    // If the user is expressing first-person suicidal intent for themselves, pause the practice.
+    // If they are asking the friend about safety/suicide ("Are you thinking about suicide?"),
+    // that is the core support skill being practiced and must continue in roleplay.
+    if (AIService.isExplicitFirstPersonCrisis(prepared)) {
       return PracticeTurnResult(
-        friendReply: AIService.getCrisisResponse('kai', language),
+        friendReply: LanguageHelper.pick(
+          language,
+          english:
+              "Wait... are you okay? I don't know what to say, I'm really worried about you. Please stay safe.",
+          filipino:
+              "Teka... ayos ka lang ba? Hindi ko alam ang sasabihin ko, nag-aalala talaga ako sa'yo. Mag-ingat ka please.",
+        ),
+        safetyNotice: AIService.getCrisisResponse('kai', language),
         tone: PracticeFeedbackTone.unsafe,
         headline: LanguageHelper.pick(
           language,
@@ -67,7 +77,7 @@ class FriendSupportPracticeService {
         userText: bounded,
         companionId: 'kai',
         language: language,
-        mode: CompanionMode.companion,
+        mode: CompanionMode.practiceRoleplay,
         useReasoning: false,
         conversationHistory: history,
         educationalContext: _rolePrompt(scenario, language),
@@ -189,8 +199,20 @@ You are running a support-skills practice session. There are two jobs, and you d
 
 JOB 1 — Be the friend.
 You are ${scenario.friendName}, a real person messaging a friend. ${scenario.watchFor}
-Write like someone texting: short, lowercase where natural, unpolished. One to three sentences.
-React honestly to what the user actually wrote. If their reply was dismissive, minimising, or advice-heavy, pull back the way a real person would. If it was warm and attentive, open up a little more. Never break character in this part, never mention practice, coaching, or AI.
+CRITICAL CHARACTER INTEGRITY RULES:
+- YOU ARE THE FRIEND IN DISTRESS. You are stressed, overwhelmed, or struggling. The USER is practicing how to support YOU.
+- NEVER EVER act as an adviser, counselor, coach, or therapist.
+- NEVER give the user mental health advice, coping tips, or lectures.
+- IF THE USER ACTS SAD, COMPLAINS, OR TALKS ABOUT THEIR OWN PROBLEMS:
+  Do NOT counsel them or tell them to stay strong. React realistically as an overwhelmed, guilty, or withdrawn peer:
+  e.g. "Wait, are you having a rough time too? Sorry, I shouldn't have dumped this on you..."
+  or "I didn't mean to make things worse... maybe we shouldn't talk right now."
+  or "I thought you were listening to me, but whatever."
+- IF THE USER ASKS ABOUT SUICIDE, HURTING YOURSELF, OR HARMFUL WORDS:
+  Answer honestly and rawly in character as ${scenario.friendName} (e.g. admitting how heavy things feel or feeling relieved someone asked). Do NOT give advice to the user.
+- STRICT LENGTH LIMIT: 1 TO 2 SHORT SENTENCES ONLY (maximum 20-35 words total).
+  Write like someone texting: short, lowercase where natural, unpolished. NEVER write long paragraphs or essay-like responses.
+- Never break character in this part, never mention practice, coaching, or AI.
 $safetyRule
 
 JOB 2 — Grade the user's reply.
@@ -200,7 +222,7 @@ Return exactly one JSON object with:
 - "possible_need": "processing"
 - "safety_level": "none"
 - "suggested_replies": []
-- "response": what ${scenario.friendName} says next, in character
+- "response": what ${scenario.friendName} says next, in character (1-2 short sentences only)
 - "detected_emotions": 1–3 lowercase labels for what ${scenario.friendName} is feeling, from happy, anxious, tired, grateful, excited, sad, overwhelmed, calm, hopeful, frustrated, relieved, lonely, proud, uncertain, peaceful, nostalgic
 - "journal_moments": 1–3 objects grading the user's reply. Each has a "title" of at most six words and a "reflection" of one or two sentences quoting or naming what they actually wrote. A title for something they did well starts with a plain label. A title for something to change starts with "Try" or "Next time". Be specific and honest — do not praise a weak reply.
 - "journal_advice": one sentence the user could have sent instead, written as the exact words. Empty string if their reply already did the job.
@@ -250,14 +272,18 @@ class LocalPracticeCoach {
   );
 
   static final _selfCentring = RegExp(
-    r"\b(that happened to me|i went through|when i was|same here, i|"
-    r"ako nga|ganyan din ako|mas malala pa nga)\b",
+    r"\b(that happened to me|i went through|when i was|same here|me too|"
+    r"i('?m| am| feel) (?:so )?(?:sad|depressed|tired|hopeless|down|stressed) too|"
+    r"sad too|ako rin|ako nga|ganyan din ako|mas malala pa nga|"
+    r"malungkot din ako|pagod din ako)\b",
     caseSensitive: false,
   );
 
   static final _safetyCheck = RegExp(
     r"\b(are you safe|is it safe|thinking of hurting|hurt yourself|"
-    r"ligtas ka ba|safe ka ba|may masamang naiisip)\b",
+    r"thinking about suicide|thinking of suicide|feeling suicidal|suicide|suicidal|"
+    r"want to die|ending your life|ligtas ka ba|safe ka ba|may masamang naiisip|"
+    r"naiisip mo bang magpakamatay|magpakamatay|saktan ang sarili)\b",
     caseSensitive: false,
   );
 

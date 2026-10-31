@@ -250,38 +250,79 @@ class FlowerDetailSheet {
     required GratitudeProvider provider,
     VoidCallback? onUpdated,
   }) {
-    final controller = TextEditingController(text: entry.content);
     showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (_) => _EditGratitudeDialog(
+        entry: entry,
+        provider: provider,
+        onUpdated: onUpdated,
+      ),
+    );
+  }
+}
+
+// The route future completes before its exit animation unmounts the TextField.
+// Own the controller here so it stays alive until that field is removed.
+class _EditGratitudeDialog extends StatefulWidget {
+  const _EditGratitudeDialog(
+      {required this.entry, required this.provider, this.onUpdated});
+  final GratitudeEntry entry;
+  final GratitudeProvider provider;
+  final VoidCallback? onUpdated;
+
+  @override
+  State<_EditGratitudeDialog> createState() => _EditGratitudeDialogState();
+}
+
+class _EditGratitudeDialogState extends State<_EditGratitudeDialog> {
+  late final _controller = TextEditingController(text: widget.entry.content);
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    final saved = await widget.provider
+        .updateGratitudeEntry(widget.entry.id, _controller.text);
+    if (!mounted) return;
+    if (saved) {
+      Navigator.of(context).pop();
+      widget.onUpdated?.call();
+    } else {
+      setState(() {
+        _saving = false;
+        _error = widget.provider.errorMessage ??
+            'This change could not be saved. Please try again.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
         title: const Text('Edit gratitude'),
         content: TextField(
-          controller: controller,
+          controller: _controller,
+          enabled: !_saving,
           maxLines: 3,
-          decoration: const InputDecoration(
-            hintText: 'Update this gratitude memory…',
-          ),
+          decoration: InputDecoration(
+              hintText: 'Update this gratitude memory…', errorText: _error),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
-          ),
+              onPressed: _saving ? null : () => Navigator.of(context).pop(),
+              child: const Text('Cancel')),
           FilledButton(
-            onPressed: () async {
-              final saved = await provider.updateGratitudeEntry(
-                entry.id,
-                controller.text,
-              );
-              if (saved && dialogContext.mounted) {
-                Navigator.of(dialogContext).pop();
-                onUpdated?.call();
-              }
-            },
-            child: const Text('Save'),
-          ),
+              onPressed: _saving ? null : _save,
+              child: Text(_saving ? 'Saving…' : 'Save')),
         ],
-      ),
-    ).whenComplete(controller.dispose);
-  }
+      );
 }

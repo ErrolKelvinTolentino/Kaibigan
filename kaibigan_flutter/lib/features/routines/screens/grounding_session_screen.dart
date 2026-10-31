@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
@@ -152,18 +153,23 @@ class _GroundingSessionScreenState extends State<GroundingSessionScreen> {
       final observations = _notes
           .where((controller) => controller.text.trim().isNotEmpty)
           .length;
-      await context.read<RoutinesProvider>().addLog(
-            RoutineLog(
-              id: '',
-              routineId: 'grounding_${DateTime.now().millisecondsSinceEpoch}',
-              routineType: RoutineType.midday,
-              completedAt: DateTime.now(),
-              focusOrHighlight: widget.routineMode
-                  ? 'Completed a quick 3-2-1 sensory grounding reset.'
-                  : 'Completed 5-4-3-2-1 grounding with $observations saved observations.',
+      // Saving happens in the background. Someone who has just finished a
+      // grounding exercise should not watch a spinner while a write lands,
+      // and the provider surfaces its own error if the save fails.
+      unawaited(
+        context.read<RoutinesProvider>().addLog(
+              RoutineLog(
+                id: '',
+                routineId:
+                    'grounding_${DateTime.now().millisecondsSinceEpoch}',
+                routineType: RoutineType.midday,
+                completedAt: DateTime.now(),
+                focusOrHighlight: widget.routineMode
+                    ? 'Completed a quick 3-2-1 sensory grounding reset.'
+                    : 'Completed 5-4-3-2-1 grounding with $observations saved observations.',
+              ),
             ),
-          );
-      if (!mounted) return;
+      );
     }
     setState(() => _page = _completePage);
   }

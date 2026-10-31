@@ -9,14 +9,18 @@ import '../../core/widgets/sync_status_banner.dart';
 import '../../core/widgets/cozy_feature_banner.dart';
 import '../../core/widgets/kaibigan_state_view.dart';
 import '../companion/companion_model.dart';
+import '../mood_tracking/mood_model.dart';
 import '../settings/user_provider.dart';
 import '../routines/screens/daily_reflection_screen.dart';
+import '../unified_entries/unified_entry_detail_screen.dart';
+import '../unified_entries/unified_feed_item.dart';
 import 'journal_provider.dart';
 import 'journal_editor_screen.dart';
 import 'journal_model.dart';
 
 class JournalListScreen extends StatefulWidget {
-  const JournalListScreen({super.key});
+  const JournalListScreen({super.key, this.embedded = false});
+  final bool embedded;
 
   @override
   State<JournalListScreen> createState() => _JournalListScreenState();
@@ -28,8 +32,6 @@ class _JournalListScreenState extends State<JournalListScreen> {
   final List<String> _categories = [
     'All',
     'Favorites',
-    'AI Journal',
-    'Reflections',
   ];
 
   bool _isReflection(JournalEntry entry) {
@@ -62,17 +64,6 @@ class _JournalListScreenState extends State<JournalListScreen> {
 
     if (_selectedCategory == 'Favorites') {
       entries = journalProvider.favoriteEntries;
-    } else if (_selectedCategory == 'AI Journal') {
-      entries = entries.where((entry) => !_isReflection(entry)).toList();
-    } else if (_selectedCategory == 'Reflections') {
-      entries = entries.where(_isReflection).toList();
-    } else if (_selectedCategory != 'All') {
-      final cleanCat = _selectedCategory.toLowerCase();
-      entries = entries
-          .where((e) =>
-              e.tags.any((t) => t.toLowerCase().contains(cleanCat)) ||
-              e.title.toLowerCase().contains(cleanCat))
-          .toList();
     }
 
     return Scaffold(
@@ -80,11 +71,14 @@ class _JournalListScreenState extends State<JournalListScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded,
-              color: isDark ? Colors.white : Colors.black87),
-          onPressed: () => Navigator.pop(context),
-        ),
+        automaticallyImplyLeading: !widget.embedded,
+        leading: widget.embedded
+            ? null
+            : IconButton(
+                icon: Icon(Icons.arrow_back_ios_new_rounded,
+                    color: isDark ? Colors.white : Colors.black87),
+                onPressed: () => Navigator.pop(context),
+              ),
         title: Text(
           copy('Journal', 'Journal'),
           style: AppTypography.heading3(context, isDark: isDark),
@@ -113,7 +107,8 @@ class _JournalListScreenState extends State<JournalListScreen> {
                 child: ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.nightlight_outlined),
-                  title: Text(copy('Start Reflection', 'Magsimula ng pagninilay')),
+                  title:
+                      Text(copy('Start Reflection', 'Magsimula ng pagninilay')),
                   subtitle: Text(copy(
                     'Use a guided evening reflection.',
                     'Gumamit ng gabay para sa pagninilay sa gabi.',
@@ -215,10 +210,8 @@ class _JournalListScreenState extends State<JournalListScreen> {
                       label: Text(
                         language == 'filipino'
                             ? switch (cat) {
-                                'All' => 'Lahat',
                                 'Favorites' => 'Paborito',
-                                'AI Journal' => 'AI Journal',
-                                _ => 'Mga Pagninilay',
+                                _ => 'Lahat',
                               }
                             : cat,
                       ),
@@ -383,120 +376,135 @@ class _JournalListScreenState extends State<JournalListScreen> {
                               borderRadius: BorderRadius.circular(20),
                               clipBehavior: Clip.antiAlias,
                               child: ListTile(
-                              contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 10),
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        JournalEditorScreen(entry: entry),
-                                  ),
-                                );
-                              },
-                              title: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      entry.displayTitle(language),
-                                      maxLines: 1,
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 10),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => UnifiedEntryDetailScreen(
+                                          item: UnifiedFeedItem(
+                                        id: 'journal_${entry.id}',
+                                        title: entry.displayTitle(language),
+                                        content: entry.content,
+                                        category: _isReflection(entry)
+                                            ? EntryCategory.reflection
+                                            : EntryCategory.journal,
+                                        categoryTag: _isReflection(entry)
+                                            ? 'Daily Reflection'
+                                            : 'AI Journal',
+                                        categoryColor: AppColors.sageGreen,
+                                        iconAssetOrEmoji:
+                                            FeatureIconHelper.journal,
+                                        timestamp: entry.createdAt,
+                                        rawData: entry,
+                                      )),
+                                    ),
+                                  );
+                                },
+                                title: Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        entry.displayTitle(language),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 15.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: isDark
+                                              ? AppColors.textPrimaryDark
+                                              : AppColors.textPrimaryLight,
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: Icon(
+                                        entry.isFavorite
+                                            ? Icons.favorite_rounded
+                                            : Icons.favorite_border_rounded,
+                                        size: 20,
+                                        color: entry.isFavorite
+                                            ? AppColors.moodAwful
+                                            : Colors.grey,
+                                      ),
+                                      onPressed: () async {
+                                        final saved = await journalProvider
+                                            .toggleFavorite(entry.id);
+                                        if (!context.mounted || saved) return;
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              journalProvider.errorMessage ??
+                                                  'The favorite change was not saved.',
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      entry.content,
+                                      maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
-                                        fontSize: 15.5,
-                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13,
+                                        height: 1.35,
                                         color: isDark
-                                            ? AppColors.textPrimaryDark
-                                            : AppColors.textPrimaryLight,
+                                            ? AppColors.textSecondaryDark
+                                            : AppColors.textSecondaryLight,
                                       ),
                                     ),
-                                  ),
-                                  IconButton(
-                                    icon: Icon(
-                                      entry.isFavorite
-                                          ? Icons.favorite_rounded
-                                          : Icons.favorite_border_rounded,
-                                      size: 20,
-                                      color: entry.isFavorite
-                                          ? AppColors.moodAwful
-                                          : Colors.grey,
-                                    ),
-                                    onPressed: () async {
-                                      final saved = await journalProvider
-                                          .toggleFavorite(entry.id);
-                                      if (!context.mounted || saved) return;
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            journalProvider.errorMessage ??
-                                                'The favorite change was not saved.',
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 8, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: mascot.primaryColor
+                                                .withValues(alpha: 0.15),
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
+                                          child: Text(
+                                            '${mascot.avatarIcon} ${mascot.name}',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              color: mascot.primaryColor,
+                                            ),
                                           ),
                                         ),
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    entry.content,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      height: 1.35,
-                                      color: isDark
-                                          ? AppColors.textSecondaryDark
-                                          : AppColors.textSecondaryLight,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 8, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: mascot.primaryColor
-                                              .withValues(alpha: 0.15),
-                                          borderRadius:
-                                              BorderRadius.circular(8),
-                                        ),
-                                        child: Text(
-                                          '${mascot.avatarIcon} ${mascot.name}',
+                                        const Spacer(),
+                                        Text(
+                                          DateFormatter.formatJournalDate(
+                                            entry.createdAt,
+                                            language: language,
+                                          ),
                                           style: TextStyle(
                                             fontSize: 11,
-                                            fontWeight: FontWeight.w700,
-                                            color: mascot.primaryColor,
+                                            color: isDark
+                                                ? Colors.white38
+                                                : Colors.black38,
                                           ),
                                         ),
-                                      ),
-                                      const Spacer(),
-                                      Text(
-                                        DateFormatter.formatJournalDate(
-                                          entry.createdAt,
-                                          language: language,
-                                        ),
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: isDark
-                                              ? Colors.white38
-                                              : Colors.black38,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
+                                      ],
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      );
-                    },
+                        );
+                      },
                     ),
             ),
           ],

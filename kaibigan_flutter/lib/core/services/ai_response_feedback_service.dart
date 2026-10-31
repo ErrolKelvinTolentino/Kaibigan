@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
+import 'supabase_service.dart';
 
 enum AIReplyFeedback { helpful, notHelpful }
 
@@ -109,6 +110,18 @@ class AIResponseFeedbackService {
 
   static AIPreferenceProfile? _cachedProfile;
 
+  static void reset() {
+    _cachedProfile = null;
+  }
+
+  static String _keyForUser([String? userId]) {
+    final uid = userId ??
+        (SupabaseService.isInitialized
+            ? SupabaseService.client.auth.currentUser?.id
+            : null);
+    return uid != null ? 'ai_response_feedback_v1_$uid' : _storageKey;
+  }
+
   /// Saves only quality metadata. Journal and response text are deliberately
   /// excluded so feedback never creates a second copy of private writing.
   static Future<void> record({
@@ -117,9 +130,11 @@ class AIResponseFeedbackService {
     required String companionId,
     required String mode,
     required bool wasOffline,
+    String? userId,
   }) async {
     final preferences = await SharedPreferences.getInstance();
-    final stored = preferences.getString(_storageKey);
+    final key = _keyForUser(userId);
+    final stored = preferences.getString(key) ?? preferences.getString(_storageKey);
     final records = <Map<String, dynamic>>[];
     if (stored != null) {
       try {
@@ -142,7 +157,7 @@ class AIResponseFeedbackService {
     if (records.length > _maximumRecords) {
       records.removeRange(_maximumRecords, records.length);
     }
-    await preferences.setString(_storageKey, jsonEncode(records));
+    await preferences.setString(key, jsonEncode(records));
     _cachedProfile = _profileFrom(records);
   }
 
@@ -151,12 +166,13 @@ class AIResponseFeedbackService {
   static AIPreferenceProfile get cachedProfile =>
       _cachedProfile ?? AIPreferenceProfile.empty;
 
-  static Future<AIPreferenceProfile> loadProfile() async {
+  static Future<AIPreferenceProfile> loadProfile([String? userId]) async {
     final cached = _cachedProfile;
     if (cached != null) return cached;
     try {
       final preferences = await SharedPreferences.getInstance();
-      final stored = preferences.getString(_storageKey);
+      final key = _keyForUser(userId);
+      final stored = preferences.getString(key) ?? preferences.getString(_storageKey);
       if (stored == null) {
         return _cachedProfile = AIPreferenceProfile.empty;
       }
@@ -174,10 +190,12 @@ class AIResponseFeedbackService {
 
   /// Forgets what feedback has taught the companion, without touching
   /// anything the person wrote.
-  static Future<void> clearLearnedPreferences() async {
+  static Future<void> clearLearnedPreferences([String? userId]) async {
     _cachedProfile = AIPreferenceProfile.empty;
     try {
       final preferences = await SharedPreferences.getInstance();
+      final key = _keyForUser(userId);
+      await preferences.remove(key);
       await preferences.remove(_storageKey);
     } catch (_) {
       // The in-memory reset above is what steers the next reply.

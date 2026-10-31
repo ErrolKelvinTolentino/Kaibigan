@@ -501,6 +501,20 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
     );
   }
 
+  String _buildReflectionTitle() {
+    if (_selectedEmotions.isEmpty) {
+      return "What got you feeling this way?";
+    }
+    final list = _selectedEmotions.toList();
+    if (list.length == 1) {
+      return "What got you feeling ${list.first.toLowerCase()}?";
+    }
+    if (list.length == 2) {
+      return "What got you feeling ${list[0].toLowerCase()} and ${list[1].toLowerCase()}?";
+    }
+    return "What got you feeling ${list.take(list.length - 1).map((e) => e.toLowerCase()).join(', ')}, and ${list.last.toLowerCase()}?";
+  }
+
   Widget _buildStep3Reflection(BuildContext context, bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -508,7 +522,7 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
         _buildProgressBar(3, 3, isDark),
         const SizedBox(height: 24),
         Text(
-          "What got you feeling this way?",
+          _buildReflectionTitle(),
           style: TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.w800,
@@ -519,13 +533,62 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
         ),
         const SizedBox(height: 6),
         Text(
-          "Optional. A sentence can help you remember the context later.",
+          _selectedEmotions.isNotEmpty
+              ? "A sentence can help you remember what sparked these feelings."
+              : "Optional. A sentence can help you remember the context later.",
           style: TextStyle(
               fontSize: 14,
               color: isDark
                   ? AppColors.textSecondaryDark
                   : AppColors.textSecondaryLight),
         ),
+        if (_selectedEmotions.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Wrap(
+            key: const ValueKey('mood-selected-emotions-reflection'),
+            spacing: 8,
+            runSpacing: 8,
+            children: _selectedEmotions.map((emotion) {
+              return Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.honeyGold
+                      .withValues(alpha: isDark ? 0.35 : 0.18),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: AppColors.honeyGold
+                        .withValues(alpha: isDark ? 0.6 : 0.4),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                        color: AppColors.honeyAmber,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 7),
+                    Text(
+                      emotion,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: isDark
+                            ? AppColors.honeyLight
+                            : AppColors.honeyAmber,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ],
         const SizedBox(height: 20),
         Container(
           padding: const EdgeInsets.all(18),
@@ -563,6 +626,13 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
                     : AppColors.textSecondaryLight.withValues(alpha: 0.5),
               ),
               border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              errorBorder: InputBorder.none,
+              disabledBorder: InputBorder.none,
+              filled: false,
+              fillColor: Colors.transparent,
+              contentPadding: EdgeInsets.zero,
             ),
           ),
         ),

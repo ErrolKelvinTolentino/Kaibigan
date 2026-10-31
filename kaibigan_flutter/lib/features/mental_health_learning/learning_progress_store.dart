@@ -218,6 +218,15 @@ class LearningProgressStore {
   static const _quizTotalPrefix = 'friend_support_quiz_total_';
 
   Future<({int score, int total})?> loadQuizScore(String lessonId) async {
+    final owner = _sync.userId;
+    if (owner != null) {
+      final row = (await _sync.load(owner))[lessonId];
+      final score = row?['quiz_score'] as int?;
+      final total = row?['quiz_total'] as int?;
+      return score == null || total == null
+          ? null
+          : (score: score, total: total);
+    }
     final preferences = await SharedPreferences.getInstance();
     final score = preferences.getInt('$_quizScorePrefix$lessonId');
     final total = preferences.getInt('$_quizTotalPrefix$lessonId');
@@ -226,6 +235,19 @@ class LearningProgressStore {
   }
 
   Future<void> saveQuizScore(String lessonId, int score, int total) async {
+    if (total <= 0 || score < 0 || score > total) {
+      throw ArgumentError('Invalid quiz result');
+    }
+    final owner = _sync.userId;
+    if (owner != null) {
+      await _sync.change(owner, lessonId, (row) {
+        final current = row['quiz_score'] as int?;
+        return current == null || score >= current
+            ? {'quiz_score': score, 'quiz_total': total}
+            : <String, dynamic>{};
+      });
+      return;
+    }
     final preferences = await SharedPreferences.getInstance();
     final current = preferences.getInt('$_quizScorePrefix$lessonId');
     if (current == null || score >= current) {
@@ -234,5 +256,31 @@ class LearningProgressStore {
         preferences.setInt('$_quizTotalPrefix$lessonId', total),
       ]);
     }
+  }
+
+  /// Only completion counts and scenario identifiers are retained, never chat.
+  Future<void> savePracticeResult(
+      {required String lessonId,
+      required String scenarioId,
+      required int replies,
+      required int supportiveReplies}) async {
+    if (replies < 1 || supportiveReplies < 0 || supportiveReplies > replies) {
+      throw ArgumentError('Invalid practice result');
+    }
+    Map<String, dynamic> patch(Map<String, dynamic> row) => {
+          'practice_count': (row['practice_count'] as int? ?? 0) + 1,
+          'last_practice_scenario': scenarioId,
+          'last_practiced_at': DateTime.now().toUtc().toIso8601String(),
+          'practice_reply_count': replies,
+          'practice_supportive_count': supportiveReplies,
+        };
+    final owner = _sync.userId;
+    if (owner != null) {
+      await _sync.change(owner, lessonId, patch);
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'friend_support_practice_count_$lessonId';
+    await prefs.setInt(key, (prefs.getInt(key) ?? 0) + 1);
   }
 }

@@ -119,7 +119,7 @@ void main() {
         ],
         child: MaterialApp(
           theme: AppTheme.lightTheme,
-          home: const RoutinesHubScreen(),
+          home: const RoutinesHubScreen(autoplay: false),
         ),
       ),
     );
@@ -159,7 +159,7 @@ void main() {
         ],
         child: MaterialApp(
           theme: AppTheme.lightTheme,
-          home: const RoutinesHubScreen(),
+          home: const RoutinesHubScreen(autoplay: false),
         ),
       ),
     );

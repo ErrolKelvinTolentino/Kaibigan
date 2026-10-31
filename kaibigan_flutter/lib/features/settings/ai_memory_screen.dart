@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/services/ai_memory_service.dart';
@@ -9,6 +10,7 @@ import '../../core/widgets/cozy_confirm_sheet.dart';
 import '../../core/widgets/cozy_feature_banner.dart';
 import '../../core/widgets/kaibigan_state_view.dart';
 import '../insights/wellbeing_context.dart';
+import 'user_provider.dart';
 
 class AiMemoryScreen extends StatefulWidget {
   final String language;
@@ -75,11 +77,23 @@ class _AiMemoryScreenState extends State<AiMemoryScreen> {
   Future<void> _toggle(bool value) async {
     setState(() => _enabled = value);
     await AIMemoryService.setEnabled(value);
+    if (mounted) {
+      try {
+        final user = Provider.of<UserProvider>(context, listen: false);
+        await user.setAiMemoryEnabled(value);
+      } catch (_) {}
+    }
   }
 
   Future<void> _toggleWellbeing(bool value) async {
     setState(() => _wellbeingEnabled = value);
     await WellbeingContextService.setEnabled(value);
+    if (mounted) {
+      try {
+        final user = Provider.of<UserProvider>(context, listen: false);
+        await user.setAiWellbeingContextEnabled(value);
+      } catch (_) {}
+    }
   }
 
   Future<void> _delete(UserMemory memory) async {

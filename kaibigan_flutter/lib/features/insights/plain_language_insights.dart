@@ -505,6 +505,34 @@ abstract final class PlainLanguageInsights {
           '$difference puntos kumpara sa mga araw na hindi.',
     );
 
+    // Journaling against mood.
+    final journalDays =
+        snapshot.activityDays['journal'] ?? const <DateTime>{};
+    compare(
+      id: 'journal_mood',
+      isInGroup: journalDays.contains,
+      statementEn: (difference) =>
+          'On the days you wrote in your journal, your mood ran $difference '
+          'points against the days you did not.',
+      statementFil: (difference) =>
+          'Sa mga araw na nagtala ka sa journal, ang mood mo ay $difference '
+          'puntos kumpara sa mga araw na hindi.',
+    );
+
+    // Gratitude against mood.
+    final gratitudeDays =
+        snapshot.activityDays['gratitude'] ?? const <DateTime>{};
+    compare(
+      id: 'gratitude_mood',
+      isInGroup: gratitudeDays.contains,
+      statementEn: (difference) =>
+          'On the days you planted gratitude flowers, your mood ran $difference '
+          'points against other days.',
+      statementFil: (difference) =>
+          'Sa mga araw na nagtala ka ng pasasalamat, ang mood mo ay $difference '
+          'puntos kumpara sa ibang araw.',
+    );
+
     links.sort(
       (left, right) => right.difference.abs().compareTo(left.difference.abs()),
     );

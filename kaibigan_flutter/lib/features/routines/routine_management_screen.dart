@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
 import '../../core/widgets/cozy_confirm_sheet.dart';
+import '../../core/widgets/sync_status_banner.dart';
 import 'routine_model.dart';
 import 'routines_provider.dart';
 import 'widgets/custom_routine_dialog.dart';
@@ -60,7 +61,8 @@ class _RoutineManagementScreenState extends State<RoutineManagementScreen>
               Text(step.title, style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 12),
               Text(step.customPrompt?.trim().isNotEmpty == true
-                  ? step.customPrompt! : step.subtitle),
+                  ? step.customPrompt!
+                  : step.subtitle),
               const SizedBox(height: 16),
               Text('~${step.estimatedMinutes} min'),
             ],
@@ -130,58 +132,124 @@ class _RoutineManagementScreenState extends State<RoutineManagementScreen>
         .where((r) => r.type == RoutineType.custom)
         .toList();
 
-    return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBackground : AppColors.warmCream,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back,
+    return PopScope(
+      canPop: !routinesProvider.isSavingConfigurations,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        await routinesProvider.flushConfigurationWrites();
+        if (context.mounted && routinesProvider.configurationError == null) {
+          Navigator.pop(context);
+        }
+      },
+      child: Scaffold(
+        backgroundColor:
+            isDark ? AppColors.darkBackground : AppColors.warmCream,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back,
+                color: isDark
+                    ? AppColors.textPrimaryDark
+                    : AppColors.textPrimaryLight),
+            onPressed: () async {
+              await routinesProvider.flushConfigurationWrites();
+              if (context.mounted &&
+                  routinesProvider.configurationError == null) {
+                Navigator.pop(context);
+              }
+            },
+          ),
+          title: Text(
+            routineText(context, 'Manage routines', 'Ayusin ang mga gawain'),
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
               color: isDark
                   ? AppColors.textPrimaryDark
-                  : AppColors.textPrimaryLight),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          routineText(context, 'Manage routines', 'Ayusin ang mga gawain'),
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            color:
-                isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                  : AppColors.textPrimaryLight,
+            ),
+          ),
+          bottom: TabBar(
+            controller: _tabController,
+            isScrollable: true,
+            labelColor: AppColors.sageGreen,
+            unselectedLabelColor: isDark
+                ? AppColors.textSecondaryDark
+                : AppColors.textSecondaryLight,
+            indicatorColor: AppColors.sageGreen,
+            indicatorWeight: 3,
+            labelStyle:
+                const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+            tabAlignment: TabAlignment.start,
+            tabs: [
+              Tab(text: routineText(context, 'Morning', 'Umaga')),
+              Tab(text: routineText(context, 'Mid-Day', 'Tanghali')),
+              Tab(text: routineText(context, 'Night', 'Gabi')),
+              Tab(text: routineText(context, 'Custom', 'Sarili mong gawa')),
+            ],
           ),
         ),
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          labelColor: AppColors.sageGreen,
-          unselectedLabelColor: isDark
-              ? AppColors.textSecondaryDark
-              : AppColors.textSecondaryLight,
-          indicatorColor: AppColors.sageGreen,
-          indicatorWeight: 3,
-          labelStyle:
-              const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-          tabAlignment: TabAlignment.start,
-          tabs: [
-            Tab(text: routineText(context, 'Morning', 'Umaga')),
-            Tab(text: routineText(context, 'Mid-Day', 'Tanghali')),
-            Tab(text: routineText(context, 'Night', 'Gabi')),
-            Tab(text: routineText(context, 'Custom', 'Sarili mong gawa')),
-          ],
+        body: FutureBuilder<void>(
+          future: routinesProvider.ready,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            return Column(children: [
+              if (routinesProvider.configurationError != null)
+                SyncStatusBanner(
+                  key: const ValueKey('routine-config-save-error'),
+                  message: routinesProvider.configurationError!,
+                  onRetry: routinesProvider.saveConfigurations,
+                )
+              else
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  child: Row(children: [
+                    Icon(
+                        routinesProvider.isSavingConfigurations
+                            ? Icons.sync_rounded
+                            : Icons.check_circle_outline_rounded,
+                        size: 16,
+                        color: AppColors.sageGreen),
+                    const SizedBox(width: 8),
+                    Expanded(
+                        child: Text(
+                      routinesProvider.isSavingConfigurations
+                          ? routineText(context, 'Saving changes…',
+                              'Sine-save ang mga pagbabago…')
+                          : routineText(context, 'Changes saved on this device',
+                              'Naka-save ang mga pagbabago sa device'),
+                      key: const ValueKey('routine-config-save-status'),
+                      style: AppTypography.bodySmall(context, isDark: isDark),
+                    )),
+                  ]),
+                ),
+              Expanded(
+                  child: TabBarView(
+                controller: _tabController,
+                children: [
+                  morningRoutine == null
+                      ? const SizedBox.shrink()
+                      : _buildRoutineEditor(
+                          morningRoutine, routinesProvider, isDark),
+                  middayRoutine == null
+                      ? const SizedBox.shrink()
+                      : _buildRoutineEditor(
+                          middayRoutine, routinesProvider, isDark),
+                  nightRoutine == null
+                      ? const SizedBox.shrink()
+                      : _buildRoutineEditor(
+                          nightRoutine, routinesProvider, isDark),
+                  _buildCustomRoutinesTab(
+                      customRoutines, routinesProvider, isDark),
+                ],
+              )),
+            ]);
+          },
         ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          morningRoutine == null ? const SizedBox.shrink() :
-            _buildRoutineEditor(morningRoutine, routinesProvider, isDark),
-          middayRoutine == null ? const SizedBox.shrink() :
-            _buildRoutineEditor(middayRoutine, routinesProvider, isDark),
-          nightRoutine == null ? const SizedBox.shrink() :
-            _buildRoutineEditor(nightRoutine, routinesProvider, isDark),
-          _buildCustomRoutinesTab(customRoutines, routinesProvider, isDark),
-        ],
       ),
     );
   }
@@ -526,40 +594,44 @@ class _RoutineManagementScreenState extends State<RoutineManagementScreen>
             )
           else
             ...customRoutines.map((routine) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Material(
-                color: isDark ? AppColors.darkCard : Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                clipBehavior: Clip.antiAlias,
-                child: ExpansionTile(
-                  key: ValueKey('edit-custom-${routine.id}'),
-                  title: Text(routine.title,
-                      style: const TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: Text(routineText(context, 'Tap to edit your activities',
-                      'Pindutin para ayusin ang mga gawain')),
-                  children: [
-                    _buildRoutineEditor(routine, provider, isDark),
-                    TextButton.icon(
-                      onPressed: () async {
-                        final confirmed = await CozyConfirmSheet.show(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Material(
+                    color: isDark ? AppColors.darkCard : Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    clipBehavior: Clip.antiAlias,
+                    child: ExpansionTile(
+                      key: ValueKey('edit-custom-${routine.id}'),
+                      title: Text(routine.title,
+                          style: const TextStyle(fontWeight: FontWeight.w700)),
+                      subtitle: Text(routineText(
                           context,
-                          title: 'Remove ${routine.title}?',
-                          message: 'Your saved activity history will stay available.',
-                          confirmLabel: 'Remove routine',
-                          cancelLabel: 'Keep it',
-                        );
-                        if (confirmed && mounted) {
-                          provider.deleteCustomRoutine(routine.id);
-                        }
-                      },
-                      icon: const Icon(Icons.delete_outline_rounded),
-                      label: Text(routineText(context, 'Remove routine', 'Alisin ang gawain')),
+                          'Tap to edit your activities',
+                          'Pindutin para ayusin ang mga gawain')),
+                      children: [
+                        _buildRoutineEditor(routine, provider, isDark),
+                        TextButton.icon(
+                          onPressed: () async {
+                            final confirmed = await CozyConfirmSheet.show(
+                              context,
+                              title: 'Remove ${routine.title}?',
+                              message:
+                                  'Your saved activity history will stay available.',
+                              confirmLabel: 'Remove routine',
+                              cancelLabel: 'Keep it',
+                            );
+                            if (confirmed && mounted) {
+                              provider.deleteCustomRoutine(routine.id);
+                            }
+                          },
+                          icon: const Icon(Icons.delete_outline_rounded),
+                          label: Text(routineText(
+                              context, 'Remove routine', 'Alisin ang gawain')),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
                     ),
-                    const SizedBox(height: 12),
-                  ],
-                ),
-              ),
-            )),
+                  ),
+                )),
         ],
       ),
     );

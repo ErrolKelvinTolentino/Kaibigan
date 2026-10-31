@@ -45,13 +45,13 @@ class PracticeScenarios {
     PracticeScenario(
       id: 'practice-overwhelm',
       lessonId: 'friend-support-listen',
-      friendName: 'Mika',
+      friendName: 'Emma',
       situation: LearningCopy(
         english:
-            'Mika messages you late on a weeknight. She has been quiet for '
+            'Emma messages you late on a weeknight. She has been quiet for '
             'about two weeks.',
         filipino:
-            'Nag-message si Mika nang gabi ng weekday. Dalawang linggo na '
+            'Nag-message si Emma nang gabi ng weekday. Dalawang linggo na '
             'siyang tahimik.',
       ),
       opener: LearningCopy(
@@ -76,7 +76,7 @@ class PracticeScenarios {
         ),
       ],
       watchFor:
-          'Mika is exhausted and struggling to name what is wrong. She opens '
+          'Emma is exhausted and struggling to name what is wrong. She opens '
           'up more when she feels listened to, and goes quieter or more formal '
           'if she is given quick advice or told to look on the bright side.',
     ),
@@ -232,6 +232,7 @@ class PracticeTurnResult {
     required this.headline,
     required this.points,
     this.modelPhrase = '',
+    this.safetyNotice,
     this.isOffline = false,
     this.endsPractice = false,
   });
@@ -247,10 +248,14 @@ class PracticeTurnResult {
   /// A concrete phrase the user could have used. May be empty.
   final String modelPhrase;
 
+  /// An explicit safety notice with crisis hotlines, separate from the friend's dialogue.
+  final String? safetyNotice;
+
   final bool isOffline;
 
   /// True when the exchange should stop, for example after a safety intercept.
   final bool endsPractice;
 
   bool get hasModelPhrase => modelPhrase.trim().isNotEmpty;
+  bool get hasSafetyNotice => safetyNotice != null && safetyNotice!.trim().isNotEmpty;
 }

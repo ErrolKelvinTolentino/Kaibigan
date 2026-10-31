@@ -127,7 +127,15 @@ class SilentUiSoundController implements UiSoundController {
 /// is ever awaited by the UI, so a device with no working audio behaves
 /// exactly as it does today.
 class UiSoundPlayer implements UiSoundController {
-  UiSoundPlayer();
+  UiSoundPlayer() {
+    activeController = this;
+  }
+
+  static UiSoundController? activeController;
+
+  static void reset() {
+    activeController?.setLevel(UiSoundLevel.soft);
+  }
 
   static const String preferenceKey = 'ui_sound_level';
 

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/services/ai_memory_service.dart';
+import '../../core/services/ai_service.dart';
+import '../../core/services/local_record_store.dart';
+import '../../core/services/offline_mode.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/utils/api_logger.dart';
 import '../../core/utils/uuid_helper.dart';
@@ -31,9 +34,9 @@ class JournalProvider extends ChangeNotifier {
   /// The complete signed-in history, unaffected by the list screen's current
   /// search and category filters. Aggregate wellness views should use this.
   List<JournalEntry> get allEntries => List.unmodifiable(
-      List<JournalEntry>.of(_entries)
-        ..sort((a, b) => b.createdAt.compareTo(a.createdAt)),
-  );
+        List<JournalEntry>.of(_entries)
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt)),
+      );
 
   List<JournalEntry> get favoriteEntries =>
       _entries.where((e) => e.isFavorite).toList()
@@ -53,14 +56,28 @@ class JournalProvider extends ChangeNotifier {
   String get searchQuery => _searchQuery;
   String? get selectedCategoryFilter => _selectedCategoryFilter;
 
+  /// Offline entries are stored in the same shape the table uses, including
+  /// the conversation turns and the saved look-back cards.
+  static final LocalRecordStore<JournalEntry> _local =
+      LocalRecordStore<JournalEntry>(
+    collection: 'journal_entries',
+    encode: (entry) => entry.toMap(),
+    decode: JournalEntry.fromMap,
+    idOf: (entry) => entry.id,
+  );
+
   JournalProvider() {
     syncForCurrentUser();
   }
 
   void syncForCurrentUser() {
-    final userId = SupabaseService.isInitialized
-        ? SupabaseService.client.auth.currentUser?.id
-        : null;
+    if (OfflineMode.storesLocally) {
+      _activeUserId = null;
+      _errorMessage = null;
+      fetchJournalEntries();
+      return;
+    }
+    final userId = SupabaseService.client.auth.currentUser?.id;
     if (userId == _activeUserId) return;
     _activeUserId = userId;
     _entries.clear();
@@ -81,6 +98,16 @@ class JournalProvider extends ChangeNotifier {
 
   Future<void> fetchJournalEntries() async {
     _errorMessage = null;
+    if (OfflineMode.storesLocally) {
+      final stored = await _local.load(OfflineMode.scope);
+      _entries
+        ..clear()
+        ..addAll(stored)
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      _isLoading = false;
+      notifyListeners();
+      return;
+    }
     if (!SupabaseService.isInitialized) {
       _errorMessage =
           'Journal sync is unavailable. Check the app configuration and try again.';
@@ -165,7 +192,12 @@ class JournalProvider extends ChangeNotifier {
     );
 
     var saved = false;
-    if (SupabaseService.isInitialized &&
+    if (OfflineMode.storesLocally) {
+      saved = await _local.upsert(OfflineMode.scope, newEntry);
+      if (!saved) {
+        _errorMessage = 'This entry could not be saved to this device.';
+      }
+    } else if (SupabaseService.isInitialized &&
         SupabaseService.client.auth.currentUser != null) {
       try {
         final userId = SupabaseService.client.auth.currentUser!.id;
@@ -220,6 +252,21 @@ class JournalProvider extends ChangeNotifier {
 
   Future<bool> toggleFavorite(String id) async {
     _errorMessage = null;
+    if (OfflineMode.storesLocally) {
+      final index = _entries.indexWhere((e) => e.id == id);
+      if (index == -1) return false;
+      final previous = _entries[index];
+      final updated = previous.copyWith(isFavorite: !previous.isFavorite);
+      _entries[index] = updated;
+      notifyListeners();
+      final stored = await _local.upsert(OfflineMode.scope, updated);
+      if (!stored) {
+        _entries[index] = previous;
+        _errorMessage = 'That change could not be saved to this device.';
+        notifyListeners();
+      }
+      return stored;
+    }
     if (!SupabaseService.isInitialized ||
         SupabaseService.client.auth.currentUser == null) {
       _errorMessage =
@@ -269,12 +316,47 @@ class JournalProvider extends ChangeNotifier {
     return false;
   }
 
-  Future<bool> updateJournalEntry(JournalEntry entry) async {
+  Future<bool> saveSummary(
+    String id,
+    AIJournalSaveSummary summary, {
+    String? expectedContent,
+  }) async {
+    final index = _entries.indexWhere((entry) => entry.id == id);
+    if (index == -1) return false;
+    final current = _entries[index];
+    if (expectedContent != null && current.content != expectedContent) {
+      return false;
+    }
+    return updateJournalEntry(current.copyWith(summary: summary),
+        extractMemory: false);
+  }
+
+  Future<bool> updateJournalEntry(JournalEntry entry,
+      {bool extractMemory = true}) async {
     _errorMessage = null;
     if (entry.title.trim().isEmpty && entry.content.trim().isEmpty) {
       _errorMessage = 'A journal entry cannot be completely empty.';
       notifyListeners();
       return false;
+    }
+    if (OfflineMode.storesLocally) {
+      final index = _entries.indexWhere((e) => e.id == entry.id);
+      if (index == -1) {
+        _errorMessage = 'This entry is no longer available.';
+        notifyListeners();
+        return false;
+      }
+      final previous = _entries[index];
+      _entries[index] = entry;
+      _entries.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      final stored = await _local.upsert(OfflineMode.scope, entry);
+      if (!stored) {
+        final restored = _entries.indexWhere((e) => e.id == entry.id);
+        if (restored != -1) _entries[restored] = previous;
+        _errorMessage = 'Your changes could not be saved to this device.';
+      }
+      notifyListeners();
+      return stored;
     }
     if (!SupabaseService.isInitialized ||
         SupabaseService.client.auth.currentUser == null) {
@@ -314,8 +396,9 @@ class JournalProvider extends ChangeNotifier {
                 .eq('user_id', userId)
                 .select();
           } catch (updateError) {
-            if (updatePayload.containsKey('summary') ||
-                updatePayload.containsKey('conversation_turns')) {
+            if (entry.summary == null &&
+                (updatePayload.containsKey('summary') ||
+                    updatePayload.containsKey('conversation_turns'))) {
               updatePayload.remove('summary');
               updatePayload.remove('conversation_turns');
               response = await SupabaseService.client
@@ -338,7 +421,9 @@ class JournalProvider extends ChangeNotifier {
                   .from('journal_entries')
                   .insert(insertMap);
             } catch (insertError) {
-              if (insertMap.containsKey('conversation_turns')) {
+              if (entry.summary == null &&
+                  insertMap.containsKey('conversation_turns')) {
+                insertMap.remove('summary');
                 insertMap.remove('conversation_turns');
                 await SupabaseService.client
                     .from('journal_entries')
@@ -366,7 +451,7 @@ class JournalProvider extends ChangeNotifier {
         }
       }
 
-      if (_errorMessage == null) {
+      if (_errorMessage == null && extractMemory) {
         AIMemoryService.extractMemoryFromNote(entry.title, entry.content);
       }
       notifyListeners();
@@ -379,6 +464,19 @@ class JournalProvider extends ChangeNotifier {
 
   Future<bool> deleteJournalEntry(String id) async {
     _errorMessage = null;
+    if (OfflineMode.storesLocally) {
+      final index = _entries.indexWhere((e) => e.id == id);
+      if (index == -1) return true;
+      final removed = _entries.removeAt(index);
+      notifyListeners();
+      final cleared = await _local.remove(OfflineMode.scope, id);
+      if (!cleared) {
+        _entries.insert(index.clamp(0, _entries.length), removed);
+        _errorMessage = 'The entry could not be deleted. It has been restored.';
+        notifyListeners();
+      }
+      return cleared;
+    }
     if (!SupabaseService.isInitialized ||
         SupabaseService.client.auth.currentUser == null) {
       _errorMessage =

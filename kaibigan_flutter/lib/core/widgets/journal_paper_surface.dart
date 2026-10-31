@@ -81,7 +81,21 @@ class JournalPaperSurface extends StatelessWidget {
                   lineHeight: lineHeight,
                   firstLineOffset: firstLineOffset,
                 ),
-                child: Padding(padding: padding, child: child),
+                child: Theme(
+                  data: Theme.of(context).copyWith(
+                    inputDecorationTheme: const InputDecorationTheme(
+                      filled: false,
+                      fillColor: Colors.transparent,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      errorBorder: InputBorder.none,
+                      focusedErrorBorder: InputBorder.none,
+                      disabledBorder: InputBorder.none,
+                    ),
+                  ),
+                  child: Padding(padding: padding, child: child),
+                ),
               ),
             ),
           ),

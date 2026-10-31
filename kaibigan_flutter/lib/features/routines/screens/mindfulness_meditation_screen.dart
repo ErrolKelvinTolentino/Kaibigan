@@ -57,13 +57,13 @@ class _MindfulnessMeditationScreenState
           label: 'Inhale',
           seconds: 4,
           scale: 1.13,
-          guidance: 'Breathe in through your nose for 4, into your belly.',
+          guidance: 'Breathe in through nose',
         ),
         _BreathPhase(
           label: 'Exhale',
           seconds: 6,
           scale: 0.78,
-          guidance: 'Out through your mouth for 6, slower than you came in.',
+          guidance: 'Slow exhale through mouth',
         ),
       ],
     ),
@@ -80,19 +80,19 @@ class _MindfulnessMeditationScreenState
           label: 'Inhale',
           seconds: 3,
           scale: 1.08,
-          guidance: 'A normal breath in through your nose.',
+          guidance: 'Breathe in through nose',
         ),
         _BreathPhase(
           label: 'Top up',
           seconds: 1,
           scale: 1.17,
-          guidance: 'A second short sniff on top, without letting any out.',
+          guidance: 'Sniff again',
         ),
         _BreathPhase(
           label: 'Exhale',
           seconds: 7,
           scale: 0.76,
-          guidance: 'Long, unforced sigh out through your mouth until empty.',
+          guidance: 'Long, slow sigh out',
         ),
       ],
     ),
@@ -109,25 +109,25 @@ class _MindfulnessMeditationScreenState
           label: 'Inhale',
           seconds: 4,
           scale: 1.13,
-          guidance: 'In through your nose for 4, shoulders still.',
+          guidance: 'In through your nose',
         ),
         _BreathPhase(
           label: 'Hold',
           seconds: 4,
           scale: 1.13,
-          guidance: 'Hold with your chest open, not clamped shut.',
+          guidance: 'Gently hold',
         ),
         _BreathPhase(
           label: 'Exhale',
           seconds: 4,
           scale: 0.78,
-          guidance: 'Out for 4 at the same steady rate.',
+          guidance: 'Steady breath out',
         ),
         _BreathPhase(
           label: 'Rest',
           seconds: 4,
           scale: 0.78,
-          guidance: 'Stay empty for 4. Do not rush the next breath in.',
+          guidance: 'Rest and stay empty',
         ),
       ],
     ),
@@ -144,19 +144,19 @@ class _MindfulnessMeditationScreenState
           label: 'Inhale',
           seconds: 4,
           scale: 1.13,
-          guidance: 'Quietly in through your nose for 4.',
+          guidance: 'Quietly breathe in',
         ),
         _BreathPhase(
           label: 'Hold',
           seconds: 7,
           scale: 1.13,
-          guidance: 'Hold for 7. Stop early if you feel lightheaded.',
+          guidance: 'Hold breath gently',
         ),
         _BreathPhase(
           label: 'Exhale',
           seconds: 8,
           scale: 0.74,
-          guidance: 'Out through pursed lips for 8, with a soft whoosh.',
+          guidance: 'Exhale with a soft whoosh',
         ),
       ],
     ),
@@ -173,13 +173,13 @@ class _MindfulnessMeditationScreenState
           label: 'Inhale',
           seconds: 5,
           scale: 1.11,
-          guidance: 'In for 5, smooth and even the whole way.',
+          guidance: 'Smooth breath in',
         ),
         _BreathPhase(
           label: 'Exhale',
           seconds: 5,
           scale: 0.80,
-          guidance: 'Out for 5, the same speed. No pause at either end.',
+          guidance: 'Smooth breath out',
         ),
       ],
     ),
@@ -462,7 +462,12 @@ class _MindfulnessMeditationScreenState
           Text(
             'These are established breathing techniques, each one for a '
             'different situation. Pick by what you need right now.',
-            style: AppTypography.bodyMedium(context, isDark: isDark),
+            style: AppTypography.bodyMedium(context, isDark: isDark).copyWith(
+              color: (isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight)
+                  .withValues(alpha: 0.70),
+            ),
           ),
           const SizedBox(height: 16),
           ..._patterns.map((pattern) => Padding(
@@ -480,7 +485,12 @@ class _MindfulnessMeditationScreenState
           Text(
             'Optional. Sound plays on a loop while you breathe and stops when '
             'the session ends.',
-            style: AppTypography.bodySmall(context, isDark: isDark),
+            style: AppTypography.bodySmall(context, isDark: isDark).copyWith(
+              color: (isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight)
+                  .withValues(alpha: 0.70),
+            ),
           ),
           const SizedBox(height: 11),
           _SoundPicker(
@@ -617,7 +627,6 @@ class _MindfulnessMeditationScreenState
     final seconds = (_totalSecondsLeft % 60).toString().padLeft(2, '0');
     final sessionProgress =
         (1 - (_totalSecondsLeft / _targetSeconds)).clamp(0.0, 1.0);
-    final phaseProgress = (_phaseSecondsLeft / _phase.seconds).clamp(0.0, 1.0);
     return Padding(
       key: const ValueKey('breathing-session'),
       padding: const EdgeInsets.fromLTRB(22, 18, 22, 28),
@@ -733,9 +742,9 @@ class _MindfulnessMeditationScreenState
           ),
           const Spacer(),
           AnimatedSwitcher(
-            duration: const Duration(milliseconds: 850),
-            switchInCurve: Curves.easeInOutCubic,
-            switchOutCurve: Curves.easeInOutCubic,
+            duration: Duration(milliseconds: _phase.seconds <= 2 ? 200 : 350),
+            switchInCurve: Curves.easeOut,
+            switchOutCurve: Curves.easeIn,
             child: Text(
               _running ? _phase.label : 'Paused',
               key: ValueKey('breathing-phase-${_phase.label}-$_running'),
@@ -753,14 +762,12 @@ class _MindfulnessMeditationScreenState
             child: Stack(
               alignment: Alignment.center,
               children: [
-                TweenAnimationBuilder<double>(
-                  tween: Tween(end: phaseProgress),
-                  duration: const Duration(milliseconds: 900),
-                  curve: Curves.easeInOutCubic,
-                  builder: (context, value, child) => SizedBox.square(
+                AnimatedBuilder(
+                  animation: _breathController,
+                  builder: (context, _) => SizedBox.square(
                     dimension: 220,
                     child: CircularProgressIndicator(
-                      value: value,
+                      value: (1.0 - _breathController.value).clamp(0.0, 1.0),
                       strokeWidth: 4,
                       strokeCap: StrokeCap.round,
                       color: AppColors.honeyAmber,
@@ -807,9 +814,18 @@ class _MindfulnessMeditationScreenState
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 650),
-                            switchInCurve: Curves.easeInOutCubic,
-                            switchOutCurve: Curves.easeInOutCubic,
+                            duration: const Duration(milliseconds: 180),
+                            switchInCurve: Curves.easeOutQuad,
+                            switchOutCurve: Curves.easeInQuad,
+                            transitionBuilder: (child, animation) =>
+                                FadeTransition(
+                              opacity: animation,
+                              child: ScaleTransition(
+                                scale: Tween<double>(begin: 0.90, end: 1.0)
+                                    .animate(animation),
+                                child: child,
+                              ),
+                            ),
                             child: Text(
                               '$_phaseSecondsLeft',
                               key: ValueKey(
@@ -842,9 +858,9 @@ class _MindfulnessMeditationScreenState
           ),
           const SizedBox(height: 24),
           AnimatedSwitcher(
-            duration: const Duration(milliseconds: 900),
-            switchInCurve: Curves.easeInOutCubic,
-            switchOutCurve: Curves.easeInOutCubic,
+            duration: Duration(milliseconds: _phase.seconds <= 2 ? 200 : 350),
+            switchInCurve: Curves.easeOut,
+            switchOutCurve: Curves.easeIn,
             child: Text(
               _running ? _phase.guidance : 'Take your time. Resume when ready.',
               key: ValueKey('breathing-guidance-${_phase.label}-$_running'),
@@ -1144,11 +1160,16 @@ class _PatternCard extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 9),
+              const SizedBox(height: 8),
               Text(
                 pattern.purpose,
-                style: AppTypography.bodySmall(context, isDark: isDark)
-                    .copyWith(height: 1.45),
+                style: AppTypography.bodySmall(context, isDark: isDark).copyWith(
+                  color: (isDark
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondaryLight)
+                      .withValues(alpha: 0.55),
+                  height: 1.4,
+                ),
               ),
             ],
           ),
@@ -1263,7 +1284,6 @@ class _SoundPicker extends StatelessWidget {
         'rain' => Icons.water_drop_outlined,
         'ocean' => Icons.waves_rounded,
         'synth' => Icons.graphic_eq_rounded,
-        'chimes' => Icons.notifications_none_rounded,
         'hum' => Icons.blur_on_rounded,
         _ => Icons.volume_off_rounded,
       };
@@ -1330,8 +1350,14 @@ class _SoundPicker extends StatelessWidget {
               Expanded(
                 child: Text(
                   selected.description,
-                  style: AppTypography.bodySmall(context, isDark: isDark)
-                      .copyWith(height: 1.4),
+                  style:
+                      AppTypography.bodySmall(context, isDark: isDark).copyWith(
+                    color: (isDark
+                            ? AppColors.textSecondaryDark
+                            : AppColors.textSecondaryLight)
+                        .withValues(alpha: 0.60),
+                    height: 1.4,
+                  ),
                 ),
               ),
             ],

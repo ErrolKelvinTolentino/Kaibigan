@@ -9,6 +9,8 @@ import '../../core/utils/language_helper.dart';
 import '../../core/widgets/kaibigan_logo.dart';
 import '../../core/widgets/kaibigan_state_view.dart';
 import '../companion/companion_model.dart';
+import '../../core/services/backend_status.dart';
+import '../../core/widgets/cozy_confirm_sheet.dart';
 import '../settings/user_provider.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -16,10 +18,15 @@ class AuthScreen extends StatefulWidget {
     super.key,
     this.initialTabIndex = 0,
     this.onShowDemo,
+    this.backendProbe,
   });
 
   final int initialTabIndex;
   final VoidCallback? onShowDemo;
+
+  /// Overridden in tests so the reachability banner can be exercised
+  /// without a network. Production uses [BackendStatus.probe].
+  final Future<BackendFailureKind> Function()? backendProbe;
 
   @override
   State<AuthScreen> createState() => _AuthScreenState();
@@ -40,12 +47,36 @@ class _AuthScreenState extends State<AuthScreen> {
   String? _confirmationMessage;
   String? _pendingConfirmationEmail;
 
+  /// Null until the reachability check answers.
+  BackendFailureKind? _backendStatus;
+
   bool get _isRegistering => _activeTabIndex == 1;
+
+  bool get _backendIsDown =>
+      _backendStatus == BackendFailureKind.unreachable ||
+      _backendStatus == BackendFailureKind.notConfigured;
 
   @override
   void initState() {
     super.initState();
     _activeTabIndex = widget.initialTabIndex.clamp(0, 1);
+    _checkBackend();
+  }
+
+  /// Asks whether the server is there before anyone types a password.
+  ///
+  /// Supabase reports itself "initialised" without making a request, so a
+  /// paused project looks healthy until the first sign-in fails. Finding
+  /// out here turns a wrong-password hunt into a plain statement.
+  Future<void> _checkBackend() async {
+    final kind = await (widget.backendProbe?.call() ?? BackendStatus.probe());
+    if (!mounted) return;
+    setState(() => _backendStatus = kind);
+  }
+
+  Future<void> _retryBackendCheck() async {
+    setState(() => _backendStatus = null);
+    await _checkBackend();
   }
 
   String _copy(String language, String english, String filipino) =>
@@ -65,15 +96,17 @@ class _AuthScreenState extends State<AuthScreen> {
     super.dispose();
   }
 
+  bool _isValidEmail(String email) =>
+      RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email);
+
   Future<void> _handleLogin() async {
     final email = _loginEmailController.text.trim();
     final password = _loginPasswordController.text;
-    if (email.isEmpty || !email.contains('@')) {
-      setState(() => _errorMessage = 'Please enter a valid email address.');
-      return;
-    }
-    if (password.length < 6) {
-      setState(() => _errorMessage = 'Password must be at least 6 characters.');
+    if (!_isValidEmail(email) || password.length < 6) {
+      setState(() => _errorMessage = _copy(
+          context.read<UserProvider>().language,
+          'Invalid email or password.',
+          'Hindi wasto ang email o password.'));
       return;
     }
     setState(() {
@@ -97,19 +130,27 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _handleRegister() async {
+    final language = context.read<UserProvider>().language;
     final name = _regNameController.text.trim();
     final email = _regEmailController.text.trim();
     final password = _regPasswordController.text;
     if (name.isEmpty) {
-      setState(() => _errorMessage = 'Please enter your display name.');
+      setState(() => _errorMessage = _copy(language,
+          'Please enter your display name.', 'Ilagay ang iyong pangalan.'));
       return;
     }
-    if (email.isEmpty || !email.contains('@')) {
-      setState(() => _errorMessage = 'Please enter a valid email address.');
+    if (!_isValidEmail(email)) {
+      setState(() => _errorMessage = _copy(
+          language,
+          'Please enter a valid email address.',
+          'Maglagay ng wastong email address.'));
       return;
     }
     if (password.length < 6) {
-      setState(() => _errorMessage = 'Password must be at least 6 characters.');
+      setState(() => _errorMessage = _copy(
+          language,
+          'Password must be at least 6 characters.',
+          'Dapat may hindi bababa sa 6 na character ang password.'));
       return;
     }
     setState(() {
@@ -576,6 +617,11 @@ class _AuthScreenState extends State<AuthScreen> {
                               ),
                       ),
                     ),
+                  if (_backendIsDown)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 15),
+                      child: _buildBackendBanner(language),
+                    ),
                   if (_errorMessage != null)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 15),
@@ -644,6 +690,8 @@ class _AuthScreenState extends State<AuthScreen> {
             ],
             const SizedBox(height: 14),
             _buildAccountSwitch(language, secondary),
+            const SizedBox(height: 4),
+            _buildOfflineEntry(language, secondary),
             if (widget.onShowDemo != null) ...[
               const SizedBox(height: 4),
               Center(
@@ -734,6 +782,120 @@ class _AuthScreenState extends State<AuthScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  /// States plainly that the server is the obstacle, with a way to re-check.
+  /// Starts the app with no account, keeping everything on this device.
+  ///
+  /// Offered always rather than only when the server is down: wanting a
+  /// private journal that never leaves your phone is a legitimate choice,
+  /// not just a fallback. The trade-off is stated before they commit, and
+  /// again in Settings afterwards.
+  Future<void> _continueOffline() async {
+    final provider = context.read<UserProvider>();
+    final language = provider.language;
+    final confirmed = await CozyConfirmSheet.show(
+      context,
+      title: _copy(language, 'Use Kaibigan on this device only',
+          'Gamitin ang Kaibigan sa device na ito lang'),
+      message: _copy(
+        language,
+        'Everything you write stays on this phone. Nothing is uploaded, so '
+            'nothing can be recovered if you lose or reset the device, and '
+            'it will not appear on another one. You can create an account '
+            'later — what you save now stays put.',
+        'Ang lahat ng isusulat mo ay mananatili sa teleponong ito. Walang '
+            'ina-upload, kaya walang mababawi kung mawala o ma-reset ang '
+            'device, at hindi ito lalabas sa ibang telepono. Puwede kang '
+            'gumawa ng account mamaya — mananatili ang mga naitala mo ngayon.',
+      ),
+      confirmLabel: _copy(language, 'Start offline', 'Magsimula nang offline'),
+      cancelLabel: _copy(language, 'Back', 'Bumalik'),
+    );
+    if (confirmed != true || !mounted) return;
+    await provider.continueOffline();
+  }
+
+  Widget _buildOfflineEntry(String language, Color secondary) {
+    return Center(
+      child: TextButton.icon(
+        key: const ValueKey('continue-offline'),
+        onPressed: _isLoading ? null : _continueOffline,
+        icon: const Icon(Icons.phone_android_outlined, size: 16),
+        label: Text(
+          _copy(
+            language,
+            'Use without an account',
+            'Gamitin nang walang account',
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBackendBanner(String language) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      key: const ValueKey('auth-backend-banner'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.moodAwful.withValues(alpha: isDark ? 0.16 : 0.09),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.moodAwful.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.cloud_off_rounded,
+                  size: 19, color: AppColors.moodAwful),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  _copy(
+                    language,
+                    'The server is not reachable',
+                    'Hindi maabot ang server',
+                  ),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 7),
+          Text(
+            BackendStatus.describe(
+              _backendStatus ?? BackendFailureKind.unreachable,
+              language: language,
+              action: _copy(language, 'sign you in', 'i-sign in ka'),
+            ),
+            style: TextStyle(
+              fontSize: 12.5,
+              height: 1.5,
+              color: isDark
+                  ? AppColors.textSecondaryDark
+                  : AppColors.textSecondaryLight,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              key: const ValueKey('auth-backend-retry'),
+              onPressed: _retryBackendCheck,
+              icon: const Icon(Icons.refresh_rounded, size: 17),
+              label: Text(_copy(language, 'Check again', 'Suriin muli')),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

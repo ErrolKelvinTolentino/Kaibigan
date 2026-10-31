@@ -498,6 +498,32 @@ void main() {
       findsNothing,
     );
   });
+
+  testWidgets('gratitude planting page text field is transparent and borderless',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => UserProvider()),
+          ChangeNotifierProvider<GratitudeProvider>(
+            create: (_) => _FakeGratitudeProvider([]),
+          ),
+        ],
+        child: const MaterialApp(
+          home: GratitudePlantingPage(gardenIndex: 0),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final fieldFinder = find.byKey(const ValueKey('gratitude-planting-field'));
+    expect(fieldFinder, findsOneWidget);
+    final field = tester.widget<TextField>(fieldFinder);
+    expect(field.decoration?.filled, isFalse);
+    expect(field.decoration?.fillColor, Colors.transparent);
+    expect(field.decoration?.border, InputBorder.none);
+    expect(field.decoration?.enabledBorder, InputBorder.none);
+  });
 }
 
 class _FakeGratitudeProvider extends GratitudeProvider {

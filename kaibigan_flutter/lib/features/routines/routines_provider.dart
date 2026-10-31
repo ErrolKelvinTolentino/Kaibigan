@@ -5,10 +5,13 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/services/local_record_store.dart';
+import '../../core/services/offline_mode.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/utils/uuid_helper.dart';
 import '../../core/utils/api_logger.dart';
 import 'routine_model.dart';
+import 'routine_launch_policy.dart';
 
 class RoutinesProvider extends ChangeNotifier {
   final Map<String, RoutineConfig> _routines = {};
@@ -18,24 +21,79 @@ class RoutinesProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _didInitializeIdentity = false;
   RoutineSessionState? _activeSession;
+  bool? _localIdentity;
+  bool _disposed = false;
+  int _identityVersion = 0;
+  int _sessionVersion = 0;
+  final Set<String> _editedRoutineIds = {};
+  Future<void> _ready = Future<void>.value();
+  Future<void> _historyReady = Future<void>.value();
+  bool _hasLoadedHistory = false;
+  Future<void> _startupClaims = Future<void>.value();
+  final Set<String> _startupOffers = {};
+  Future<void> _configurationWrites = Future<void>.value();
+  Future<void> _sessionWrites = Future<void>.value();
+  int _pendingConfigurationWrites = 0;
+  String? _configurationError;
+  bool _restorationFailed = false;
+  bool _unreadableConfigurations = false;
+  final Future<SharedPreferences> Function() _preferences;
+
+  Future<void> get ready => _ready;
+  Future<void> get startupReady =>
+      Future.wait([_ready, _historyReady]).then((_) {});
+  bool get isSavingConfigurations => _pendingConfigurationWrites > 0;
+  String? get configurationError => _configurationError;
+
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
 
   RoutinesProvider({
     Iterable<RoutineLog> initialLogs = const [],
     bool syncOnCreate = true,
-  }) {
+    Future<SharedPreferences> Function()? preferencesLoader,
+  }) : _preferences = preferencesLoader ?? SharedPreferences.getInstance {
     _initDefaultRoutines();
     _logs.addAll(initialLogs);
+    _hasLoadedHistory = !syncOnCreate;
     if (syncOnCreate) syncForCurrentUser();
   }
 
   List<RoutineConfig> get allRoutines => _routines.values.toList();
   List<RoutineLog> get logs => List.unmodifiable(
-      List<RoutineLog>.of(_logs)
-        ..sort((a, b) => b.completedAt.compareTo(a.completedAt)),
-  );
+        List<RoutineLog>.of(_logs)
+          ..sort((a, b) => b.completedAt.compareTo(a.completedAt)),
+      );
   String? get errorMessage => _errorMessage;
   bool get isLoading => _isLoading;
-  RoutineSessionState? get activeSession => _activeSession;
+  RoutineSessionState? get activeSession => resumableSessionAt(DateTime.now());
+
+  RoutineSessionState? resumableSessionAt(DateTime now,
+      {RoutineConfig? config}) {
+    final session = _activeSession;
+    final routine =
+        config ?? (session == null ? null : _routines[session.routineId]);
+    if (session == null ||
+        routine == null ||
+        routine.id != session.routineId ||
+        !RoutineLaunchPolicy.sessionIsCurrent(session, routine, now)) {
+      return null;
+    }
+    final alreadySaved = _logs.any((log) =>
+        log.routineId == routine.id &&
+        routineActivity(log) == 'routine' &&
+        !log.completedAt.isBefore(session.updatedAt) &&
+        !log.completedAt.isAfter(now));
+    return alreadySaved ? null : session;
+  }
 
   RoutineLog? get todayHighlight {
     final now = DateTime.now();
@@ -70,30 +128,74 @@ class RoutinesProvider extends ChangeNotifier {
         localLeft.day == localRight.day;
   }
 
+  /// Offline routine logs are stored in the same shape the table uses, so
+  /// the sleep analytics read them without knowing the difference.
+  static final LocalRecordStore<RoutineLog> _local =
+      LocalRecordStore<RoutineLog>(
+    collection: 'routine_logs',
+    encode: (log) => log.toMap(),
+    decode: RoutineLog.fromMap,
+    idOf: (log) => log.id,
+  );
+
   void syncForCurrentUser() {
+    final locally = OfflineMode.storesLocally;
     final userId = SupabaseService.isInitialized
         ? SupabaseService.client.auth.currentUser?.id
         : null;
-    if (_didInitializeIdentity && userId == _activeUserId) return;
+    if (_didInitializeIdentity &&
+        userId == _activeUserId &&
+        locally == _localIdentity) {
+      return;
+    }
+    final firstInitialization = !_didInitializeIdentity;
     _didInitializeIdentity = true;
     _activeUserId = userId;
+    _localIdentity = locally;
+    final version = ++_identityVersion;
     _activeSession = null;
+    _sessionVersion++;
+    _editedRoutineIds.clear();
+    _startupOffers.clear();
+    _configurationError = null;
+    _restorationFailed = false;
+    _unreadableConfigurations = false;
     _routines.clear();
     _initDefaultRoutines();
-    _logs.clear();
+    if (!firstInitialization) _logs.clear();
     _errorMessage = null;
+    _hasLoadedHistory = false;
+    _ready = _restoreRoutineState(userId, version);
     notifyListeners();
-    unawaited(_restoreRoutineState(userId));
-    if (userId != null) fetchRoutineLogs();
+    if (locally || userId != null) _historyReady = fetchRoutineLogs();
   }
 
-  Future<void> _restoreRoutineState(String? userId) async {
+  Future<void> _restoreRoutineState(String? userId, int version) async {
+    final sessionVersion = _sessionVersion;
     try {
-      await _restoreRoutineConfigs(userId);
-      await _restoreActiveSession(userId);
+      await _restoreRoutineConfigs(userId, version);
+      final prefs = await _preferences();
+      if (version == _identityVersion) {
+        _startupOffers
+            .addAll(prefs.getStringList(_startupKey(userId)) ?? const []);
+      }
+      if (version == _identityVersion && sessionVersion == _sessionVersion) {
+        await _restoreActiveSession(userId, version, sessionVersion);
+      }
+      if (version == _identityVersion) {
+        _restorationFailed = false;
+        _configurationError = _unreadableConfigurations
+            ? 'Saved routine settings could not be read. Review them and save again.'
+            : null;
+        notifyListeners();
+      }
     } catch (_) {
-      // Platform storage is not available in every host (for example, a
-      // provider-only unit test). Routines still work from their defaults.
+      if (version == _identityVersion) {
+        _restorationFailed = true;
+        _configurationError =
+            'Saved routines could not be loaded on this device.';
+        notifyListeners();
+      }
     }
   }
 
@@ -102,11 +204,13 @@ class RoutinesProvider extends ChangeNotifier {
 
   String _configKey(String? userId) =>
       'routine_configurations_v1_${userId ?? 'local'}';
+  String _startupKey(String? userId) =>
+      'routine_startup_offers_v1_${userId ?? 'local'}';
 
-  Future<void> _restoreRoutineConfigs(String? userId) async {
-    final prefs = await SharedPreferences.getInstance();
+  Future<void> _restoreRoutineConfigs(String? userId, int version) async {
+    final prefs = await _preferences();
     final raw = prefs.getString(_configKey(userId));
-    if (_activeUserId != userId || raw == null) return;
+    if (version != _identityVersion || _disposed || raw == null) return;
     try {
       final decoded = jsonDecode(raw) as List<dynamic>;
       final restored = <String, RoutineConfig>{};
@@ -116,27 +220,69 @@ class RoutinesProvider extends ChangeNotifier {
           restored[routine.id] = routine;
         }
       }
-      if (_activeUserId != userId || restored.isEmpty) return;
+      if (version != _identityVersion || _disposed || restored.isEmpty) return;
       for (final entry in restored.entries) {
-        _routines[entry.key] = entry.value;
+        if (!_editedRoutineIds.contains(entry.key)) {
+          _routines[entry.key] = entry.value;
+        }
       }
       notifyListeners();
     } catch (_) {
-      await prefs.remove(_configKey(userId));
+      _unreadableConfigurations = true;
+      // Preserve the unreadable original until the person explicitly reviews
+      // and resaves their settings. Never autoplay unverified defaults.
+      final backupKey = '${_configKey(userId)}_unreadable';
+      if (!prefs.containsKey(backupKey)) await prefs.setString(backupKey, raw);
     }
   }
 
   Future<void> _persistRoutineConfigs() async {
+    final version = _identityVersion;
+    final key = _configKey(_activeUserId);
+    final restoration = _ready;
+    _pendingConfigurationWrites++;
+    notifyListeners();
+    final write = _configurationWrites.then((_) async {
+      await restoration;
+      if (version != _identityVersion || _restorationFailed) return;
+      // Capture after restoration has merged untouched saved routines, and
+      // serialize writes so an older operation cannot overwrite a newer edit.
+      final value = jsonEncode(_routines.values.map(_routineToJson).toList());
+      try {
+        final prefs = await _preferences();
+        if (!await prefs.setString(key, value)) {
+          throw StateError('Configuration storage rejected the write');
+        }
+        if (version == _identityVersion) {
+          _unreadableConfigurations = false;
+          _configurationError = null;
+        }
+      } catch (_) {
+        if (version == _identityVersion) {
+          _configurationError =
+              'Your routine changes could not be saved. Please retry.';
+        }
+      }
+    });
+    _configurationWrites = write;
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-        _configKey(_activeUserId),
-        jsonEncode(_routines.values.map(_routineToJson).toList()),
-      );
-    } catch (_) {
-      // Keep in-memory customization usable if local storage is unavailable.
+      await write;
+    } finally {
+      _pendingConfigurationWrites--;
+      notifyListeners();
     }
   }
+
+  Future<void> saveConfigurations() async {
+    if (_restorationFailed) {
+      _ready = _restoreRoutineState(_activeUserId, _identityVersion);
+      await _ready;
+      if (_restorationFailed) return;
+    }
+    await _persistRoutineConfigs();
+  }
+
+  Future<void> flushConfigurationWrites() => _configurationWrites;
 
   Map<String, dynamic> _routineToJson(RoutineConfig routine) => {
         'id': routine.id,
@@ -215,17 +361,24 @@ class RoutinesProvider extends ChangeNotifier {
         StepType.custom => Icons.star_outline_rounded,
       };
 
-  Future<void> _restoreActiveSession(String? userId) async {
-    final prefs = await SharedPreferences.getInstance();
+  Future<void> _restoreActiveSession(
+      String? userId, int version, int sessionVersion) async {
+    final prefs = await _preferences();
     final raw = prefs.getString(_sessionKey(userId));
-    if (_activeUserId != userId || raw == null) return;
+    if (version != _identityVersion ||
+        sessionVersion != _sessionVersion ||
+        _disposed ||
+        raw == null) {
+      return;
+    }
     try {
       final restored = RoutineSessionState.fromJson(
         jsonDecode(raw) as Map<String, dynamic>,
       );
       final routine = _routines[restored.routineId];
-      final isToday = _isSameDay(restored.updatedAt, DateTime.now());
-      if (!isToday || routine == null || !routine.isEnabled) {
+      if (routine == null ||
+          !RoutineLaunchPolicy.sessionIsCurrent(
+              restored, routine, DateTime.now())) {
         await prefs.remove(_sessionKey(userId));
         return;
       }
@@ -243,28 +396,91 @@ class RoutinesProvider extends ChangeNotifier {
   }
 
   Future<void> _persistActiveSession() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final key = _sessionKey(_activeUserId);
-      final session = _activeSession;
-      if (session == null) {
-        await prefs.remove(key);
-      } else {
-        await prefs.setString(key, jsonEncode(session.toJson()));
+    final key = _sessionKey(_activeUserId);
+    final session = _activeSession;
+    final value = session == null ? null : jsonEncode(session.toJson());
+    final write = _sessionWrites.then((_) async {
+      try {
+        final prefs = await _preferences();
+        if (value == null) {
+          await prefs.remove(key);
+        } else {
+          await prefs.setString(key, value);
+        }
+      } catch (_) {
+        // The current session remains valid in memory for this app run.
       }
-    } catch (_) {
-      // The current session remains valid in memory for this app run.
-    }
+    });
+    _sessionWrites = write;
+    await write;
   }
 
-  RoutineSessionState? sessionFor(String routineId) {
-    final session = _activeSession;
+  RoutineSessionState? sessionFor(String routineId, {RoutineConfig? config}) {
+    final session = resumableSessionAt(DateTime.now(), config: config);
     if (session == null || session.routineId != routineId) return null;
-    if (!_isSameDay(session.updatedAt, DateTime.now())) return null;
     return session;
   }
 
+  bool isCompletedForPeriod(RoutineConfig config, DateTime now) {
+    final start = RoutineLaunchPolicy.periodStart(now, config.type);
+    final end = RoutineLaunchPolicy.periodEnd(now, config.type);
+    return _logs.any((log) =>
+        log.routineId == config.id &&
+        routineActivity(log) == 'routine' &&
+        !log.completedAt.isBefore(start) &&
+        log.completedAt.isBefore(end) &&
+        !log.completedAt.isAfter(now));
+  }
+
+  RoutineLaunch? eligibleRoutineAt(DateTime now, {bool scheduledOnly = true}) =>
+      RoutineLaunchPolicy.choose(
+          now: now,
+          routines: allRoutines,
+          session: resumableSessionAt(now),
+          completed: (config) => isCompletedForPeriod(config, now),
+          scheduledOnly: scheduledOnly);
+
+  Future<RoutineLaunch?> claimStartupRoutine({DateTime? now}) async {
+    final version = _identityVersion;
+    final userId = _activeUserId;
+    RoutineLaunch? result;
+    final claim = _startupClaims.then((_) async {
+      await startupReady;
+      if (version != _identityVersion ||
+          _disposed ||
+          !_hasLoadedHistory ||
+          _configurationError != null ||
+          _errorMessage != null) {
+        return;
+      }
+      final time = now ?? DateTime.now();
+      final key = RoutineLaunchPolicy.offerKey(time);
+      if (_startupOffers.contains(key)) return;
+      final launch = eligibleRoutineAt(time);
+      if (launch == null) return;
+      try {
+        final prefs = await _preferences();
+        if (version != _identityVersion) return;
+        final offers = [..._startupOffers, key];
+        final kept =
+            offers.skip((offers.length - 12).clamp(0, offers.length)).toList();
+        if (!await prefs.setStringList(_startupKey(userId), kept)) return;
+        if (version != _identityVersion) return;
+        _startupOffers
+          ..clear()
+          ..addAll(kept);
+        result = launch;
+      } catch (_) {
+        // Home remains usable if offer tracking cannot be persisted.
+      }
+    });
+    _startupClaims = claim;
+    await claim;
+    return result;
+  }
+
   void startRoutineSession(String routineId) {
+    _sessionVersion++;
     _activeSession = RoutineSessionState(
       routineId: routineId,
       nextStepIndex: 0,
@@ -280,6 +496,7 @@ class RoutinesProvider extends ChangeNotifier {
     int nextStepIndex,
     Set<String> skippedStepIds,
   ) {
+    _sessionVersion++;
     _activeSession = RoutineSessionState(
       routineId: routineId,
       nextStepIndex: nextStepIndex,
@@ -292,6 +509,7 @@ class RoutinesProvider extends ChangeNotifier {
 
   void clearRoutineSession([String? routineId]) {
     if (routineId != null && _activeSession?.routineId != routineId) return;
+    _sessionVersion++;
     _activeSession = null;
     notifyListeners();
     unawaited(_persistActiveSession());
@@ -341,7 +559,8 @@ class RoutinesProvider extends ChangeNotifier {
     final now = DateTime.now();
     return _logs
         .where((log) =>
-            _routines.containsKey(log.routineId) && routineActivity(log) == 'routine' &&
+            _routines.containsKey(log.routineId) &&
+            routineActivity(log) == 'routine' &&
             _isSameDay(log.completedAt, now))
         .map((log) => log.routineId)
         .toSet()
@@ -349,9 +568,10 @@ class RoutinesProvider extends ChangeNotifier {
   }
 
   int get streakDays => WellnessStreak.fromDates(
-    _logs.where((log) => routineActivity(log) == 'routine')
-      .map((log) => log.completedAt),
-  ).current;
+        _logs
+            .where((log) => routineActivity(log) == 'routine')
+            .map((log) => log.completedAt),
+      ).current;
   bool isRoutineCompletedToday(RoutineType type) {
     return isRoutineCompletedTodayById(type.name);
   }
@@ -359,7 +579,9 @@ class RoutinesProvider extends ChangeNotifier {
   bool isRoutineCompletedTodayById(String routineId) {
     final now = DateTime.now();
     return _logs.any((log) =>
-        log.routineId == routineId && routineActivity(log) == 'routine' && _isSameDay(log.completedAt, now));
+        log.routineId == routineId &&
+        routineActivity(log) == 'routine' &&
+        _isSameDay(log.completedAt, now));
   }
 
   void _initDefaultRoutines() {
@@ -504,8 +726,36 @@ class RoutinesProvider extends ChangeNotifier {
     );
   }
 
-  Future<void> fetchRoutineLogs() async {
+  Future<void> fetchRoutineLogs() {
+    _historyReady = _fetchRoutineLogs();
+    return _historyReady;
+  }
+
+  Future<void> _fetchRoutineLogs() async {
+    final version = _identityVersion;
+    _hasLoadedHistory = false;
     _errorMessage = null;
+    if (OfflineMode.storesLocally) {
+      try {
+        final stored = await _local.load(OfflineMode.scope, strict: true);
+        if (version != _identityVersion || _disposed) return;
+        _logs
+          ..clear()
+          ..addAll(stored)
+          ..sort((a, b) => b.completedAt.compareTo(a.completedAt));
+        _hasLoadedHistory = true;
+      } catch (_) {
+        if (version == _identityVersion) {
+          _errorMessage = 'We could not refresh routine history.';
+        }
+      } finally {
+        if (version == _identityVersion) {
+          _isLoading = false;
+          notifyListeners();
+        }
+      }
+      return;
+    }
     if (!SupabaseService.isInitialized) {
       _errorMessage =
           'Routine sync is unavailable. Check your connection and try again.';
@@ -524,13 +774,16 @@ class RoutinesProvider extends ChangeNotifier {
           .select()
           .eq('user_id', userId);
       final response = await query.order('completed_at', ascending: false);
+      if (version != _identityVersion || _disposed) return;
 
       final List data = response as List;
       _logs.clear();
       _logs.addAll(data.map((e) => RoutineLog.fromMap(e)).toList());
       _logs.sort((a, b) => b.completedAt.compareTo(a.completedAt));
+      _hasLoadedHistory = true;
       notifyListeners();
     } catch (e) {
+      if (version != _identityVersion || _disposed) return;
       _errorMessage = 'We could not refresh routine history.';
       ApiLogger.logDatabase(
         operation: 'SELECT',
@@ -539,8 +792,10 @@ class RoutinesProvider extends ChangeNotifier {
       );
       notifyListeners();
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (version == _identityVersion) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -553,6 +808,7 @@ class RoutinesProvider extends ChangeNotifier {
   void toggleStep(String routineId, String stepId) {
     final routine = _routines[routineId];
     if (routine != null) {
+      _editedRoutineIds.add(routineId);
       final updatedSteps = routine.steps.map((step) {
         if (step.id == stepId) {
           return step.copyWith(isEnabled: !step.isEnabled);
@@ -569,6 +825,7 @@ class RoutinesProvider extends ChangeNotifier {
   void addStepToRoutine(String routineId, RoutineStep step) {
     final routine = _routines[routineId];
     if (routine != null) {
+      _editedRoutineIds.add(routineId);
       final updatedSteps = List<RoutineStep>.from(routine.steps)..add(step);
       _routines[routineId] = routine.copyWith(steps: updatedSteps);
       clearRoutineSession(routineId);
@@ -580,6 +837,7 @@ class RoutinesProvider extends ChangeNotifier {
   void removeStepFromRoutine(String routineId, String stepId) {
     final routine = _routines[routineId];
     if (routine != null) {
+      _editedRoutineIds.add(routineId);
       final updatedSteps = routine.steps.where((s) => s.id != stepId).toList();
       _routines[routineId] = routine.copyWith(steps: updatedSteps);
       clearRoutineSession(routineId);
@@ -590,8 +848,12 @@ class RoutinesProvider extends ChangeNotifier {
 
   void reorderSteps(String routineId, int oldIndex, int newIndex) {
     final routine = _routines[routineId];
-    if (routine != null) {
-      if (newIndex > oldIndex) newIndex -= 1;
+    if (routine != null &&
+        oldIndex >= 0 &&
+        oldIndex < routine.steps.length &&
+        newIndex >= 0 &&
+        newIndex < routine.steps.length) {
+      _editedRoutineIds.add(routineId);
       final updatedSteps = List<RoutineStep>.from(routine.steps);
       final item = updatedSteps.removeAt(oldIndex);
       updatedSteps.insert(newIndex, item);
@@ -605,6 +867,7 @@ class RoutinesProvider extends ChangeNotifier {
   void updateReminderTime(String routineId, TimeOfDay time) {
     final routine = _routines[routineId];
     if (routine != null) {
+      _editedRoutineIds.add(routineId);
       _routines[routineId] = routine.copyWith(reminderTime: time);
       unawaited(_persistRoutineConfigs());
       notifyListeners();
@@ -614,6 +877,7 @@ class RoutinesProvider extends ChangeNotifier {
   void toggleRoutineEnabled(String routineId) {
     final routine = _routines[routineId];
     if (routine != null) {
+      _editedRoutineIds.add(routineId);
       _routines[routineId] = routine.copyWith(isEnabled: !routine.isEnabled);
       if (routine.isEnabled) clearRoutineSession(routineId);
       unawaited(_persistRoutineConfigs());
@@ -622,6 +886,7 @@ class RoutinesProvider extends ChangeNotifier {
   }
 
   void addCustomRoutine(RoutineConfig routine) {
+    _editedRoutineIds.add(routine.id);
     _routines[routine.id] = routine;
     unawaited(_persistRoutineConfigs());
     notifyListeners();
@@ -632,6 +897,7 @@ class RoutinesProvider extends ChangeNotifier {
         routineId != 'morning' &&
         routineId != 'midday' &&
         routineId != 'night') {
+      _editedRoutineIds.add(routineId);
       _routines.remove(routineId);
       clearRoutineSession(routineId);
       unawaited(_persistRoutineConfigs());
@@ -660,6 +926,22 @@ class RoutinesProvider extends ChangeNotifier {
             gratitudeContent: log.gratitudeContent,
           )
         : log;
+
+    if (OfflineMode.storesLocally) {
+      _isLoading = true;
+      notifyListeners();
+      final stored = await _local.upsert(OfflineMode.scope, finalLog);
+      if (stored) {
+        _logs.removeWhere((item) => item.id == finalLog.id);
+        _logs.insert(0, finalLog);
+        _logs.sort((a, b) => b.completedAt.compareTo(a.completedAt));
+      } else {
+        _errorMessage = 'Routine completion could not be saved to this device.';
+      }
+      _isLoading = false;
+      notifyListeners();
+      return stored;
+    }
 
     if (!SupabaseService.isInitialized ||
         SupabaseService.client.auth.currentUser == null) {
@@ -727,6 +1009,25 @@ class RoutinesProvider extends ChangeNotifier {
 
   Future<bool> updateLog(RoutineLog updated) async {
     _errorMessage = null;
+    if (OfflineMode.storesLocally) {
+      final index = _logs.indexWhere((log) => log.id == updated.id);
+      if (index == -1) {
+        _errorMessage = 'This saved item is no longer available.';
+        notifyListeners();
+        return false;
+      }
+      final previous = _logs[index];
+      _logs[index] = updated;
+      _logs.sort((a, b) => b.completedAt.compareTo(a.completedAt));
+      final stored = await _local.upsert(OfflineMode.scope, updated);
+      if (!stored) {
+        final restored = _logs.indexWhere((log) => log.id == updated.id);
+        if (restored != -1) _logs[restored] = previous;
+        _errorMessage = 'Your changes could not be saved to this device.';
+      }
+      notifyListeners();
+      return stored;
+    }
     final userId = SupabaseService.isInitialized
         ? SupabaseService.client.auth.currentUser?.id
         : null;
@@ -775,6 +1076,20 @@ class RoutinesProvider extends ChangeNotifier {
 
   Future<bool> deleteLog(String id) async {
     _errorMessage = null;
+    if (OfflineMode.storesLocally) {
+      final index = _logs.indexWhere((log) => log.id == id);
+      if (index == -1) return true;
+      final removed = _logs.removeAt(index);
+      notifyListeners();
+      final cleared = await _local.remove(OfflineMode.scope, id);
+      if (!cleared) {
+        _logs.insert(index.clamp(0, _logs.length), removed);
+        _errorMessage =
+            'The routine log could not be deleted. It has been restored.';
+        notifyListeners();
+      }
+      return cleared;
+    }
     if (!SupabaseService.isInitialized ||
         SupabaseService.client.auth.currentUser == null) {
       _errorMessage =

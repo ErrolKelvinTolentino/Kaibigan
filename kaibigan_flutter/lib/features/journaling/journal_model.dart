@@ -76,6 +76,7 @@ class JournalEntry {
     DateTime? createdAt,
     List<JournalConversationTurn>? conversationTurns,
     AIJournalSaveSummary? summary,
+    bool clearSummary = false,
   }) {
     return JournalEntry(
       id: id ?? this.id,
@@ -89,7 +90,7 @@ class JournalEntry {
       isFavorite: isFavorite ?? this.isFavorite,
       createdAt: createdAt ?? this.createdAt,
       conversationTurns: conversationTurns ?? this.conversationTurns,
-      summary: summary ?? this.summary,
+      summary: clearSummary ? null : summary ?? this.summary,
     );
   }
 

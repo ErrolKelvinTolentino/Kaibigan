@@ -226,6 +226,13 @@ class _MorningFocusScreenState extends State<MorningFocusScreen> {
                         hintText:
                             'Type your focus, priorities, or gentle intention for today...',
                         border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        errorBorder: InputBorder.none,
+                        disabledBorder: InputBorder.none,
+                        filled: false,
+                        fillColor: Colors.transparent,
+                        contentPadding: EdgeInsets.zero,
                       ),
                     ),
                   ],

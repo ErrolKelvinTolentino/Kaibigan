@@ -1,10 +1,20 @@
 import 'package:flutter/material.dart';
+import '../../core/services/local_record_store.dart';
+import '../../core/services/offline_mode.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/utils/api_logger.dart';
 import '../../core/utils/uuid_helper.dart';
 import 'mood_model.dart';
 
 class MoodProvider extends ChangeNotifier {
+  /// Offline records are written in the same shape the table uses.
+  static final LocalRecordStore<MoodLog> _local = LocalRecordStore<MoodLog>(
+    collection: 'mood_logs',
+    encode: (log) => log.toMap(),
+    decode: MoodLog.fromMap,
+    idOf: (log) => log.id,
+  );
+
   final List<MoodLog> _logs = [];
   bool _isLoading = false;
   String? _errorMessage;
@@ -62,9 +72,13 @@ class MoodProvider extends ChangeNotifier {
   }
 
   void syncForCurrentUser() {
-    final userId = SupabaseService.isInitialized
-        ? SupabaseService.client.auth.currentUser?.id
-        : null;
+    if (OfflineMode.storesLocally) {
+      _activeUserId = null;
+      _errorMessage = null;
+      fetchMoodLogs();
+      return;
+    }
+    final userId = SupabaseService.client.auth.currentUser?.id;
     if (userId == _activeUserId) return;
     _activeUserId = userId;
     _logs.clear();
@@ -75,6 +89,16 @@ class MoodProvider extends ChangeNotifier {
 
   Future<void> fetchMoodLogs() async {
     _errorMessage = null;
+    if (OfflineMode.storesLocally) {
+      final stored = await _local.load(OfflineMode.scope);
+      _logs
+        ..clear()
+        ..addAll(stored)
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      _isLoading = false;
+      notifyListeners();
+      return;
+    }
     if (!SupabaseService.isInitialized) {
       _errorMessage =
           'Mood sync is unavailable. Check the app configuration and try again.';
@@ -152,7 +176,12 @@ class MoodProvider extends ChangeNotifier {
     );
 
     var saved = false;
-    if (SupabaseService.isInitialized &&
+    if (OfflineMode.storesLocally) {
+      saved = await _local.upsert(OfflineMode.scope, newLog);
+      if (!saved) {
+        _errorMessage = 'Your mood check-in could not be saved to this device.';
+      }
+    } else if (SupabaseService.isInitialized &&
         SupabaseService.client.auth.currentUser != null) {
       try {
         final userId = SupabaseService.client.auth.currentUser!.id;
@@ -199,6 +228,24 @@ class MoodProvider extends ChangeNotifier {
       _errorMessage = 'This mood check-in contains invalid values.';
       notifyListeners();
       return false;
+    }
+    if (OfflineMode.storesLocally) {
+      final index = _logs.indexWhere((l) => l.id == updated.id);
+      if (index == -1) {
+        _errorMessage = 'This mood check-in is no longer available.';
+        notifyListeners();
+        return false;
+      }
+      final previous = _logs[index];
+      _logs[index] = updated;
+      _logs.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      final stored = await _local.upsert(OfflineMode.scope, updated);
+      if (!stored) {
+        _logs[_logs.indexWhere((l) => l.id == updated.id)] = previous;
+        _errorMessage = 'Your mood update could not be saved to this device.';
+      }
+      notifyListeners();
+      return stored;
     }
     if (!SupabaseService.isInitialized ||
         SupabaseService.client.auth.currentUser == null) {
@@ -252,6 +299,20 @@ class MoodProvider extends ChangeNotifier {
 
   Future<bool> deleteMoodLog(String id) async {
     _errorMessage = null;
+    if (OfflineMode.storesLocally) {
+      final index = _logs.indexWhere((log) => log.id == id);
+      if (index == -1) return true;
+      final removed = _logs.removeAt(index);
+      notifyListeners();
+      final cleared = await _local.remove(OfflineMode.scope, id);
+      if (!cleared) {
+        _logs.insert(index.clamp(0, _logs.length), removed);
+        _errorMessage =
+            'The mood log could not be deleted. It has been restored.';
+        notifyListeners();
+      }
+      return cleared;
+    }
     if (!SupabaseService.isInitialized ||
         SupabaseService.client.auth.currentUser == null) {
       _errorMessage =

@@ -31,10 +31,18 @@ void main() {
   WeekReading readingFor({
     List<MoodLog> moods = const [],
     List<RoutineLog> routines = const [],
+    Iterable<DateTime> journalDates = const [],
+    Iterable<DateTime> gratitudeDates = const [],
     String language = 'english',
   }) =>
       PlainLanguageInsights.read(
-        WellnessAnalytics.build(now: now, moods: moods, routines: routines),
+        WellnessAnalytics.build(
+          now: now,
+          moods: moods,
+          routines: routines,
+          journalDates: journalDates,
+          gratitudeDates: gratitudeDates,
+        ),
         language: language,
       );
 
@@ -410,6 +418,30 @@ void main() {
       expect(find.byKey(const ValueKey('wellness-plain-headline')), findsNothing);
       expect(find.byKey(const ValueKey('wellness-day-contrast')), findsNothing);
       expect(find.byKey(const ValueKey('wellness-plain-mood')), findsOneWidget);
+      expect(find.byKey(const ValueKey('wellness-feature-rhythm-mood')), findsOneWidget);
+      expect(find.byKey(const ValueKey('wellness-export-summary-button')), findsOneWidget);
+    });
+
+    test('journaling against mood is recognized as an association', () {
+      final reading = readingFor(
+        moods: [
+          mood('m1', 6, 5),
+          mood('m2', 5, 5),
+          mood('m3', 4, 4),
+          mood('m4', 3, 2),
+          mood('m5', 2, 2),
+          mood('m6', 1, 2),
+        ],
+        journalDates: [
+          DateTime(2026, 9, 6, 9),
+          DateTime(2026, 9, 5, 9),
+          DateTime(2026, 9, 4, 9),
+        ],
+      );
+
+      final link = reading.links.firstWhere((l) => l.id == 'journal_mood');
+      expect(link.statement, contains('wrote in your journal'));
+      expect(link.withDays, 3);
     });
   });
 

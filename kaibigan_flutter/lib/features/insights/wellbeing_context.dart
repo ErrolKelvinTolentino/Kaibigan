@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/services/supabase_service.dart';
 import '../../core/utils/language_helper.dart';
 import '../mood_tracking/mood_model.dart';
 import '../routines/routine_model.dart';
@@ -48,20 +49,37 @@ abstract final class WellbeingContextService {
 
   static bool get isEnabled => _isEnabled;
 
+  static void reset() {
+    _isEnabled = true;
+    _preferenceLoaded = false;
+  }
+
+  static String _keyForUser([String? userId]) {
+    final uid = userId ??
+        (SupabaseService.isInitialized
+            ? SupabaseService.client.auth.currentUser?.id
+            : null);
+    return uid != null ? 'ai_wellbeing_context_enabled_$uid' : preferenceKey;
+  }
+
   /// Defaults to on, matching AI memory: the whole point of the companion is
   /// that it knows something about the person it is talking to.
-  static Future<bool> loadPreference() async {
+  static Future<bool> loadPreference([String? userId]) async {
     final preferences = await SharedPreferences.getInstance();
-    _isEnabled = preferences.getBool(preferenceKey) ?? true;
+    final key = _keyForUser(userId);
+    _isEnabled = preferences.getBool(key) ??
+        preferences.getBool(preferenceKey) ??
+        true;
     _preferenceLoaded = true;
     return _isEnabled;
   }
 
-  static Future<void> setEnabled(bool enabled) async {
+  static Future<void> setEnabled(bool enabled, [String? userId]) async {
     _isEnabled = enabled;
     _preferenceLoaded = true;
     final preferences = await SharedPreferences.getInstance();
-    await preferences.setBool(preferenceKey, enabled);
+    final key = _keyForUser(userId);
+    await preferences.setBool(key, enabled);
   }
 
   /// Test seam: sets the flag without touching storage.

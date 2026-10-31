@@ -18,7 +18,8 @@ import 'learning_toolkit_screen.dart';
 import 'friend_support/friend_support_hub_screen.dart';
 
 class LearningHubScreen extends StatefulWidget {
-  const LearningHubScreen({super.key});
+  const LearningHubScreen({super.key, this.embedded = false});
+  final bool embedded;
 
   @override
   State<LearningHubScreen> createState() => _LearningHubScreenState();
@@ -55,7 +56,8 @@ class _LearningHubScreenState extends State<LearningHubScreen> {
     setState(() {
       _completed = completed.where((id) => _lessonForId(id) != null).toSet();
       _lastLessonId = lastLessonId;
-      _lastIdeaIndex = resumeLesson == null ? 0 : positions[resumeLesson.id] ?? 0;
+      _lastIdeaIndex =
+          resumeLesson == null ? 0 : positions[resumeLesson.id] ?? 0;
       _positions = positions;
     });
   }
@@ -177,6 +179,7 @@ class _LearningHubScreenState extends State<LearningHubScreen> {
     return Scaffold(
       backgroundColor: palette.background,
       appBar: AppBar(
+        automaticallyImplyLeading: !widget.embedded,
         title: Text(
           LanguageHelper.pick(
             language,
@@ -371,7 +374,8 @@ class _LearningHubScreenState extends State<LearningHubScreen> {
                       onTap: () async {
                         await Navigator.of(context).push<void>(
                           MaterialPageRoute(
-                            settings: const RouteSettings(name: 'friend_support_hub'),
+                            settings:
+                                const RouteSettings(name: 'friend_support_hub'),
                             builder: (_) => const FriendSupportHubScreen(),
                           ),
                         );
@@ -1150,8 +1154,10 @@ class _FriendSupportEntryCard extends StatelessWidget {
                     Text(
                       LanguageHelper.pick(
                         language,
-                        english: 'Learn how to listen and respond with empathy.',
-                        filipino: 'Matutong makinig at sumuporta nang may malasakit.',
+                        english:
+                            'Learn to listen, then practise a conversation with a fictional friend.',
+                        filipino:
+                            'Matutong makinig, at magpraktis ng usapan sa kathang-isip na kaibigan.',
                       ),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: palette.textSecondary,

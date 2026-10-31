@@ -773,10 +773,19 @@ class _LearningKaiAnswer extends StatelessWidget {
             MarkdownBody(
               data: result.text,
               selectable: true,
-              styleSheet: MarkdownStyleSheet(
+              styleSheet:
+                  MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
                 p: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: palette.textSecondary,
                       height: 1.55,
+                    ),
+                strong: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: palette.textPrimary,
+                    ),
+                em: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontStyle: FontStyle.italic,
+                      color: palette.textSecondary,
                     ),
                 listBullet: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: palette.textSecondary,

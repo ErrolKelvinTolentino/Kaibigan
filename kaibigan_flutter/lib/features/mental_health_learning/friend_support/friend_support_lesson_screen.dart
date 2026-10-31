@@ -10,6 +10,8 @@ import '../../settings/user_provider.dart';
 import 'friend_support_model.dart';
 import 'friend_support_quiz_screen.dart';
 import 'friend_support_safety_sheet.dart';
+import 'friend_support_practice_model.dart';
+import 'friend_support_practice_screen.dart';
 
 class FriendSupportLessonScreen extends StatelessWidget {
   const FriendSupportLessonScreen({
@@ -135,7 +137,8 @@ class FriendSupportLessonScreen extends StatelessWidget {
                             height: 38,
                             decoration: BoxDecoration(
                               color: Colors.white.withValues(
-                                alpha: Theme.of(context).brightness == Brightness.dark
+                                alpha: Theme.of(context).brightness ==
+                                        Brightness.dark
                                     ? 0.12
                                     : 0.85,
                               ),
@@ -251,7 +254,8 @@ class FriendSupportLessonScreen extends StatelessWidget {
                           Container(
                             padding: const EdgeInsets.all(6),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF81C784).withValues(alpha: 0.22),
+                              color: const Color(0xFF81C784)
+                                  .withValues(alpha: 0.22),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: const Icon(
@@ -344,7 +348,8 @@ class FriendSupportLessonScreen extends StatelessWidget {
                             Container(
                               padding: const EdgeInsets.all(6),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFE57373).withValues(alpha: 0.20),
+                                color: const Color(0xFFE57373)
+                                    .withValues(alpha: 0.20),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: const Icon(
@@ -412,6 +417,26 @@ class FriendSupportLessonScreen extends StatelessWidget {
                 ],
 
                 const SizedBox(height: 24),
+                for (final scenario in PracticeScenarios.all
+                    .where((item) => item.lessonId == lesson.id)) ...[
+                  OutlinedButton.icon(
+                    key: ValueKey('lesson-practice-${scenario.id}'),
+                    onPressed: () =>
+                        Navigator.of(context).push<void>(MaterialPageRoute(
+                      builder: (_) =>
+                          FriendSupportPracticeScreen(scenario: scenario),
+                    )),
+                    icon: const Icon(Icons.forum_outlined),
+                    label: Text(LanguageHelper.pick(
+                      language,
+                      english:
+                          'Practise a conversation with ${scenario.friendName}',
+                      filipino:
+                          'Praktisin ang usapan kay ${scenario.friendName}',
+                    )),
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 // Practice Quiz CTA
                 ElevatedButton(
                   key: const ValueKey('start-friend-quiz-btn'),

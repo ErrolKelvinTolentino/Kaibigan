@@ -9,14 +9,14 @@ void main() {
 
   test('journal appearance loads and persists locally', () async {
     SharedPreferences.setMockInitialValues({
-      'journal_paper_style': 'dotted',
-      'journal_accent': 'sage',
+      'offline_mode_enabled': true,
+      'user_pref_offline:guest_journal_paper_style': 'dotted',
+      'user_pref_offline:guest_journal_accent': 'sage',
     });
 
     final provider = UserProvider();
     addTearDown(provider.dispose);
-    await Future<void>.delayed(Duration.zero);
-    await Future<void>.delayed(Duration.zero);
+    await provider.ready;
 
     expect(provider.journalPaperStyle, JournalPaperStyle.dotted);
     expect(provider.journalAccent, JournalAccent.sage);
@@ -24,9 +24,11 @@ void main() {
     await provider.setJournalPaperStyle(JournalPaperStyle.botanical);
     await provider.setJournalAccent(JournalAccent.rose);
 
-    final preferences = await SharedPreferences.getInstance();
-    expect(preferences.getString('journal_paper_style'), 'botanical');
-    expect(preferences.getString('journal_accent'), 'rose');
+    final reopened = UserProvider();
+    addTearDown(reopened.dispose);
+    await reopened.ready;
+    expect(reopened.journalPaperStyle, JournalPaperStyle.botanical);
+    expect(reopened.journalAccent, JournalAccent.rose);
   });
 
   test('journal appearance safely falls back for unknown stored values', () {

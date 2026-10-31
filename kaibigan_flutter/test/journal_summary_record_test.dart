@@ -104,7 +104,10 @@ void main() {
             language: 'english',
             companionId: 'kai',
             summaryLoader: () async => _summary,
-            onSummaryReady: (value) => handedBack = value,
+            onSummaryReady: (value) async {
+              handedBack = value;
+              return true;
+            },
           ),
         ),
       );
@@ -190,35 +193,29 @@ void main() {
           ),
         );
 
-    testWidgets('shows the saved cards above the conversation',
+    testWidgets('Insights opens saved cards in the original carousel',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(390, 900));
       addTearDown(() => tester.binding.setSurfaceSize(null));
-
       await tester.pumpWidget(detailFor(entryWithSummary(summary: _summary)));
       await tester.pumpAndSettle();
-
-      expect(find.byKey(const ValueKey('record-summary-deck')), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('record-summary-recap-card')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const ValueKey('record-summary-deck')), findsNothing);
+      expect(find.text('WHAT THIS ENTRY LEFT YOU WITH'), findsNothing);
+      expect(find.text('THE JOURNAL'), findsOneWidget);
+      expect(find.text(_summary.summary), findsNothing);
+      await tester.tap(find.text('Insights'));
+      await tester.pumpAndSettle();
+      expect(find.byType(JournalSaveReflectionScreen), findsOneWidget);
+      expect(find.byType(PageView), findsOneWidget);
+      expect(find.text(_summary.summary), findsOneWidget);
+      await tester.drag(find.byType(PageView), const Offset(-350, 0));
+      await tester.pumpAndSettle();
       expect(find.text('Choosing to stop'), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('record-summary-advice-card')),
-        findsOneWidget,
-      );
-
-      // The conversation is still there, below the cards.
-      expect(find.text('JOURNAL CONVERSATION'), findsOneWidget);
-      final deckTop = tester
-          .getTopLeft(find.byKey(const ValueKey('record-summary-deck')))
-          .dy;
-      final conversationTop =
-          tester.getTopLeft(find.text('JOURNAL CONVERSATION')).dy;
-      expect(deckTop, lessThan(conversationTop));
+      await tester.tap(find.byTooltip('Close'));
+      await tester.pumpAndSettle();
+      expect(find.text('THE JOURNAL'), findsOneWidget);
+      expect(find.text('Insights'), findsOneWidget);
     });
-
     testWidgets('an entry without a summary shows the conversation alone',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(390, 900));
@@ -228,7 +225,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const ValueKey('record-summary-deck')), findsNothing);
-      expect(find.text('JOURNAL CONVERSATION'), findsOneWidget);
+      expect(find.text('THE JOURNAL'), findsOneWidget);
     });
   });
 }

@@ -62,6 +62,8 @@ class _CustomRoutineDialogState extends State<CustomRoutineDialog> {
   ];
 
   final List<RoutineStep> _selectedSteps = [];
+  bool _isSaving = false;
+  String? _routineId;
 
   @override
   void dispose() {
@@ -70,12 +72,17 @@ class _CustomRoutineDialogState extends State<CustomRoutineDialog> {
     super.dispose();
   }
 
-  void _saveRoutine() {
-    if (_titleController.text.trim().isEmpty || _selectedSteps.isEmpty) return;
+  Future<void> _saveRoutine() async {
+    if (_isSaving ||
+        _titleController.text.trim().isEmpty ||
+        _selectedSteps.isEmpty) {
+      return;
+    }
+    setState(() => _isSaving = true);
 
     final routinesProvider =
         Provider.of<RoutinesProvider>(context, listen: false);
-    final id = 'custom_${DateTime.now().millisecondsSinceEpoch}';
+    final id = _routineId ??= 'custom_${DateTime.now().millisecondsSinceEpoch}';
 
     final newRoutine = RoutineConfig(
       id: id,
@@ -90,6 +97,15 @@ class _CustomRoutineDialogState extends State<CustomRoutineDialog> {
     );
 
     routinesProvider.addCustomRoutine(newRoutine);
+    await routinesProvider.flushConfigurationWrites();
+    if (!mounted) return;
+    setState(() => _isSaving = false);
+    if (routinesProvider.configurationError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(routinesProvider.configurationError!)),
+      );
+      return;
+    }
     Navigator.pop(context);
   }
 
@@ -98,7 +114,8 @@ class _CustomRoutineDialogState extends State<CustomRoutineDialog> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
-      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.92),
+      constraints:
+          BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.92),
       padding: EdgeInsets.only(
         top: 24,
         left: 24,
@@ -117,7 +134,8 @@ class _CustomRoutineDialogState extends State<CustomRoutineDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(child: Text(
+                Expanded(
+                    child: Text(
                   'Create Custom Routine',
                   style: TextStyle(
                     fontSize: 20,
@@ -200,8 +218,11 @@ class _CustomRoutineDialogState extends State<CustomRoutineDialog> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _titleController.text.trim().isEmpty || _selectedSteps.isEmpty
-                    ? null : _saveRoutine,
+                onPressed: _isSaving ||
+                        _titleController.text.trim().isEmpty ||
+                        _selectedSteps.isEmpty
+                    ? null
+                    : _saveRoutine,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.sageGreen,
                   foregroundColor: Colors.white,
@@ -209,9 +230,9 @@ class _CustomRoutineDialogState extends State<CustomRoutineDialog> {
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(24)),
                 ),
-                child: const Text('Save Custom Routine',
-                    style:
-                        TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                child: Text(_isSaving ? 'Saving…' : 'Save Custom Routine',
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w700)),
               ),
             ),
           ],

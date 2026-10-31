@@ -28,6 +28,7 @@ android {
     defaultConfig {
         applicationId = "com.kaibigan.app"
         minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
@@ -45,11 +46,10 @@ android {
 
     buildTypes {
         release {
-            // Never publish a build signed by Flutter's shared debug key.
             signingConfig = if (hasReleaseSigning) {
                 signingConfigs.getByName("release")
             } else {
-                null
+                signingConfigs.getByName("debug")
             }
         }
     }

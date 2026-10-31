@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/services/ui_sound_service.dart';
 import '../../core/theme/kaibigan_tokens.dart';
@@ -6,6 +7,7 @@ import '../../core/utils/language_helper.dart';
 import '../../core/widgets/kaibigan_sound_scope.dart';
 import '../../core/widgets/kaibigan_surface.dart';
 import '../../core/widgets/mobile_layout.dart';
+import 'user_provider.dart';
 
 /// Controls for the app's interface sound.
 ///
@@ -40,6 +42,11 @@ class _SoundSettingsScreenState extends State<SoundSettingsScreen> {
     final sound = _sound;
     if (sound == null) return;
     await sound.setLevel(level);
+    if (!mounted) return;
+    try {
+      final user = Provider.of<UserProvider>(context, listen: false);
+      await user.setUiSoundLevel(level, soundController: sound);
+    } catch (_) {}
     if (!mounted) return;
     setState(() {});
     // The chosen level plays itself, so the choice is audible immediately.

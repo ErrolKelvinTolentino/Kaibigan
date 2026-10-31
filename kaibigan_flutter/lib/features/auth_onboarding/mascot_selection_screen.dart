@@ -4,7 +4,6 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_typography.dart';
 import '../companion/companion_model.dart';
 import '../settings/user_provider.dart';
-import '../main_navigation_screen.dart';
 
 class MascotSelectionScreen extends StatefulWidget {
   final bool isInitialOnboarding;
@@ -17,6 +16,7 @@ class MascotSelectionScreen extends StatefulWidget {
 class _MascotSelectionScreenState extends State<MascotSelectionScreen> {
   String _selectedId = 'kai';
   String _selectedLang = 'taglish';
+  bool _saving = false;
 
   @override
   void initState() {
@@ -192,26 +192,42 @@ class _MascotSelectionScreenState extends State<MascotSelectionScreen> {
                     ),
                     elevation: 0,
                   ),
-                  onPressed: () async {
-                    final userProvider =
-                        Provider.of<UserProvider>(context, listen: false);
-                    await userProvider.setCompanion(_selectedId);
-                    await userProvider.setLanguage(_selectedLang);
-
-                    if (!context.mounted) return;
-
-                    if (widget.isInitialOnboarding) {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const MainNavigationScreen()),
-                      );
-                    } else {
-                      Navigator.pop(context);
-                    }
-                  },
+                  onPressed: _saving
+                      ? null
+                      : () async {
+                          setState(() => _saving = true);
+                          final userProvider =
+                              Provider.of<UserProvider>(context, listen: false);
+                          try {
+                            await userProvider.setCompanion(_selectedId);
+                            await userProvider.setLanguage(_selectedLang);
+                            final completed = !widget.isInitialOnboarding ||
+                                await userProvider.completeCompanionSetup();
+                            if (!context.mounted) return;
+                            setState(() => _saving = false);
+                            if (!completed) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content: Text(
+                                          'Your choices could not be saved. Please try again.')));
+                            } else if (!widget.isInitialOnboarding) {
+                              Navigator.pop(context);
+                            }
+                            // Initial setup stays under AuthGate. Its completion
+                            // reveals Home without replacing the authentication root.
+                          } catch (_) {
+                            if (!context.mounted) return;
+                            setState(() => _saving = false);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content: Text(
+                                        'Your choices could not be saved. Please try again.')));
+                          }
+                        },
                   child: Text(
-                    'Magsimula tayo, ${selectedMascot.name}',
+                    _saving
+                        ? 'Saving…'
+                        : 'Magsimula tayo, ${selectedMascot.name}',
                     style: AppTypography.labelButton(context),
                   ),
                 ),

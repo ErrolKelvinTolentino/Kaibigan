@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../core/services/local_record_store.dart';
+import '../../core/services/offline_mode.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/utils/api_logger.dart';
 import '../../core/utils/uuid_helper.dart';
@@ -38,10 +40,23 @@ class GratitudeProvider extends ChangeNotifier {
     syncForCurrentUser();
   }
 
+  /// Offline flowers are stored in the same shape the table uses.
+  static final LocalRecordStore<GratitudeEntry> _local =
+      LocalRecordStore<GratitudeEntry>(
+    collection: 'gratitude_entries',
+    encode: (entry) => entry.toMap(),
+    decode: GratitudeEntry.fromMap,
+    idOf: (entry) => entry.id,
+  );
+
   void syncForCurrentUser() {
-    final userId = SupabaseService.isInitialized
-        ? SupabaseService.client.auth.currentUser?.id
-        : null;
+    if (OfflineMode.storesLocally) {
+      _activeUserId = null;
+      _errorMessage = null;
+      fetchGratitudeEntries();
+      return;
+    }
+    final userId = SupabaseService.client.auth.currentUser?.id;
     if (userId == _activeUserId) return;
     _activeUserId = userId;
     _entries.clear();
@@ -52,6 +67,16 @@ class GratitudeProvider extends ChangeNotifier {
 
   Future<void> fetchGratitudeEntries() async {
     _errorMessage = null;
+    if (OfflineMode.storesLocally) {
+      final stored = await _local.load(OfflineMode.scope);
+      _entries
+        ..clear()
+        ..addAll(stored)
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      _isLoading = false;
+      notifyListeners();
+      return;
+    }
     if (!SupabaseService.isInitialized) {
       _errorMessage =
           'Garden sync is unavailable. Check the app configuration and try again.';
@@ -143,7 +168,12 @@ class GratitudeProvider extends ChangeNotifier {
     );
 
     var saved = false;
-    if (SupabaseService.isInitialized &&
+    if (OfflineMode.storesLocally) {
+      saved = await _local.upsert(OfflineMode.scope, newEntry);
+      if (!saved) {
+        _errorMessage = 'This gratitude could not be saved to this device.';
+      }
+    } else if (SupabaseService.isInitialized &&
         SupabaseService.client.auth.currentUser != null) {
       try {
         final userId = SupabaseService.client.auth.currentUser!.id;
@@ -185,6 +215,24 @@ class GratitudeProvider extends ChangeNotifier {
       _errorMessage = 'A gratitude note cannot be empty.';
       notifyListeners();
       return false;
+    }
+    if (OfflineMode.storesLocally) {
+      final index = _entries.indexWhere((e) => e.id == id);
+      if (index == -1) {
+        _errorMessage = 'This gratitude is no longer available.';
+        notifyListeners();
+        return false;
+      }
+      final previous = _entries[index];
+      final updated = previous.copyWith(content: cleanContent);
+      _entries[index] = updated;
+      final stored = await _local.upsert(OfflineMode.scope, updated);
+      if (!stored) {
+        _entries[index] = previous;
+        _errorMessage = 'That change could not be saved to this device.';
+      }
+      notifyListeners();
+      return stored;
     }
     if (!SupabaseService.isInitialized ||
         SupabaseService.client.auth.currentUser == null) {
@@ -238,6 +286,20 @@ class GratitudeProvider extends ChangeNotifier {
 
   Future<bool> deleteGratitudeEntry(String id) async {
     _errorMessage = null;
+    if (OfflineMode.storesLocally) {
+      final index = _entries.indexWhere((entry) => entry.id == id);
+      if (index == -1) return true;
+      final removed = _entries.removeAt(index);
+      notifyListeners();
+      final cleared = await _local.remove(OfflineMode.scope, id);
+      if (!cleared) {
+        _entries.insert(index.clamp(0, _entries.length), removed);
+        _errorMessage =
+            'This flower could not be deleted. It has been restored.';
+        notifyListeners();
+      }
+      return cleared;
+    }
     if (!SupabaseService.isInitialized ||
         SupabaseService.client.auth.currentUser == null) {
       _errorMessage =

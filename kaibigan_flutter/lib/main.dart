@@ -24,7 +24,10 @@ import 'features/routines/routines_provider.dart';
 import 'features/auth_onboarding/auth_screen.dart';
 import 'features/auth_onboarding/kai_value_demo_screen.dart';
 import 'features/auth_onboarding/reset_password_screen.dart';
-import 'features/home/home_screen.dart';
+import 'features/auth_onboarding/mascot_selection_screen.dart';
+import 'features/auth_onboarding/startup_destination.dart';
+import 'features/auth_onboarding/startup_home_screen.dart';
+import 'core/services/offline_mode.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -58,13 +61,36 @@ class _KaibiganBootstrapState extends State<KaibiganBootstrap> {
         systemNavigationBarDividerColor: Colors.transparent,
       ),
     );
-    await EnvConfig.init();
+    // Nothing in start-up is allowed to strand the splash screen. Each step
+    // is optional at this stage: a failed preference read or notification
+    // permission should not stop the app from opening, and a failure here
+    // was previously an infinite "Preparing your space…".
+    Future<void> optional(Future<void> work, String label) => work.catchError(
+          (Object error) => debugPrint('Start-up step "$label" failed: $error'),
+        );
+
+    try {
+      await EnvConfig.init().timeout(const Duration(seconds: 5));
+    } catch (error) {
+      debugPrint('Environment load failed: $error');
+    }
     await Future.wait([
-      SupabaseService.init(),
-      NotificationService.init(),
+      optional(SupabaseService.init().timeout(const Duration(seconds: 8)),
+          'supabase'),
+      optional(
+          OfflineMode.loadPreference()
+              .then((_) {})
+              .timeout(const Duration(seconds: 3)),
+          'offline preference'),
+      optional(NotificationService.init().timeout(const Duration(seconds: 3)),
+          'notifications'),
       // Read before any journal screen can open: the default is on, so a
       // user who turned it off must not have one request slip through.
-      WellbeingContextService.loadPreference(),
+      optional(
+          WellbeingContextService.loadPreference()
+              .then((_) {})
+              .timeout(const Duration(seconds: 3)),
+          'wellbeing context preference'),
       minimumSplash,
     ]);
     if (mounted) setState(() => _isReady = true);
@@ -139,22 +165,25 @@ class _AuthGateState extends State<AuthGate> {
   Widget build(BuildContext context) {
     return Consumer<UserProvider>(
       builder: (context, userProvider, child) {
-        if (!userProvider.hasLoadedPreferences) {
-          return const KaibiganLoadingScreen(message: 'Opening your space…');
-        }
-        if (userProvider.isPasswordRecovery) {
-          return const ResetPasswordScreen();
-        }
-        if (userProvider.isAuthenticated) {
-          return const HomeScreen();
-        }
-        if (_showDemo || !userProvider.hasSeenKaiValueDemo) {
-          return KaiValueDemoScreen(onContinue: _finishDemo);
-        }
-        return AuthScreen(
-          initialTabIndex: _authTabIndex,
-          onShowDemo: _reopenDemo,
-        );
+        return switch (StartupDestinationPolicy.choose(
+          loaded: userProvider.hasLoadedPreferences,
+          recovery: userProvider.isPasswordRecovery,
+          canUseApp: userProvider.canUseApp,
+          setupComplete: userProvider.hasCompletedSetup,
+          demoSeen: userProvider.hasSeenKaiValueDemo,
+          reopenDemo: _showDemo,
+        )) {
+          StartupDestination.loading =>
+            const KaibiganLoadingScreen(message: 'Opening your space…'),
+          StartupDestination.recovery => const ResetPasswordScreen(),
+          StartupDestination.demo =>
+            KaiValueDemoScreen(onContinue: _finishDemo),
+          StartupDestination.authentication =>
+            AuthScreen(initialTabIndex: _authTabIndex, onShowDemo: _reopenDemo),
+          StartupDestination.setup => const MascotSelectionScreen(),
+          StartupDestination.home =>
+            StartupHomeScreen(key: ValueKey(userProvider.startupIdentity)),
+        };
       },
     );
   }
@@ -238,6 +267,8 @@ class _KaibiganAppState extends State<KaibiganApp> {
       child: Consumer<UserProvider>(
         builder: (context, userProvider, child) {
           return MaterialApp(
+            key: ValueKey(
+                '${userProvider.startupIdentity}:${userProvider.isPasswordRecovery}'),
             title: 'Kaibigan - Mental Wellness Companion',
             debugShowCheckedModeBanner: false,
             scrollBehavior: AppScrollBehavior(),

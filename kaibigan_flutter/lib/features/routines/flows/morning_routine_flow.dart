@@ -479,6 +479,13 @@ class _MorningRoutineFlowState extends State<MorningRoutineFlow> {
                     hintText:
                         'Write your thoughts, focus, or gentle intention here...',
                     border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    errorBorder: InputBorder.none,
+                    disabledBorder: InputBorder.none,
+                    filled: false,
+                    fillColor: Colors.transparent,
+                    contentPadding: EdgeInsets.zero,
                   ),
                 ),
               ],

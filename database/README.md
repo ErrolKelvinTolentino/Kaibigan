@@ -1,7 +1,7 @@
 # Kaibigan database contract
 
 The schema is based on the app's actual persistence paths, not every planned
-feature. There are eight active public tables after the September 3 alignment.
+feature. There are nine active public tables after the October 12 upgrade.
 
 | Table | Purpose / current reader and writer |
 | --- | --- |
@@ -12,7 +12,44 @@ feature. There are eight active public tables after the September 3 alignment.
 | `future_letters` | Letters, delivery dates and opened status (`LettersProvider`). |
 | `routine_logs` | Actual completed routines and standalone activities, including sleep/focus/highlight/breathing (`RoutinesProvider`). |
 | `user_memories` | User-controlled AI personalization summaries (`AIMemoryService`). |
-| `learning_progress` | Per-account lesson completion, viewed/helpful idea indexes, and resume position (`LearningProgressStore` / `LearningProgressSync`). |
+| `learning_progress` | One row per account and lesson: completion, viewed/helpful idea indexes, resume position, best quiz score and last conversation-practice result (`LearningProgressStore` / `LearningProgressSync`). |
+| `user_activity_stats` | Account-scoped login dates, activity usage counts and pinned favorites used by the home screen. |
+
+## October 12 deployment
+
+The live project was verified through the logged-in CLI as **Kaibigan**
+(`mclcasledpioyvmvryzv`). InaAgapay Capstone 2 was not modified.
+
+The schema had been partly updated manually while migration history recorded
+only the initial migration. The three historical garden migrations were marked
+applied after checking their resulting columns, unique index, removed growth
+stage and current ten-slot constraint. Replaying their original plot assignment
+would relocate saved flowers, so that migration was not rerun.
+
+The September alignment, activity-stats and journal-summary migrations were
+then applied, followed by
+`supabase/migrations/20261012010000_learning_practice_progress.sql`. This restored
+the missing profile-to-auth foreign key, mandatory ownership, score constraints
+and timestamp triggers. The October migration adds paired quiz score/total
+columns and practice completion counts, scenario identifier, date and last reply
+counts to the existing lesson-progress row. It creates no duplicate content or
+conversation table. Existing table row counts were unchanged after deployment.
+
+Practice transcripts are not persisted. Guest practice and quiz state stays
+local; authenticated results use the existing account cache and retry queue.
+The last result is not a clinical assessment. Concurrent devices use the same
+last-write-wins behavior as other lesson fields; practice_count is a progress
+indicator, not an authoritative analytics counter.
+
+Saved journal insights now reopen from both Journal and Records. Reopening a
+saved summary makes no new AI request. Entries without a stored summary offer
+**Create insights**; editing the underlying content invalidates the old summary.
+Summary persistence failures remain visible and can be retried.
+
+Fresh installations use `database/supabase_setup.sql`. Future upgrades use the
+[Supabase migration workflow](https://supabase.com/docs/guides/deployment/database-migrations).
+For this verified live project, migration history now matches every local file.
+`database/audit_active_schema.sql` reports only aggregate table counts.
 
 ## What was removed
 
@@ -46,7 +83,7 @@ history matters. Other schemas and unknown tables are not touched.
 
 ## Deploy to an existing Supabase project
 
-1. Take/export a database backup first. Retire old builds or schedule maintenance:
+1. Use a project backup when available. Retire old builds or schedule maintenance:
    old clients that still write removed columns are not compatible with this cleanup.
 2. Run `supabase/migrations/20260903010000_align_active_features.sql` as one script
    in the project's SQL Editor (or use the normal Supabase migration pipeline).
@@ -90,7 +127,7 @@ pending changes; failed network writes do not erase them.
 
 Every active table has owner-only authenticated RLS, no anonymous table grants,
 non-null ownership, indexed owner queries and cascading account deletion. The
-alignment replaces existing policies on these eight tables with the owner policy;
+alignment replaces existing policies on its eight tables with the owner policy;
 review any custom admin-sharing policy before deployment. Server triggers maintain
 `updated_at` where the app stores it. No triggers generate fabricated activity.
 

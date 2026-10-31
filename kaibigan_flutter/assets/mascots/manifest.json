@@ -1,0 +1,27 @@
+{
+  "status": "final",
+  "format": "PNG",
+  "background": "transparent",
+  "companions": [
+    {
+      "id": "kai",
+      "name": "Kai",
+      "design": "Slim, boyish bee with slate-blue bandana and honeycomb detail",
+      "assets": {
+        "welcoming": "assets/mascots/kai-welcoming.png",
+        "listening": "assets/mascots/kai-listening.png",
+        "celebrating": "assets/mascots/kai-celebrating.png"
+      }
+    },
+    {
+      "id": "ann",
+      "name": "Ann",
+      "design": "Matching balanced proportions, peach flower and botanical scarf",
+      "assets": {
+        "welcoming": "assets/mascots/ann-welcoming.png",
+        "listening": "assets/mascots/ann-listening.png",
+        "celebrating": "assets/mascots/ann-celebrating.png"
+      }
+    }
+  ]
+}

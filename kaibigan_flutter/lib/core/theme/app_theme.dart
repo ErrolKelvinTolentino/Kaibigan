@@ -302,7 +302,9 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         modalBackgroundColor: elevatedSurface,
         modalBarrierColor: palette.scrim,
-        showDragHandle: true,
+        // Custom sheets draw their handle inside their own surface. Opt in to
+        // the framework handle only for sheets without a custom one.
+        showDragHandle: false,
         dragHandleColor: border,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
@@ -407,18 +409,6 @@ class CozyPageTransitionsBuilder extends PageTransitionsBuilder {
       curve: Curves.easeOutCubic,
       reverseCurve: Curves.easeInCubic,
     );
-    return FadeTransition(
-      opacity: curved,
-      child: SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(0.035, 0.025),
-          end: Offset.zero,
-        ).animate(curved),
-        child: ScaleTransition(
-          scale: Tween<double>(begin: 0.992, end: 1).animate(curved),
-          child: child,
-        ),
-      ),
-    );
+    return FadeTransition(opacity: curved, child: child);
   }
 }

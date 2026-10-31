@@ -5,8 +5,11 @@ import 'package:kaibigan_flutter/features/journaling/journal_provider.dart';
 import 'package:kaibigan_flutter/features/mood_tracking/mood_model.dart';
 import 'package:kaibigan_flutter/features/mood_tracking/mood_provider.dart';
 import 'package:kaibigan_flutter/features/routines/routines_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() => SharedPreferences.setMockInitialValues({}));
   group('honest unauthenticated state', () {
     test('personal history providers do not seed fabricated records', () {
       expect(JournalProvider().entries, isEmpty);
@@ -41,10 +44,11 @@ void main() {
 
     test('a day with several check-ins still counts as one day', () {
       final provider = providerWith([
-        log('a', 0, 5),
-        log('b', 0, 5, 12),
-        log('c', 0, 5, 18),
-        log('d', 1, 1),
+        // Use completed calendar days so this also runs before 9 AM.
+        log('a', 1, 5),
+        log('b', 1, 5, 12),
+        log('c', 1, 5, 18),
+        log('d', 2, 1),
       ]);
 
       expect(provider.weeklyMoodAverage, 3);

@@ -5,7 +5,6 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
-import '../../core/services/ai_service.dart';
 import '../../core/theme/journal_appearance.dart';
 import '../../core/utils/language_helper.dart';
 import '../../core/widgets/cozy_confirm_sheet.dart';
@@ -17,6 +16,7 @@ import '../gratitude_garden/polished_flower_asset.dart';
 import '../journaling/journal_editor_screen.dart';
 import '../journaling/journal_model.dart';
 import '../journaling/journal_provider.dart';
+import '../journaling/journal_save_reflection_screen.dart';
 import '../mood_tracking/mood_model.dart';
 import '../mood_tracking/mood_provider.dart';
 import '../routines/routine_model.dart';
@@ -81,7 +81,27 @@ class _UnifiedEntryDetailScreenState extends State<UnifiedEntryDetailScreen> {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 24, 20, 36),
-              child: _buildFeatureBody(rawData, palette, isDark),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (rawData is JournalEntry) ...[
+                    OutlinedButton.icon(
+                      key: const ValueKey('record-view-insights'),
+                      onPressed: rawData.content.trim().isEmpty
+                          ? null
+                          : () => _openInsights(rawData),
+                      icon: const Icon(Icons.auto_awesome_outlined),
+                      label: Text(LanguageHelper.pick(
+                        context.watch<UserProvider>().language,
+                        english: 'Insights',
+                        filipino: 'Mga insight',
+                      )),
+                    ),
+                    const SizedBox(height: 18),
+                  ],
+                  _buildFeatureBody(rawData, palette, isDark),
+                ],
+              ),
             ),
           ),
         ],
@@ -101,7 +121,7 @@ class _UnifiedEntryDetailScreenState extends State<UnifiedEntryDetailScreen> {
           raw;
     }
     if (raw is JournalEntry) {
-      final entries = context.watch<JournalProvider>().entries;
+      final entries = context.watch<JournalProvider>().allEntries;
       return entries.cast<JournalEntry?>().firstWhere(
                 (entry) => entry?.id == raw.id,
                 orElse: () => raw,
@@ -109,6 +129,22 @@ class _UnifiedEntryDetailScreenState extends State<UnifiedEntryDetailScreen> {
           raw;
     }
     return raw;
+  }
+
+  Future<void> _openInsights(JournalEntry entry) async {
+    final user = context.read<UserProvider>();
+    final journals = context.read<JournalProvider>();
+    await Navigator.of(context).push<void>(MaterialPageRoute(
+      builder: (_) => JournalSaveReflectionScreen(
+        entry: entry,
+        language: user.language,
+        companionId: entry.companionId,
+        previousEntries:
+            journals.allEntries.where((item) => item.id != entry.id).toList(),
+        onSummaryReady: (summary) => journals.saveSummary(entry.id, summary,
+            expectedContent: entry.content),
+      ),
+    ));
   }
 
   Widget _buildHero(Object? rawData, _DetailPalette palette) {
@@ -128,6 +164,16 @@ class _UnifiedEntryDetailScreenState extends State<UnifiedEntryDetailScreen> {
       EntryCategory.focus => _IntentHero(
           title: 'A direction for the day',
           icon: Icons.near_me_outlined,
+          palette: palette,
+          timestamp: widget.item.timestamp,
+        ),
+      EntryCategory.breathing || EntryCategory.grounding => _IntentHero(
+          title: widget.item.category == EntryCategory.breathing
+              ? 'A moment to breathe'
+              : 'Back to the present',
+          icon: widget.item.category == EntryCategory.breathing
+              ? Icons.air_rounded
+              : Icons.spa_outlined,
           palette: palette,
           timestamp: widget.item.timestamp,
         ),
@@ -187,7 +233,11 @@ class _UnifiedEntryDetailScreenState extends State<UnifiedEntryDetailScreen> {
           palette: palette,
           isDark: isDark,
         ),
-      EntryCategory.focus || EntryCategory.highlight => _IntentEntryBody(
+      EntryCategory.focus ||
+      EntryCategory.highlight ||
+      EntryCategory.breathing ||
+      EntryCategory.grounding =>
+        _IntentEntryBody(
           item: widget.item,
           log: rawData as RoutineLog,
           palette: palette,
@@ -517,12 +567,12 @@ class _JournalHero extends StatelessWidget {
                   ? JournalEntry.warmUntitledTitle
                   : entry.title,
               textAlign: TextAlign.center,
-              maxLines: 2,
+              maxLines: 3,
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.lora(
                 color: Colors.white,
-                fontSize: 27,
-                height: 1.2,
+                fontSize: 25,
+                height: 1.25,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -625,22 +675,11 @@ class _JournalEntryBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final turns = entry.turnsForDisplay;
     final mascot = MascotInfo.getById(entry.companionId);
-    final summary = entry.summary;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // The look-back cards lead, because they are what the person was left
-        // holding when they saved. The conversation follows underneath.
-        if (summary != null) ...[
-          _SummaryCardDeck(
-            summary: summary,
-            entry: entry,
-            palette: palette,
-            isDark: isDark,
-          ),
-          const SizedBox(height: 26),
-        ],
-        _Eyebrow('JOURNAL CONVERSATION', palette.accent),
+        _Eyebrow('THE JOURNAL', palette.accent),
         const SizedBox(height: 12),
         for (var index = 0; index < turns.length; index++) ...[
           _ConversationCard(
@@ -679,263 +718,6 @@ class _JournalEntryBody extends StatelessWidget {
           ),
         ],
       ],
-    );
-  }
-}
-
-/// The saved AI look-back, rendered as a stack of cards rather than a wall of
-/// text. Each card keeps the shape it had on the summary screen so a record
-/// reads the same way it did the day it was written.
-class _SummaryCardDeck extends StatelessWidget {
-  const _SummaryCardDeck({
-    required this.summary,
-    required this.entry,
-    required this.palette,
-    required this.isDark,
-  });
-
-  final AIJournalSaveSummary summary;
-  final JournalEntry entry;
-  final _DetailPalette palette;
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context) {
-    final language = context.watch<UserProvider>().language;
-    final cards = <Widget>[
-      _SummaryCard(
-        key: const ValueKey('record-summary-recap-card'),
-        eyebrow: LanguageHelper.pick(
-          language,
-          english: 'A GENTLE LOOK BACK',
-          filipino: 'BANAYAD NA PAGLINGON',
-        ),
-        title: entry.displayTitle(language),
-        body: summary.summary,
-        emotions: summary.emotions,
-        icon: Icons.auto_awesome_rounded,
-        accent: AppColors.honeyAmber,
-        isDark: isDark,
-      ),
-      ...summary.moments.map(
-        (moment) => _SummaryCard(
-          eyebrow: LanguageHelper.pick(
-            language,
-            english: 'A MOMENT THAT STOOD OUT',
-            filipino: 'SANDALING NAMUKOD-TANGI',
-          ),
-          title: moment.title,
-          body: moment.reflection,
-          emotions: moment.emotions,
-          icon: Icons.bookmark_rounded,
-          accent: AppColors.softRose,
-          isDark: isDark,
-        ),
-      ),
-      if (summary.hasQuestion)
-        _SummaryCard(
-          key: const ValueKey('record-summary-question-card'),
-          eyebrow: LanguageHelper.pick(
-            language,
-            english: 'A QUESTION TO SIT WITH',
-            filipino: 'TANONG NA PAG-ISIPAN',
-          ),
-          title: LanguageHelper.pick(
-            language,
-            english: 'No answer needed today',
-            filipino: 'Walang kailangang sagot ngayon',
-          ),
-          body: summary.question,
-          emotions: const [],
-          icon: Icons.help_outline_rounded,
-          accent: AppColors.skyBlue,
-          isDark: isDark,
-        ),
-      if (summary.hasAdvice)
-        _SummaryCard(
-          key: const ValueKey('record-summary-advice-card'),
-          eyebrow: LanguageHelper.pick(
-            language,
-            english: 'SOMETHING YOU COULD TRY',
-            filipino: 'MAAARI MONG SUBUKAN',
-          ),
-          title: LanguageHelper.pick(
-            language,
-            english: 'One small thing',
-            filipino: 'Isang munting hakbang',
-          ),
-          body: summary.advice,
-          emotions: const [],
-          icon: Icons.tips_and_updates_rounded,
-          accent: AppColors.sageGreen,
-          isDark: isDark,
-        ),
-    ];
-
-    return Column(
-      key: const ValueKey('record-summary-deck'),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _Eyebrow(
-          LanguageHelper.pick(
-            language,
-            english: 'WHAT THIS ENTRY LEFT YOU WITH',
-            filipino: 'ANG NAIWAN SA IYO NG TALANG ITO',
-          ),
-          AppColors.honeyAmber,
-        ),
-        const SizedBox(height: 12),
-        for (var index = 0; index < cards.length; index++) ...[
-          cards[index],
-          if (index < cards.length - 1) const SizedBox(height: 12),
-        ],
-      ],
-    );
-  }
-}
-
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({
-    super.key,
-    required this.eyebrow,
-    required this.title,
-    required this.body,
-    required this.emotions,
-    required this.icon,
-    required this.accent,
-    required this.isDark,
-  });
-
-  final String eyebrow;
-  final String title;
-  final String body;
-  final List<String> emotions;
-  final IconData icon;
-  final Color accent;
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context) {
-    final scale = context.watch<UserProvider>().journalTextSize.scale;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 17),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: isDark
-              ? [
-                  Color.alphaBlend(
-                    accent.withValues(alpha: 0.17),
-                    AppColors.darkCard,
-                  ),
-                  AppColors.darkCard,
-                ]
-              : [
-                  Colors.white,
-                  Color.alphaBlend(
-                    accent.withValues(alpha: 0.14),
-                    Colors.white,
-                  ),
-                ],
-        ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: accent.withValues(alpha: 0.3)),
-        boxShadow: [
-          BoxShadow(
-            color: accent.withValues(alpha: isDark ? 0.14 : 0.11),
-            blurRadius: 20,
-            offset: const Offset(0, 7),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: isDark ? 0.22 : 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: accent, size: 17),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  eyebrow,
-                  style: TextStyle(
-                    color: accent,
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.1,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 17.5 * scale,
-              height: 1.25,
-              fontWeight: FontWeight.w900,
-              color: isDark
-                  ? AppColors.textPrimaryDark
-                  : AppColors.textPrimaryLight,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            body,
-            style: TextStyle(
-              fontSize: 14 * scale,
-              height: 1.5,
-              color: isDark
-                  ? AppColors.textPrimaryDark
-                  : AppColors.textPrimaryLight,
-            ),
-          ),
-          if (emotions.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 7,
-              runSpacing: 7,
-              children: emotions
-                  .map(
-                    (emotion) => Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: accent.withValues(alpha: isDark ? 0.2 : 0.13),
-                        borderRadius: BorderRadius.circular(99),
-                        border: Border.all(
-                          color: accent.withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: Text(
-                        emotion.isEmpty
-                            ? emotion
-                            : emotion[0].toUpperCase() + emotion.substring(1),
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          color: accent,
-                        ),
-                      ),
-                    ),
-                  )
-                  .toList(),
-            ),
-          ],
-        ],
-      ),
     );
   }
 }
@@ -1173,6 +955,19 @@ class _SleepEntryBody extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 15),
+        if (log.focusOrHighlight?.trim().isNotEmpty == true &&
+            (log.routineId == 'sleep' ||
+                log.routineId.startsWith('sleep_') ||
+                log.focusOrHighlight!.startsWith('Slept '))) ...[
+          Text(log.focusOrHighlight!,
+              style: TextStyle(
+                  color: isDark
+                      ? AppColors.textPrimaryDark
+                      : AppColors.textPrimaryLight,
+                  fontSize: 16,
+                  height: 1.5)),
+          const SizedBox(height: 15),
+        ],
         _InfoTile(
           icon: Icons.schedule_rounded,
           label: DateFormat('h:mm a • EEEE, MMMM d').format(log.completedAt),
@@ -1201,10 +996,17 @@ class _IntentEntryBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isHighlight = item.category == EntryCategory.highlight;
+    final isPractice = item.category == EntryCategory.breathing ||
+        item.category == EntryCategory.grounding;
     return Column(
       children: [
         _Eyebrow(
-          isHighlight ? 'THE MOMENT YOU KEPT' : 'THE DIRECTION YOU CHOSE',
+          switch (item.category) {
+            EntryCategory.breathing => 'BREATHING SESSION',
+            EntryCategory.grounding => 'GROUNDING SESSION',
+            _ =>
+              isHighlight ? 'THE MOMENT YOU KEPT' : 'THE DIRECTION YOU CHOSE',
+          },
           palette.accent,
         ),
         const SizedBox(height: 14),
@@ -1234,12 +1036,16 @@ class _IntentEntryBody extends StatelessWidget {
         ),
         const SizedBox(height: 15),
         _InfoTile(
-          icon: isHighlight
-              ? Icons.nights_stay_outlined
-              : Icons.wb_sunny_outlined,
-          label: isHighlight
-              ? 'Saved during your evening routine'
-              : 'Chosen during your ${log.routineType.name} routine',
+          icon: isPractice
+              ? Icons.schedule_rounded
+              : isHighlight
+                  ? Icons.nights_stay_outlined
+                  : Icons.wb_sunny_outlined,
+          label: isPractice
+              ? DateFormat('h:mm a • EEEE, MMMM d').format(log.completedAt)
+              : isHighlight
+                  ? 'Saved during your evening routine'
+                  : 'Chosen during your ${log.routineType.name} routine',
           color: palette.accent,
           surface: palette.surface,
           isDark: isDark,
@@ -1325,10 +1131,16 @@ class _MarkdownText extends StatelessWidget {
     return MarkdownBody(
       data: data,
       selectable: true,
-      styleSheet: MarkdownStyleSheet(
+      styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
         p: body,
-        em: GoogleFonts.lora(fontStyle: FontStyle.italic),
-        strong: const TextStyle(fontWeight: FontWeight.w800),
+        em: GoogleFonts.lora(
+          fontStyle: FontStyle.italic,
+          color: isDark ? AppColors.honeyGold : AppColors.honeyAmber,
+        ),
+        strong: TextStyle(
+          fontWeight: FontWeight.w800,
+          color: body.color,
+        ),
         listBullet: body,
         listIndent: 20 * scale,
         blockSpacing: 10 * scale,
@@ -1524,14 +1336,14 @@ _DetailPalette _paletteFor(EntryCategory category, bool isDark) {
         heroStart: const Color(0xFF87BBD5),
         heroEnd: const Color(0xFF4B759D),
       ),
-    EntryCategory.sleep => _DetailPalette(
+    EntryCategory.sleep || EntryCategory.breathing => _DetailPalette(
         accent: AppColors.skyBlue,
         page: page,
         surface: surface,
         heroStart: const Color(0xFF596E9D),
         heroEnd: const Color(0xFF273657),
       ),
-    EntryCategory.focus => _DetailPalette(
+    EntryCategory.focus || EntryCategory.grounding => _DetailPalette(
         accent: AppColors.sageGreen,
         page: page,
         surface: surface,

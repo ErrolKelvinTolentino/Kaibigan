@@ -159,13 +159,13 @@ class JournalFormatToolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final canFormat = enabled && controller != null;
-    final foreground = isDark
-        ? AppColors.textSecondaryDark
-        : AppColors.textSecondaryLight;
+    final foreground =
+        isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
 
-    return Container(
+    return TextFieldTapRegion(
+        child: Container(
       key: const ValueKey('journal-format-toolbar'),
-      height: 46,
+      height: 48,
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkCard : Colors.white,
         border: Border(
@@ -227,7 +227,8 @@ class JournalFormatToolbar extends StatelessWidget {
             _ToolbarDivider(isDark: isDark),
             Padding(
               padding: const EdgeInsets.only(right: 6),
-              child: Icon(Icons.format_size_rounded, size: 17, color: foreground),
+              child:
+                  Icon(Icons.format_size_rounded, size: 17, color: foreground),
             ),
             ...JournalTextSize.values.map(
               (size) => Padding(
@@ -243,7 +244,7 @@ class JournalFormatToolbar extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ));
   }
 }
 
@@ -271,7 +272,7 @@ class _ToolbarButton extends StatelessWidget {
       tooltip: tooltip,
       onPressed: enabled ? onPressed : null,
       visualDensity: VisualDensity.compact,
-      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
       padding: EdgeInsets.zero,
       icon: Icon(icon, size: 20, color: foreground),
     );

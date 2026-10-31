@@ -63,13 +63,6 @@ class AmbientSounds {
       volume: 0.34,
     ),
     AmbientSound(
-      id: 'chimes',
-      label: 'Chimes',
-      description: 'Soft wind chimes at random. Gentle if silence feels tense.',
-      assetPath: 'breathing sounds/chimes.wav',
-      volume: 0.40,
-    ),
-    AmbientSound(
       id: 'hum',
       label: 'Deep hum',
       description: 'A low, even hum. Steadying when rain feels too busy.',
@@ -135,20 +128,77 @@ class AmbientSoundPlayer implements AmbientSoundController {
   final AudioPlayer _player;
   AmbientSound _current = AmbientSounds.silence;
   bool _disposed = false;
+  int _transitionToken = 0;
 
   @override
   AmbientSound get current => _current;
 
+  Future<void> _fadeVolume({
+    required int token,
+    required double from,
+    required double to,
+    required Duration duration,
+  }) async {
+    const steps = 6;
+    final stepDuration = Duration(
+      milliseconds: (duration.inMilliseconds / steps).round(),
+    );
+    for (var i = 1; i <= steps; i++) {
+      if (_disposed || token != _transitionToken) return;
+      final progress = i / steps;
+      final currentVol = from + (to - from) * progress;
+      try {
+        await _player.setVolume(currentVol.clamp(0.0, 1.0));
+      } catch (_) {}
+      await Future<void>.delayed(stepDuration);
+    }
+  }
+
   @override
   Future<void> play(AmbientSound sound) async {
     if (_disposed) return;
+    final token = ++_transitionToken;
+    final wasPlaying = !_current.isSilent;
+    final previousSound = _current;
     _current = sound;
+
     try {
-      await _player.stop();
+      if (wasPlaying && !sound.isSilent && previousSound.id == sound.id) {
+        await _fadeVolume(
+          token: token,
+          from: 0.0,
+          to: sound.volume,
+          duration: const Duration(milliseconds: 200),
+        );
+        return;
+      }
+
+      if (wasPlaying) {
+        await _fadeVolume(
+          token: token,
+          from: previousSound.volume,
+          to: 0.0,
+          duration: const Duration(milliseconds: 200),
+        );
+        if (_disposed || token != _transitionToken) return;
+        await _player.stop();
+      } else {
+        await _player.stop();
+      }
+
       if (sound.isSilent) return;
+      if (_disposed || token != _transitionToken) return;
+
       await _player.setReleaseMode(ReleaseMode.loop);
-      await _player.setVolume(sound.volume);
-      await _player.play(AssetSource(sound.assetPath!), volume: sound.volume);
+      await _player.setVolume(0.0);
+      await _player.play(AssetSource(sound.assetPath!), volume: 0.0);
+
+      await _fadeVolume(
+        token: token,
+        from: 0.0,
+        to: sound.volume,
+        duration: const Duration(milliseconds: 300),
+      );
     } catch (_) {
       // A silent session is a working session.
     }
@@ -157,24 +207,52 @@ class AmbientSoundPlayer implements AmbientSoundController {
   @override
   Future<void> pause() async {
     if (_disposed || _current.isSilent) return;
+    final token = ++_transitionToken;
     try {
-      await _player.pause();
+      await _fadeVolume(
+        token: token,
+        from: _current.volume,
+        to: 0.0,
+        duration: const Duration(milliseconds: 180),
+      );
+      if (!_disposed && token == _transitionToken) {
+        await _player.pause();
+      }
     } catch (_) {}
   }
 
   @override
   Future<void> resume() async {
     if (_disposed || _current.isSilent) return;
+    final token = ++_transitionToken;
     try {
+      await _player.setVolume(0.0);
       await _player.resume();
+      await _fadeVolume(
+        token: token,
+        from: 0.0,
+        to: _current.volume,
+        duration: const Duration(milliseconds: 250),
+      );
     } catch (_) {}
   }
 
   @override
   Future<void> stop() async {
     if (_disposed) return;
+    final token = ++_transitionToken;
     try {
-      await _player.stop();
+      if (!_current.isSilent) {
+        await _fadeVolume(
+          token: token,
+          from: _current.volume,
+          to: 0.0,
+          duration: const Duration(milliseconds: 200),
+        );
+      }
+      if (!_disposed && token == _transitionToken) {
+        await _player.stop();
+      }
     } catch (_) {}
   }
 
@@ -182,6 +260,7 @@ class AmbientSoundPlayer implements AmbientSoundController {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    _transitionToken++;
     try {
       await _player.stop();
       await _player.dispose();

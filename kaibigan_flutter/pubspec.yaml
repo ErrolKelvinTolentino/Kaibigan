@@ -82,6 +82,7 @@ flutter:
   assets:
     - .env
     - assets/Kaibigan Logo.png
+    - assets/mascots/
     - assets/feature icons/
     - assets/mood tracker/
     - assets/sleep log/

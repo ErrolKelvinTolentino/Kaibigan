@@ -80,7 +80,81 @@ void main() {
     await tester.tap(find.text('Login'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Please enter a valid email address.'), findsOneWidget);
+    expect(find.text('Invalid email or password.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a short password uses the requested invalid credentials message',
+      (tester) async {
+    await pumpAuth(tester, size: const Size(390, 844));
+    await tester.enterText(find.byType(TextField).at(0), 'qa@example.com');
+    await tester.enterText(find.byType(TextField).at(1), '123');
+    await tester.tap(find.text('Login'));
+    await tester.pumpAndSettle();
+    expect(find.text('Invalid email or password.'), findsOneWidget);
+    expect(find.textContaining('at least 6'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('malformed login emails use the same generic message',
+      (tester) async {
+    await pumpAuth(tester, size: const Size(390, 844));
+    await tester.enterText(find.byType(TextField).at(1), 'password123');
+    for (final email in [
+      'invalid',
+      'user@',
+      'user@example',
+      'user @example.com'
+    ]) {
+      await tester.enterText(find.byType(TextField).at(0), email);
+      await tester.tap(find.text('Login'));
+      await tester.pumpAndSettle();
+      expect(find.text('Invalid email or password.'), findsOneWidget);
+      expect(find.text('Please enter a valid email address.'), findsNothing);
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('registration explains each correction in the manual test flow',
+      (tester) async {
+    await pumpAuth(tester, size: const Size(390, 844));
+    await tester.tap(find.byKey(const ValueKey('switch-to-register')));
+    await tester.pumpAndSettle();
+
+    Future<void> submit() async {
+      await tester.ensureVisible(find.text('Register'));
+      await tester.tap(find.text('Register'));
+      await tester.pumpAndSettle();
+    }
+
+    await submit();
+    expect(find.text('Please enter your display name.'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField).at(0), 'Test User');
+    for (final email in [
+      'invalid',
+      'user@',
+      'user@example',
+      'user @example.com'
+    ]) {
+      await tester.enterText(find.byType(TextField).at(1), email);
+      await submit();
+      expect(find.text('Please enter a valid email address.'), findsOneWidget);
+    }
+
+    await tester.enterText(find.byType(TextField).at(1), 'user@example.com');
+    await tester.enterText(find.byType(TextField).at(2), '123');
+    await submit();
+    expect(
+        find.text('Password must be at least 6 characters.'), findsOneWidget);
+    expect(find.text('Invalid email or password.'), findsNothing);
+
+    // Changing forms clears registration advice from the login screen.
+    await tester.ensureVisible(find.byKey(const ValueKey('switch-to-login')));
+    await tester.tap(find.byKey(const ValueKey('switch-to-login')));
+    await tester.pumpAndSettle();
+    expect(find.text('Password must be at least 6 characters.'), findsNothing);
+    expect(find.text('At least 6 characters'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

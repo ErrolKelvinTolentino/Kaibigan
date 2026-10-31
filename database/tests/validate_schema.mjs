@@ -7,9 +7,11 @@ import path from 'node:path';
 
 const { PGlite } = await import(pathToFileURL(path.resolve(process.argv[2])).href);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const read = name => readFile(path.join(root, name), 'utf8');
+const read = async name => (await readFile(path.join(root, name), 'utf8')).replace(/^\uFEFF/, '');
 const migration = await read('supabase/migrations/20260903010000_align_active_features.sql');
 const statsMigration = await read('supabase/migrations/20260903020000_user_activity_stats.sql');
+const summaryMigration = await read('supabase/migrations/20260910010000_journal_entry_summary.sql');
+const practiceMigration = await read('supabase/migrations/20261012010000_learning_practice_progress.sql');
 const fresh = await read('database/supabase_setup.sql');
 const oldFiles = [
   '20260821010000_kaibigan_schema_and_rls.sql',
@@ -73,6 +75,9 @@ await db.exec(migration);
 await db.exec(migration); // Safe rerun, including policy/trigger replacement.
 await db.exec(statsMigration);
 await db.exec(statsMigration); // Safe rerun
+await db.exec(summaryMigration);
+await db.exec(practiceMigration);
+await db.exec(practiceMigration); // Safe rerun preserves existing progress.
 const tables = (await db.query(`SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename`)).rows.map(r => r.tablename);
 assert.deepEqual(tables, ['future_letters', 'gratitude_entries', 'journal_entries', 'learning_progress', 'mood_logs', 'profiles', 'routine_logs', 'user_activity_stats', 'user_memories']);
 const journal = (await db.query('SELECT * FROM public.journal_entries WHERE id = $1', [noteId])).rows[0];
@@ -95,6 +100,13 @@ console.log('PASS: fresh schema, migration, rerun, and preserved journal/gratitu
 await db.exec(`SET ROLE authenticated; SELECT set_config('request.jwt.claim.sub', '${a}', false);`);
 await db.query(`INSERT INTO public.learning_progress(user_id, lesson_id, completed, viewed_ideas)
   VALUES ($1, 'sleep-and-mind', TRUE, ARRAY[0,1])`, [a]);
+await db.query(`UPDATE public.learning_progress SET quiz_score = 3, quiz_total = 4,
+  practice_count = 1, last_practice_scenario = 'practice-overwhelm', practice_reply_count = 3,
+  practice_supportive_count = 2 WHERE user_id = $1`, [a]);
+await assert.rejects(db.query(`UPDATE public.learning_progress SET quiz_score = 5 WHERE user_id = $1`, [a]), /check constraint/);
+await assert.rejects(db.query(`UPDATE public.learning_progress SET quiz_total = NULL WHERE user_id = $1`, [a]), /check constraint/);
+await assert.rejects(db.query(`UPDATE public.learning_progress SET practice_supportive_count = 4 WHERE user_id = $1`, [a]), /check constraint/);
+await assert.rejects(db.query(`UPDATE public.journal_entries SET summary = '[]'::jsonb WHERE user_id = $1`, [a]), /check constraint/);
 await db.query(`INSERT INTO public.user_activity_stats(user_id, login_dates, activity_counts)
   VALUES ($1, ARRAY['2026-09-03'], '{"mood": 5}'::jsonb)`, [a]);
 await assert.rejects(db.query(`INSERT INTO public.user_activity_stats(user_id) VALUES ($1)`, [b]), /row-level security/);

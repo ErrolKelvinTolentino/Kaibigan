@@ -93,6 +93,51 @@ class EnvConfig {
         'SUPABASE_ANON_KEY',
         defaultValue: _defaultSupabaseAnonKey,
       );
+
+  /// Where a value was actually found, in the order [_readString] checks.
+  ///
+  /// The built-in defaults mean a build with no .env still starts, which is
+  /// convenient and also a trap: the app then talks to whatever was compiled
+  /// in months ago, with no sign that anything is wrong. Naming the source
+  /// turns a silent substitution into a visible one.
+  static String sourceOf(String key) {
+    if (_readBuildEnvironment(key).trim().isNotEmpty) return 'dart-define';
+    final runtimeValue = _runtimeValues[key];
+    if (runtimeValue != null && runtimeValue.trim().isNotEmpty) return '.env';
+    try {
+      final dotenvValue = dotenv.maybeGet(key);
+      if (dotenvValue != null && dotenvValue.trim().isNotEmpty) return '.env';
+    } catch (_) {}
+    try {
+      final platformValue = platform_env.getPlatformEnvironment()[key];
+      if (platformValue != null && platformValue.trim().isNotEmpty) {
+        return 'process environment';
+      }
+    } catch (_) {}
+    return 'built-in fallback';
+  }
+
+  /// True when the Supabase credentials came from the constants in this
+  /// file rather than from configuration.
+  static bool get usingFallbackSupabaseCredentials =>
+      sourceOf('SUPABASE_URL') == 'built-in fallback' ||
+      sourceOf('SUPABASE_ANON_KEY') == 'built-in fallback';
+
+  /// A short, non-secret description of the loaded credentials, safe to log.
+  /// Only the key's shape and last four characters are included, which is
+  /// enough to tell two keys apart without writing one into a log file.
+  static String describeSupabaseCredentials() {
+    final key = supabaseAnonKey;
+    final shape = key.startsWith('eyJ')
+        ? 'legacy JWT'
+        : key.startsWith('sb_publishable_')
+            ? 'publishable'
+            : 'unrecognised';
+    final tail = key.length >= 4 ? key.substring(key.length - 4) : '????';
+    return 'url from ${sourceOf('SUPABASE_URL')}, '
+        'key from ${sourceOf('SUPABASE_ANON_KEY')} '
+        '($shape, ${key.length} chars, ends …$tail)';
+  }
   static String get passwordResetRedirectUrl =>
       _redirectUrl(_readString('PASSWORD_RESET_REDIRECT_URL'));
   static String get oauthRedirectUrl =>

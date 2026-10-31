@@ -289,6 +289,13 @@ class _NightMoodScreenState extends State<NightMoodScreen> {
                             decoration: const InputDecoration(
                               hintText: 'Add an optional evening note...',
                               border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              errorBorder: InputBorder.none,
+                              disabledBorder: InputBorder.none,
+                              filled: false,
+                              fillColor: Colors.transparent,
+                              contentPadding: EdgeInsets.zero,
                             ),
                           ),
                         ),

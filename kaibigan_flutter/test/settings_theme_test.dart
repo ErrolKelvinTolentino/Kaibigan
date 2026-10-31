@@ -79,6 +79,7 @@ void main() {
     });
     final provider = UserProvider();
     await provider.ready;
+    await provider.continueOffline();
 
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
@@ -97,8 +98,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(provider.gardenAppearance, GardenAppearance.night);
-    final preferences = await SharedPreferences.getInstance();
-    expect(preferences.getString('garden_appearance'), 'night');
+    final reopened = UserProvider();
+    await reopened.ready;
+    expect(reopened.gardenAppearance, GardenAppearance.night);
+    reopened.dispose();
     expect(tester.takeException(), isNull);
   });
 }
